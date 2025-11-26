@@ -11,8 +11,9 @@ if (!admin.apps.length) {
   admin.initializeApp();
 }
 
-// Define secret for Resend API key
+// Define secrets for Resend
 const resendApiKey = defineSecret('RESEND_API_KEY');
+const resendFromEmail = defineSecret('RESEND_FROM_EMAIL');
 const db = admin.firestore();
 
 // Initialize Resend with secret
@@ -30,7 +31,7 @@ const getResend = () => {
 export const sendPartyInvite = onRequest(
   { 
     cors: true,
-    secrets: [resendApiKey],
+    secrets: [resendApiKey, resendFromEmail],
     invoker: 'public', // Make function publicly accessible
   },
   async (req, res) => {
@@ -62,15 +63,17 @@ export const sendPartyInvite = onRequest(
     }
 
     const party = partyDoc.data();
-    const clientUrl = process.env.CLIENT_URL || 'http://sandbox-mac-mini.local:5173';
+    // Use production URL for invite links
+    const clientUrl = process.env.CLIENT_URL || 'https://better-white-elephant.web.app';
     const inviteLink = `${clientUrl}/party/${partyId}`;
     const partyTitle = party.title || 'White Elephant Party';
     const partyDate = party.date?.toDate ? party.date.toDate().toLocaleDateString() : 'TBD';
 
     // Send email via Resend
     const resendClient = getResend();
+    const fromEmail = resendFromEmail.value() || process.env.RESEND_FROM_EMAIL || 'White Elephant <onboarding@resend.dev>';
     const { data, error } = await resendClient.emails.send({
-      from: process.env.RESEND_FROM_EMAIL || 'White Elephant <onboarding@resend.dev>',
+      from: fromEmail,
       to: email,
       subject: `You're invited to ${partyTitle}!`,
       html: `
@@ -112,7 +115,7 @@ export const sendPartyInvite = onRequest(
  */
 export const notifyGiftSubmitter = onDocumentUpdated(
   {
-    secrets: [resendApiKey],
+    secrets: [resendApiKey, resendFromEmail],
   },
   'users/{userId}',
   async (event) => {
@@ -148,8 +151,9 @@ export const notifyGiftSubmitter = onDocumentUpdated(
 
           // Send email to submitter with winner's address
           const resendClient = getResend();
+          const fromEmail = resendFromEmail.value() || process.env.RESEND_FROM_EMAIL || 'White Elephant <onboarding@resend.dev>';
           await resendClient.emails.send({
-            from: process.env.RESEND_FROM_EMAIL || 'White Elephant <onboarding@resend.dev>',
+            from: fromEmail,
             to: submitter.email,
             subject: 'Shipping Address for Your Gift',
             html: `
