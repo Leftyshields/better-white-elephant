@@ -2,7 +2,7 @@
   "name": "better-white-elephant",
   "version": "1.0.0",
   "description": "Real-time White Elephant gift exchange platform",
-  "private": true,
+  "private": false,
   "workspaces": [
     "client",
     "server",
