@@ -28,17 +28,27 @@ Your domain is "Connected" in Firebase, but it's still showing "Site Not Found".
    - Value: (Firebase's second IP)
    - Repeat for all Firebase IPs
 
-### Step 3: Update www Subdomain (Optional)
+### Step 3: Update www Subdomain (Required)
 
-If you want `www.stealorreveal.com` to work too:
+If you want `www.stealorreveal.com` to work too, you need to fix the DNS:
 
-1. In IONOS, edit or add the `www` A record
-2. Point it to Firebase's first IP (same as `@`)
+**Option 1: CNAME (Recommended)**
+1. In IONOS, delete or edit the existing `www` A record pointing to `199.36.158.100`
+2. Add a CNAME record:
+   - Type: `CNAME`
+   - Name: `www`
+   - Value: `stealorreveal.com`
+   - TTL: `3600`
 
-**OR** better yet, add a CNAME:
-- Type: `CNAME`
-- Name: `www`
-- Value: `stealorreveal.com`
+**Option 2: A Record**
+1. In IONOS, edit the `www` A record
+2. Change the value from `199.36.158.100` to Firebase's IP address (same as your `@` record)
+
+After updating, you also need to add `www.stealorreveal.com` to Firebase:
+1. Go to Firebase Hosting → Domains
+2. Click "Add custom domain"
+3. Enter: `www.stealorreveal.com`
+4. Firebase will verify and issue an SSL certificate for the www subdomain
 
 ### Step 4: Wait for DNS Propagation
 
