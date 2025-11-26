@@ -64,9 +64,27 @@ better-white-elephant/
 
 ## Deployment
 
-- **Client**: Deploy to Firebase Hosting
+### Firebase Hosting (Frontend)
+
+1. **Build the client:**
+   ```bash
+   cd client
+   npm run build
+   cd ..
+   ```
+
+2. **Deploy to Firebase:**
+   ```bash
+   firebase deploy --only hosting
+   ```
+
+See [DEPLOY_FIREBASE_HOSTING.md](./DEPLOY_FIREBASE_HOSTING.md) for detailed instructions.
+
+### Other Services
+
 - **Server**: Deploy to cloud service (Railway, Render, etc.)
-- **Functions**: Deploy via Firebase CLI
+- **Functions**: Deploy via Firebase CLI: `firebase deploy --only functions`
 - **Redis**: Use cloud Redis service (Upstash, Redis Cloud)
+- **Firestore Rules**: Deploy via Firebase CLI: `firebase deploy --only firestore:rules`
 
 
