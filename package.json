@@ -21,8 +21,9 @@
     "socket.io"
   ],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
     "firebase": "^12.6.0"
   }
 }
+  

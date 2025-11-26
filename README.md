@@ -1,6 +1,10 @@
-# Better White Elephant - Firebase Hybrid
+# Better White Elephant 🎁
 
 A real-time White Elephant gift exchange platform built with React, Firebase, Node.js, Socket.io, and Redis.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Firebase](https://img.shields.io/badge/Firebase-FFCA28?logo=firebase&logoColor=black)](https://firebase.google.com)
+[![React](https://img.shields.io/badge/React-20232A?logo=react&logoColor=61DAFB)](https://reactjs.org)
 
 ## Architecture
 
