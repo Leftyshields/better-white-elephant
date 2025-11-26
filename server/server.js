@@ -79,7 +79,8 @@ const io = new Server(httpServer, {
   },
 });
 
-const PORT = process.env.SERVER_PORT || 3001;
+// Railway and other platforms use PORT, fallback to SERVER_PORT or 3001
+const PORT = process.env.PORT || process.env.SERVER_PORT || 3001;
 
 // Middleware
 app.use(cors({
