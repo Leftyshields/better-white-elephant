@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth.js';
 import { Button } from '../components/ui/Button.jsx';
 import { Input } from '../components/ui/Input.jsx';
+import { Footer } from '../components/Footer.jsx';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { collection, addDoc, doc, setDoc, query, where, onSnapshot, orderBy, collectionGroup, getDocs } from 'firebase/firestore';
 import { db } from '../utils/firebase.js';
@@ -232,201 +233,481 @@ export function Home() {
 
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12">
-        <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8">
-          <p className="text-gray-600 text-center mb-6">
-            Sign in to create or join a White Elephant gift exchange party
-          </p>
-          
-          {!showEmailAuth ? (
-            <>
-              <Button onClick={signInWithGoogle} className="w-full mb-3">
-                Sign in with Google
-              </Button>
-              <Button 
-                variant="secondary" 
-                onClick={() => setShowEmailAuth(true)} 
-                className="w-full"
-              >
-                Sign in with Email
-              </Button>
-            </>
-          ) : (
-            <form onSubmit={handleEmailAuth} className="space-y-4">
-              {isSignUp && (
-                <Input
-                  type="text"
-                  label="Display Name (optional)"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  placeholder="Your name"
-                />
-              )}
-              <Input
-                type="email"
-                label="Email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="your.email@example.com"
-                required
-              />
-              <Input
-                type="password"
-                label="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder={isSignUp ? "At least 6 characters" : "Your password"}
-                required
-              />
-              {authError && (
-                <p className="text-sm text-red-600">{authError}</p>
-              )}
-              <Button type="submit" className="w-full">
-                {isSignUp ? 'Sign Up' : 'Sign In'}
-              </Button>
-              <div className="text-center">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsSignUp(!isSignUp);
-                    setAuthError('');
-                  }}
-                  className="text-sm text-blue-600 hover:underline"
-                >
-                  {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
-                </button>
-              </div>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => {
-                  setShowEmailAuth(false);
-                  setAuthError('');
-                  setEmail('');
-                  setPassword('');
-                  setDisplayName('');
+      <>
+      <div className="min-h-screen bg-gradient-to-br from-red-50 via-green-50 to-blue-50 relative overflow-hidden">
+        {/* Snowflakes Animation */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
+          {[...Array(50)].map((_, i) => {
+            const size = Math.random() * 20 + 10; // Random size between 10-30px
+            const opacity = Math.random() * 0.5 + 0.3; // Random opacity between 0.3-0.8
+            return (
+              <div
+                key={i}
+                className="absolute animate-float"
+                style={{
+                  left: `${Math.random() * 100}%`,
+                  top: `${-Math.random() * 20}%`,
+                  fontSize: `${size}px`,
+                  opacity: opacity,
+                  animationDelay: `${Math.random() * 5}s`,
+                  animationDuration: `${8 + Math.random() * 7}s`,
                 }}
-                className="w-full"
               >
-                Back
-              </Button>
-            </form>
-          )}
+                ❄️
+              </div>
+            );
+          })}
+          {/* Additional smaller snowflakes */}
+          {[...Array(30)].map((_, i) => {
+            const size = Math.random() * 15 + 8;
+            const opacity = Math.random() * 0.4 + 0.2;
+            return (
+              <div
+                key={`small-${i}`}
+                className="absolute animate-float"
+                style={{
+                  left: `${Math.random() * 100}%`,
+                  top: `${-Math.random() * 20}%`,
+                  fontSize: `${size}px`,
+                  opacity: opacity,
+                  animationDelay: `${Math.random() * 5}s`,
+                  animationDuration: `${6 + Math.random() * 6}s`,
+                }}
+              >
+                ❄
+              </div>
+            );
+          })}
+        </div>
+        
+        {/* Hero Section */}
+        <div className="relative overflow-hidden">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-16">
+            <div className="text-center">
+              <div className="mb-4 text-6xl">🎄🎁</div>
+              <h1 className="text-5xl md:text-6xl font-extrabold text-gray-900 mb-4">
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-600 via-green-600 to-red-600">
+                  StealOrReveal.com
+                </span>
+              </h1>
+              <h2 className="text-3xl md:text-4xl font-bold text-gray-800 mb-6">
+                A Better White Elephant Gift Exchange
+              </h2>
+              <p className="text-xl md:text-2xl text-gray-700 mb-4 max-w-3xl mx-auto font-medium">
+                🎅 The modern way to host unforgettable White Elephant gift exchanges! 
+                Real-time gameplay, automatic gift tracking, and endless holiday fun! 🎉
+              </p>
+              <p className="text-lg text-gray-600 mb-4 max-w-2xl mx-auto">
+                Open source and free forever. View the source code on{' '}
+                <a 
+                  href="https://github.com/Leftyshields/better-white-elephant" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-blue-600 hover:text-blue-800 font-semibold underline"
+                >
+                  GitHub
+                </a>
+                .
+              </p>
+              <div className="inline-flex items-center gap-2 bg-green-100 border-2 border-green-300 rounded-full px-6 py-2 mb-8">
+                <span className="text-2xl">🎁</span>
+                <span className="text-lg font-bold text-green-800">100% Free - No Credit Card Required!</span>
+                <span className="text-2xl">✨</span>
+              </div>
+              
+              {/* Auth Card */}
+              <div className="max-w-md mx-auto bg-white rounded-2xl shadow-2xl p-8 border-4 border-red-200 relative">
+                <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 text-4xl">🎁</div>
+                <h2 className="text-2xl font-bold text-gray-900 mb-4 mt-4">Get Started</h2>
+                <p className="text-gray-600 mb-6">
+                  Sign in to create or join a White Elephant gift exchange party 🎄
+                </p>
+                
+                {!showEmailAuth ? (
+                  <div className="space-y-3">
+                    <Button 
+                      onClick={signInWithGoogle} 
+                      className="w-full py-3 text-lg font-semibold shadow-lg hover:shadow-xl transition-all"
+                    >
+                      <svg className="w-5 h-5 inline-block mr-2" viewBox="0 0 24 24">
+                        <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                        <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                        <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                        <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                      </svg>
+                      Sign in with Google
+                    </Button>
+                    <Button 
+                      variant="secondary" 
+                      onClick={() => setShowEmailAuth(true)} 
+                      className="w-full py-3 text-lg font-semibold"
+                    >
+                      Sign in with Email
+                    </Button>
+                  </div>
+                ) : (
+                  <form onSubmit={handleEmailAuth} className="space-y-4">
+                    {isSignUp && (
+                      <Input
+                        type="text"
+                        label="Display Name (optional)"
+                        value={displayName}
+                        onChange={(e) => setDisplayName(e.target.value)}
+                        placeholder="Your name"
+                      />
+                    )}
+                    <Input
+                      type="email"
+                      label="Email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="your.email@example.com"
+                      required
+                    />
+                    <Input
+                      type="password"
+                      label="Password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder={isSignUp ? "At least 6 characters" : "Your password"}
+                      required
+                    />
+                    {authError && (
+                      <p className="text-sm text-red-600 bg-red-50 p-3 rounded-lg">{authError}</p>
+                    )}
+                    <Button type="submit" className="w-full py-3 text-lg font-semibold">
+                      {isSignUp ? 'Sign Up' : 'Sign In'}
+                    </Button>
+                    <div className="text-center">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsSignUp(!isSignUp);
+                          setAuthError('');
+                        }}
+                        className="text-sm text-blue-600 hover:underline font-medium"
+                      >
+                        {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
+                      </button>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => {
+                        setShowEmailAuth(false);
+                        setAuthError('');
+                        setEmail('');
+                        setPassword('');
+                        setDisplayName('');
+                      }}
+                      className="w-full"
+                    >
+                      Back
+                    </Button>
+                  </form>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Features Section */}
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20">
+            <div className="grid md:grid-cols-3 gap-8 mt-16">
+              <div className="text-center p-6 bg-white/80 backdrop-blur-sm rounded-xl border-2 border-red-200 shadow-lg hover:shadow-xl transition-all">
+                <div className="text-5xl mb-4">⚡</div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">Real-Time Gameplay</h3>
+                <p className="text-gray-600">Watch the action unfold live as players steal and unwrap gifts in real-time! 🎮</p>
+              </div>
+              <div className="text-center p-6 bg-white/80 backdrop-blur-sm rounded-xl border-2 border-green-200 shadow-lg hover:shadow-xl transition-all">
+                <div className="text-5xl mb-4">🎁</div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">Easy Gift Submission</h3>
+                <p className="text-gray-600">Just paste a URL - we'll automatically extract the gift details and images! ✨</p>
+              </div>
+              <div className="text-center p-6 bg-white/80 backdrop-blur-sm rounded-xl border-2 border-red-200 shadow-lg hover:shadow-xl transition-all">
+                <div className="text-5xl mb-4">👥</div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">Invite Friends</h3>
+                <p className="text-gray-600">Share a link or send email invites. Everyone can join the fun instantly! 🎉</p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
+      <Footer />
+      </>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12">
-      <div className="max-w-4xl mx-auto space-y-6">
-        {/* Create Party Section */}
-        <div className="bg-white rounded-lg shadow-lg p-8">
-          <h1 className="text-3xl font-bold text-center mb-6">Create a Party</h1>
-          <div className="space-y-4">
-            <Input
-              type="text"
-              label="Party Title (optional)"
-              placeholder="e.g., Family Christmas Exchange 2025"
-              value={partyTitle}
-              onChange={(e) => setPartyTitle(e.target.value)}
-            />
-            <Input
-              type="datetime-local"
-              label="Party Date"
-              value={partyDate}
-              onChange={(e) => setPartyDate(e.target.value)}
-              required
-            />
+    <>
+    <div className="min-h-screen bg-gradient-to-br from-red-50 via-green-50 to-blue-50 relative overflow-hidden">
+      {/* Snowflakes Animation */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
+        {[...Array(50)].map((_, i) => {
+          const size = Math.random() * 20 + 10;
+          const opacity = Math.random() * 0.5 + 0.3;
+          return (
+            <div
+              key={i}
+              className="absolute animate-float"
+              style={{
+                left: `${Math.random() * 100}%`,
+                top: `${-Math.random() * 20}%`,
+                fontSize: `${size}px`,
+                opacity: opacity,
+                animationDelay: `${Math.random() * 5}s`,
+                animationDuration: `${8 + Math.random() * 7}s`,
+              }}
+            >
+              ❄️
+            </div>
+          );
+        })}
+        {/* Additional smaller snowflakes */}
+        {[...Array(30)].map((_, i) => {
+          const size = Math.random() * 15 + 8;
+          const opacity = Math.random() * 0.4 + 0.2;
+          return (
+            <div
+              key={`small-${i}`}
+              className="absolute animate-float"
+              style={{
+                left: `${Math.random() * 100}%`,
+                top: `${-Math.random() * 20}%`,
+                fontSize: `${size}px`,
+                opacity: opacity,
+                animationDelay: `${Math.random() * 5}s`,
+                animationDuration: `${6 + Math.random() * 6}s`,
+              }}
+            >
+              ❄
+            </div>
+          );
+        })}
+      </div>
+      
+      {/* Hero Section */}
+      <div className="relative bg-gradient-to-r from-red-600 via-green-600 to-red-600 text-white overflow-hidden">
+        <div className="absolute inset-0 opacity-20">
+          {[...Array(25)].map((_, i) => {
+            const size = Math.random() * 30 + 20;
+            return (
+              <div
+                key={i}
+                className="absolute text-white animate-float"
+                style={{
+                  left: `${Math.random() * 100}%`,
+                  top: `${Math.random() * 100}%`,
+                  fontSize: `${size}px`,
+                  animationDelay: `${Math.random() * 5}s`,
+                  animationDuration: `${8 + Math.random() * 7}s`,
+                }}
+              >
+                ❄️
+              </div>
+            );
+          })}
+        </div>
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+          <div className="text-center mb-12">
+            <div className="text-7xl mb-6 animate-bounce">🎄🎁🎅</div>
+            <h1 className="text-5xl md:text-6xl font-extrabold mb-3">
+              Welcome Back! 🎉
+            </h1>
+            <h2 className="text-3xl md:text-4xl font-bold text-white/95 mb-4">
+              StealOrReveal.com
+            </h2>
+            <p className="text-xl md:text-2xl text-white/90 max-w-3xl mx-auto font-medium mb-6">
+              A Better White Elephant Gift Exchange - Create a new party or manage your existing ones! 🎄✨
+            </p>
+            <div className="inline-flex items-center gap-2 bg-white/25 backdrop-blur-sm border-2 border-white/40 rounded-full px-8 py-3 shadow-lg mb-4">
+              <span className="text-2xl">🎁</span>
+              <span className="text-lg font-bold text-white">Completely Free - No Hidden Costs!</span>
+              <span className="text-2xl">✨</span>
+            </div>
+            <p className="text-sm text-white/80 max-w-2xl mx-auto">
+              Open source and free forever. View the source code on{' '}
+              <a 
+                href="https://github.com/Leftyshields/better-white-elephant" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-white font-semibold underline hover:text-yellow-200 transition-colors"
+              >
+                GitHub
+              </a>
+              .
+            </p>
           </div>
-          <Button onClick={handleCreateParty} className="w-full mt-4">
-            Create Party
-          </Button>
+
+          {/* Create Party Card */}
+          <div className="max-w-2xl mx-auto bg-white rounded-2xl shadow-2xl p-8 border-4 border-red-300 relative z-10">
+            <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 text-6xl animate-bounce">🎁</div>
+            <div className="text-center mb-6 mt-6">
+              <div className="w-24 h-24 bg-gradient-to-br from-red-500 to-green-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-xl animate-pulse">
+                <span className="text-5xl">🎄</span>
+              </div>
+              <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">Create a New Party</h2>
+              <p className="text-lg text-gray-600 font-medium">Set up your gift exchange in seconds! 🎅✨</p>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Party Title <span className="text-gray-400 font-normal">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g., Family Christmas Exchange 2025"
+                  value={partyTitle}
+                  onChange={(e) => setPartyTitle(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Party Date <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="datetime-local"
+                  value={partyDate}
+                  onChange={(e) => setPartyDate(e.target.value)}
+                  required
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <Button 
+                onClick={handleCreateParty} 
+                className="w-full py-4 text-lg font-semibold shadow-lg hover:shadow-xl transition-all mt-6 bg-gradient-to-r from-red-600 to-green-600 hover:from-red-700 hover:to-green-700"
+                disabled={!partyDate}
+              >
+                <span className="flex items-center justify-center gap-2">
+                  <span className="text-xl">🎄</span>
+                  Create Party
+                  <span className="text-xl">🎁</span>
+                </span>
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* My Parties Section */}
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 z-10">
+        <div className="mb-8 text-center">
+          <div className="text-5xl mb-3 animate-bounce">🎅</div>
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">My Parties</h2>
+          <p className="text-lg text-gray-600 font-medium">Manage your gift exchanges and join ongoing games! 🎄</p>
         </div>
 
-        {/* My Parties Section */}
-        {(myParties.length > 0 || loadingParties || partiesError) && (
-          <div className="bg-white rounded-lg shadow-lg p-8">
-            <h2 className="text-2xl font-bold mb-4">My Parties</h2>
-            {loadingParties && (
-              <p className="text-gray-500">Loading parties...</p>
-            )}
-            {partiesError && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded p-3 mb-4">
+        {loadingParties && (
+          <div className="text-center py-12">
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            <p className="mt-4 text-gray-600">Loading your parties...</p>
+          </div>
+        )}
+
+        {partiesError && (
+          <div className="bg-yellow-50 border-l-4 border-yellow-400 rounded-lg p-4 mb-6">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
                 <p className="text-sm text-yellow-800">
                   <strong>Note:</strong> {partiesError}
                   {partiesError.includes('index') && (
-                    <span className="block mt-1">
+                    <span className="block mt-2">
                       The Firestore index is being created. This may take a few minutes. 
-                      You can deploy it manually with: <code className="bg-yellow-100 px-1 rounded">firebase deploy --only firestore:indexes</code>
+                      You can deploy it manually with: <code className="bg-yellow-100 px-2 py-1 rounded text-xs">firebase deploy --only firestore:indexes</code>
                     </span>
                   )}
                 </p>
               </div>
-            )}
-            {myParties.length === 0 && !loadingParties && !partiesError && (
-              <p className="text-gray-500">You don't have any parties yet. Create one above!</p>
-            )}
-            {myParties.length > 0 && (
-              <div className="space-y-3">
-                {myParties.map((party) => (
-                <Link
-                  key={party.id}
-                  to={`/party/${party.id}`}
-                  className="block p-4 border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-blue-500 transition-colors"
-                >
-                  <div className="flex justify-between items-start">
+            </div>
+          </div>
+        )}
+
+        {myParties.length === 0 && !loadingParties && !partiesError && (
+          <div className="text-center py-16 bg-white rounded-2xl shadow-lg border-4 border-dashed border-red-300">
+            <div className="text-6xl mb-4">🎁</div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">No parties yet</h3>
+            <p className="text-gray-600 mb-6 font-medium">Create your first White Elephant gift exchange above! 🎄✨</p>
+          </div>
+        )}
+
+        {myParties.length > 0 && (
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {myParties.map((party) => (
+              <Link
+                key={party.id}
+                to={`/party/${party.id}`}
+                className="group block bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden border-2 border-gray-200 hover:border-red-400 relative"
+              >
+                {party.status === 'LOBBY' && (
+                  <div className="absolute top-2 right-2 text-2xl animate-bounce">🎄</div>
+                )}
+                <div className="p-6">
+                  <div className="flex items-start justify-between mb-4">
                     <div className="flex-1">
-                      <div className="flex items-start gap-3 mb-2">
-                        <div className="flex-1">
-                          {party.title && (
-                            <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                              {party.title}
-                            </h3>
-                          )}
-                          <p className="text-sm text-gray-600">
-                            {party.date?.toDate ? party.date.toDate().toLocaleDateString() : 'No date set'}
-                          </p>
-                        </div>
-                        <span
-                          className={`px-2 py-1 text-xs font-medium rounded flex-shrink-0 ${
-                            party.status === 'LOBBY'
-                              ? 'bg-yellow-100 text-yellow-800'
-                              : party.status === 'ACTIVE'
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-gray-100 text-gray-800'
-                          }`}
-                        >
-                          {party.status}
+                      {party.title ? (
+                        <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-red-600 transition-colors">
+                          {party.title}
+                        </h3>
+                      ) : (
+                        <h3 className="text-xl font-bold text-gray-400 mb-2">Untitled Party</h3>
+                      )}
+                      <div className="flex items-center gap-2 text-sm text-gray-600 mb-3">
+                        <span className="text-lg">📅</span>
+                        <span>
+                          {party.date?.toDate 
+                            ? party.date.toDate().toLocaleDateString('en-US', { 
+                                month: 'short', 
+                                day: 'numeric', 
+                                year: 'numeric' 
+                              })
+                            : 'No date set'}
                         </span>
                       </div>
-                      <p className="text-sm text-gray-500">
-                        Created {party.createdAt?.toDate ? party.createdAt.toDate().toLocaleDateString() : ''}
-                        {party.isAdmin === false && (
-                          <span className="ml-2 text-blue-600">• You're a participant</span>
-                        )}
-                      </p>
                     </div>
-                    <svg
-                      className="w-5 h-5 text-gray-400"
-                      fill="none"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
+                    <span
+                      className={`px-3 py-1 text-xs font-bold rounded-full flex-shrink-0 ${
+                        party.status === 'LOBBY'
+                          ? 'bg-yellow-100 text-yellow-800 border-2 border-yellow-300'
+                          : party.status === 'ACTIVE'
+                          ? 'bg-green-100 text-green-800 border-2 border-green-300'
+                          : 'bg-gray-100 text-gray-800 border-2 border-gray-300'
+                      }`}
                     >
-                      <path d="M9 5l7 7-7 7" />
-                    </svg>
+                      {party.status}
+                    </span>
                   </div>
-                </Link>
-              ))}
-              </div>
-            )}
+                  
+                  <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+                    <div className="text-sm text-gray-500 font-medium">
+                      {party.isAdmin ? (
+                        <span className="flex items-center gap-1">
+                          <span className="text-lg">⭐</span>
+                          You're the host
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1">
+                          <span className="text-lg">👤</span>
+                          Participant
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-xl group-hover:translate-x-1 transition-all">🎁</span>
+                  </div>
+                </div>
+              </Link>
+            ))}
           </div>
         )}
       </div>
-    </div>
+      <Footer />
+      </div>
+    </>
   );
 }
 

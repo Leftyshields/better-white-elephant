@@ -338,38 +338,218 @@ export function PartyLobby({ partyId, onStartGame }) {
     return <div className="p-8 text-center">Party not found</div>;
   }
 
+  // Calculate setup progress
+  const setupSteps = isAdmin ? [
+    { id: 'gift', label: 'Submit your gift', completed: !!userGift },
+    { id: 'address', label: 'Add shipping address', completed: adminShippingAddress?.street && adminShippingAddress?.city },
+    { id: 'participants', label: 'Invite at least 2 participants', completed: participants.filter(p => p.status === 'GOING').length >= 2 },
+    { id: 'ready', label: 'All participants ready', completed: (() => {
+      const nonAdminParticipants = participants.filter((p) => p.status === 'GOING' && p.id !== party?.adminId);
+      return nonAdminParticipants.length > 0 && nonAdminParticipants.every((p) => p.ready === true);
+    })() },
+  ] : [
+    { id: 'gift', label: 'Submit your gift', completed: !!userGift },
+    { id: 'address', label: 'Add shipping address', completed: userShippingAddress?.street && userShippingAddress?.city },
+    { id: 'ready', label: 'Mark yourself as ready', completed: currentParticipant?.ready === true },
+  ];
+
+  const completedSteps = setupSteps.filter(s => s.completed).length;
+  const totalSteps = setupSteps.length;
+  const progressPercentage = (completedSteps / totalSteps) * 100;
+
   return (
-    <div className="max-w-4xl mx-auto p-6">
-      <div className="mb-6">
-        {party.title && (
-          <h1 className="text-3xl font-bold mb-2">{party.title}</h1>
-        )}
-        <p className="text-lg text-gray-600">
-          {party.date?.toDate?.().toLocaleDateString() || 'No date set'}
-        </p>
+    <div className="max-w-5xl mx-auto p-6 space-y-6">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl shadow-lg p-8 text-white">
+        <div className="flex justify-between items-start">
+          <div>
+            {party.title && (
+              <h1 className="text-4xl font-bold mb-2">{party.title}</h1>
+            )}
+            <p className="text-blue-100 text-lg">
+              {party.date?.toDate?.().toLocaleDateString('en-US', { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+              }) || 'No date set'}
+            </p>
+          </div>
+          {isAdmin && (
+            <div className="flex gap-2">
+              <PartyManagement party={party} participants={participants} pendingInvites={pendingInvites} />
+              <Button onClick={() => setShowShareModal(true)} variant="secondary" className="bg-white/20 hover:bg-white/30 text-white border-white/30">
+                Share Link
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Gift Submission */}
-      {!userGift && (
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">Submit Your Gift</h2>
-          <p className="text-gray-600 mb-4">
-            Enter a URL to your gift. We'll automatically extract the title and image.
-          </p>
-          <div className="flex gap-4">
-            <Input
-              type="url"
-              placeholder="https://example.com/gift"
-              value={giftUrl}
-              onChange={(e) => setGiftUrl(e.target.value)}
-              className="flex-1"
-            />
-            <Button onClick={handleSubmitGift} disabled={scraping}>
-              {scraping ? 'Processing...' : 'Submit Gift'}
-            </Button>
+      {/* Setup Progress */}
+      <div className="bg-white rounded-xl shadow-md p-6">
+        <div className="mb-4">
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Setup Progress</h2>
+          <div className="flex items-center gap-4">
+            <div className="flex-1 bg-gray-200 rounded-full h-3 overflow-hidden">
+              <div 
+                className="bg-gradient-to-r from-blue-500 to-green-500 h-full transition-all duration-500 rounded-full"
+                style={{ width: `${progressPercentage}%` }}
+              />
+            </div>
+            <span className="text-sm font-semibold text-gray-700">
+              {completedSteps} of {totalSteps} complete
+            </span>
           </div>
         </div>
-      )}
+        
+        <div className="space-y-3">
+          {setupSteps.map((step, index) => (
+            <div key={step.id} className="flex items-center gap-3 p-3 rounded-lg bg-gray-50">
+              <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-bold ${
+                step.completed 
+                  ? 'bg-green-500 text-white' 
+                  : 'bg-gray-300 text-gray-600'
+              }`}>
+                {step.completed ? '✓' : index + 1}
+              </div>
+              <span className={`flex-1 ${step.completed ? 'text-gray-600 line-through' : 'text-gray-900 font-medium'}`}>
+                {step.label}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Step 1: Submit Gift */}
+      <div className="bg-white rounded-xl shadow-md p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${
+            userGift 
+              ? 'bg-green-500 text-white' 
+              : 'bg-blue-500 text-white'
+          }`}>
+            {userGift ? '✓' : '1'}
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900">Submit Your Gift</h2>
+        </div>
+
+        {!userGift ? (
+          <div className="space-y-4">
+            <p className="text-gray-600">
+              Enter a URL to your gift. We'll automatically extract the title and image from the page.
+            </p>
+            <div className="flex gap-4">
+              <div className="flex-1">
+                <input
+                  type="url"
+                  placeholder="https://example.com/gift"
+                  value={giftUrl}
+                  onChange={(e) => setGiftUrl(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && !scraping && giftUrl.trim()) {
+                      handleSubmitGift();
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <Button onClick={handleSubmitGift} disabled={scraping || !giftUrl.trim()} className="px-6">
+                {scraping ? 'Processing...' : 'Submit Gift'}
+              </Button>
+            </div>
+            <p className="text-sm text-gray-500">
+              💡 Tip: Use any product page URL from Amazon, Etsy, or other online stores
+            </p>
+          </div>
+        ) : (
+          <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-4 flex-1">
+                {userGift.image && (
+                  <img
+                    src={userGift.image}
+                    alt={userGift.title || 'Gift image'}
+                    className="w-24 h-24 object-cover rounded-lg border-2 border-green-300"
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                    }}
+                    loading="lazy"
+                  />
+                )}
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-green-700 font-semibold">✓ Gift Submitted</span>
+                  </div>
+                  <h3 className="font-semibold text-gray-900 mb-1">{userGift.title || 'Untitled Gift'}</h3>
+                  {userGift.url && (() => {
+                    const url = String(userGift.url).trim();
+                    let fullUrl;
+                    try {
+                      if (url.includes(' ') || url.includes('Uncaught') || url.includes('Error:')) {
+                        return (
+                          <p className="text-red-600 text-sm">
+                            Invalid URL saved. Please delete and re-submit.
+                          </p>
+                        );
+                      }
+                      fullUrl = url.startsWith('http://') || url.startsWith('https://') 
+                        ? url 
+                        : `https://${url}`;
+                      new URL(fullUrl);
+                    } catch (e) {
+                      return (
+                        <p className="text-red-600 text-sm">
+                          Invalid URL format. Please delete and re-submit.
+                        </p>
+                      );
+                    }
+                    return (
+                      <a
+                        href={fullUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 text-sm hover:underline"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          try {
+                            window.open(fullUrl, '_blank', 'noopener,noreferrer');
+                          } catch (err) {
+                            alert('Invalid URL. Please delete and re-submit your gift.');
+                          }
+                        }}
+                      >
+                        View Gift →
+                      </a>
+                    );
+                  })()}
+                </div>
+              </div>
+              <Button
+                variant="danger"
+                onClick={async () => {
+                  if (confirm('Are you sure you want to delete your gift? You can submit a new one.')) {
+                    try {
+                      await deleteDoc(doc(db, 'gifts', userGift.id));
+                      const participantRef = doc(db, 'parties', partyId, 'participants', user.uid);
+                      await updateDoc(participantRef, {
+                        status: 'PENDING',
+                        updatedAt: new Date(),
+                      });
+                    } catch (error) {
+                      console.error('Error deleting gift:', error);
+                      alert('Failed to delete gift: ' + error.message);
+                    }
+                  }
+                }}
+                className="ml-4"
+              >
+                Change
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Your Gift */}
       {userGift && (
@@ -469,37 +649,94 @@ export function PartyLobby({ partyId, onStartGame }) {
         </div>
       )}
 
-      {/* Participants */}
-      <div className="bg-white rounded-lg shadow p-6 mb-6">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold">Participants</h2>
-          <div className="flex gap-2">
-            {isAdmin && (
-              <>
-                <PartyManagement party={party} participants={participants} pendingInvites={pendingInvites} />
-                <Button onClick={() => setShowShareModal(true)} variant="secondary">
-                  Share Link
+      {/* Step 2: Add Shipping Address */}
+      {(() => {
+        const hasAddress = isAdmin 
+          ? (adminShippingAddress?.street && adminShippingAddress?.city)
+          : (userShippingAddress?.street && userShippingAddress?.city);
+        const stepNumber = userGift ? '2' : '1';
+        
+        return (
+          <div className="bg-white rounded-xl shadow-md p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${
+                hasAddress 
+                  ? 'bg-green-500 text-white' 
+                  : 'bg-blue-500 text-white'
+              }`}>
+                {hasAddress ? '✓' : stepNumber}
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900">Shipping Address</h2>
+            </div>
+            
+            {hasAddress ? (
+              <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-green-700 font-semibold">✓ Address Added</span>
+                </div>
+                <p className="text-sm text-gray-600">
+                  Your shipping address is on file. Winners will need this to receive their gifts.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-gray-600">
+                  Add your shipping address so winners can receive their gifts.
+                </p>
+                <Button 
+                  onClick={() => window.location.href = '/profile'}
+                  className="w-full sm:w-auto"
+                >
+                  Add Shipping Address →
                 </Button>
-              </>
+                <p className="text-sm text-gray-500">
+                  {isAdmin 
+                    ? 'As the host, you need an address on file before starting the game.'
+                    : 'You need an address before marking yourself as ready.'}
+                </p>
+              </div>
             )}
           </div>
-        </div>
-        <ul className="space-y-2">
-          {/* Actual participants (signed up users) */}
-          {participants.map((participant) => {
-            const isYou = participant.id === user?.uid;
-            const displayName = isYou 
-              ? 'You' 
-              : (userNames[participant.id] && userNames[participant.id] !== participant.id 
-                  ? userNames[participant.id] 
-                  : null);
-            const email = userEmails[participant.id] || null;
-            
-            return (
-              <li
-                key={participant.id}
-                className="flex items-center justify-between p-3 bg-gray-50 rounded"
-              >
+        );
+      })()}
+
+      {/* Step 3: Participants (Admin only) */}
+      {isAdmin && (
+        <div className="bg-white rounded-xl shadow-md p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${
+              participants.filter(p => p.status === 'GOING').length >= 2
+                ? 'bg-green-500 text-white' 
+                : 'bg-blue-500 text-white'
+            }`}>
+              {participants.filter(p => p.status === 'GOING').length >= 2 ? '✓' : '3'}
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900">Participants</h2>
+          </div>
+          
+          <div className="mb-4">
+            <p className="text-gray-600 mb-4">
+              {participants.filter(p => p.status === 'GOING').length >= 2
+                ? `Great! You have ${participants.filter(p => p.status === 'GOING').length} participants.`
+                : `You need at least 2 participants to start. Currently: ${participants.filter(p => p.status === 'GOING').length}`}
+            </p>
+          </div>
+
+          <div className="space-y-2 max-h-64 overflow-y-auto">
+            {participants.map((participant) => {
+              const isYou = participant.id === user?.uid;
+              const displayName = isYou 
+                ? 'You (Host)' 
+                : (userNames[participant.id] && userNames[participant.id] !== participant.id 
+                    ? userNames[participant.id] 
+                    : null);
+              const email = userEmails[participant.id] || null;
+              
+              return (
+                <div
+                  key={participant.id}
+                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                >
                   <div className="flex items-center gap-3">
                     <div>
                       <span className="text-gray-900 font-medium">
@@ -509,150 +746,176 @@ export function PartyLobby({ partyId, onStartGame }) {
                         <span className="text-xs text-gray-500 ml-1">({email})</span>
                       )}
                     </div>
-                    {participant.turnNumber !== null && (
-                      <span className="text-xs text-gray-500">Turn #{participant.turnNumber}</span>
-                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     {participant.status === 'GOING' && (
-                      <span className={`px-2 py-1 rounded text-xs ${
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                         participant.ready === true
-                          ? 'bg-blue-100 text-blue-800' 
-                          : 'bg-gray-100 text-gray-600'
-                      }`}>
-                        {participant.ready === true ? '✓ Ready' : 'Not Ready'}
-                      </span>
-                    )}
-                    <span
-                      className={`px-3 py-1 rounded text-sm ${
-                        participant.status === 'GOING'
-                          ? 'bg-green-100 text-green-800'
+                          ? 'bg-green-100 text-green-800' 
                           : 'bg-yellow-100 text-yellow-800'
-                      }`}
-                    >
-                      {participant.status}
-                    </span>
-                  </div>
-              </li>
-            );
-          })}
-          {/* Pending invites with GOING status - show in participants list */}
-          {pendingInvites
-            .filter(inv => inv.status === 'GOING' && inv.status !== 'ACCEPTED')
-            .map((invite) => (
-              <li
-                key={invite.id}
-                className="flex items-center justify-between p-3 bg-gray-50 rounded"
-              >
-                <div className="flex items-center gap-3">
-                  <div>
-                    {invite.name && (
-                      <span className="text-gray-900 font-medium">{invite.name}</span>
+                      }`}>
+                        {participant.ready === true ? '✓ Ready' : 'Waiting...'}
+                      </span>
                     )}
-                    {invite.email && (
-                      <span className={`${invite.name ? 'text-xs text-gray-500 ml-1' : 'text-gray-900 font-medium'}`}>
-                        {invite.name ? `(${invite.email})` : invite.email}
+                    {participant.status === 'PENDING' && (
+                      <span className="px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                        Pending
                       </span>
                     )}
                   </div>
-                  {invite.emailFailed && (
-                    <span className="text-xs text-orange-600">Email failed - use share link</span>
-                  )}
                 </div>
-                <span className="px-3 py-1 rounded text-sm bg-green-100 text-green-800">
-                  GOING
-                </span>
-              </li>
-            ))}
-          {/* Other pending invites (not GOING) - show separately */}
-          {pendingInvites
-            .filter(inv => inv.status !== 'ACCEPTED' && inv.status !== 'GOING')
-            .map((invite) => (
-              <li
-                key={invite.id}
-                className="flex items-center justify-between p-3 bg-gray-50 rounded"
-              >
-                <div className="flex items-center gap-3">
-                  <div>
-                    {invite.name && (
-                      <span className="text-gray-900 font-medium">{invite.name}</span>
-                    )}
-                    {invite.email && (
-                      <span className={`${invite.name ? 'text-xs text-gray-500 ml-1' : 'text-gray-900 font-medium'}`}>
-                        {invite.name ? `(${invite.email})` : invite.email}
-                      </span>
+              );
+            })}
+            {pendingInvites
+              .filter(inv => inv.status === 'GOING' || inv.status !== 'ACCEPTED')
+              .map((invite) => (
+                <div
+                  key={invite.id}
+                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                >
+                  <div className="flex items-center gap-3">
+                    <div>
+                      {invite.name && (
+                        <span className="text-gray-900 font-medium">{invite.name}</span>
+                      )}
+                      {invite.email && (
+                        <span className={`${invite.name ? 'text-xs text-gray-500 ml-1' : 'text-gray-900 font-medium'}`}>
+                          {invite.name ? `(${invite.email})` : invite.email}
+                        </span>
+                      )}
+                    </div>
+                    {invite.emailFailed && (
+                      <span className="text-xs text-orange-600 ml-2">Email failed</span>
                     )}
                   </div>
-                  {invite.emailFailed && (
-                    <span className="text-xs text-orange-600">Email failed - use share link</span>
-                  )}
+                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                    invite.status === 'GOING' 
+                      ? 'bg-green-100 text-green-800'
+                      : 'bg-yellow-100 text-yellow-800'
+                  }`}>
+                    {invite.status}
+                  </span>
                 </div>
-                <span className="px-3 py-1 rounded text-sm bg-yellow-100 text-yellow-800">
-                  PENDING
-                </span>
-              </li>
-            ))}
-        </ul>
-        {participants.length === 0 && pendingInvites.filter(inv => inv.status !== 'ACCEPTED').length === 0 && (
-          <p className="text-gray-500 text-center py-4">No participants yet. Add people to get started!</p>
-        )}
-      </div>
+              ))}
+          </div>
+          
+          {participants.length === 0 && pendingInvites.filter(inv => inv.status !== 'ACCEPTED').length === 0 && (
+            <p className="text-gray-500 text-center py-4">No participants yet. Use the Share Link button above to invite people!</p>
+          )}
+        </div>
+      )}
 
-      {/* Ready Button (Non-admin) or Start Game Button (Admin) */}
+      {/* Participants List (Non-admin) */}
+      {!isAdmin && (
+        <div className="bg-white rounded-xl shadow-md p-6">
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">Participants</h2>
+          <div className="space-y-2">
+            {participants.map((participant) => {
+              const isYou = participant.id === user?.uid;
+              const displayName = isYou 
+                ? 'You' 
+                : (userNames[participant.id] && userNames[participant.id] !== participant.id 
+                    ? userNames[participant.id] 
+                    : null);
+              const email = userEmails[participant.id] || null;
+              
+              return (
+                <div
+                  key={participant.id}
+                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                >
+                  <span className="text-gray-900 font-medium">
+                    {displayName || email || `User ${participant.id.slice(0, 8)}`}
+                  </span>
+                  {participant.status === 'GOING' && (
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                      participant.ready === true
+                        ? 'bg-green-100 text-green-800' 
+                        : 'bg-yellow-100 text-yellow-800'
+                    }`}>
+                      {participant.ready === true ? '✓ Ready' : 'Not Ready'}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Action Section */}
       {party.status === 'LOBBY' && (
-        <div className="text-center">
+        <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl shadow-lg p-8 border-2 border-blue-200">
           {isAdmin ? (
             <>
               {(() => {
-                // Exclude admin from ready check
                 const nonAdminParticipants = participants.filter((p) => p.status === 'GOING' && p.id !== party?.adminId);
                 const allReady = nonAdminParticipants.length > 0 && nonAdminParticipants.every((p) => p.ready === true);
                 const readyCount = nonAdminParticipants.filter((p) => p.ready === true).length;
                 const totalCount = nonAdminParticipants.length;
                 const totalGoingParticipants = participants.filter((p) => p.status === 'GOING').length;
                 
-                // Check admin requirements
                 const hasShippingAddress = adminShippingAddress && adminShippingAddress.street && adminShippingAddress.city;
                 const hasGift = !!userGift;
                 const canStart = allReady && totalGoingParticipants >= 2 && hasShippingAddress && hasGift;
                 
                 return (
-                  <>
+                  <div className="text-center space-y-4">
+                    <h3 className="text-2xl font-bold text-gray-900 mb-2">Ready to Start?</h3>
+                    
+                    {!canStart && (
+                      <div className="bg-white rounded-lg p-4 mb-4 space-y-2 text-left">
+                        <p className="font-semibold text-gray-900 mb-2">Complete these steps to start:</p>
+                        <ul className="space-y-1 text-sm text-gray-600">
+                          {!hasGift && (
+                            <li className="flex items-center gap-2">
+                              <span className="text-red-500">✗</span>
+                              <span>Submit your gift</span>
+                            </li>
+                          )}
+                          {!hasShippingAddress && (
+                            <li className="flex items-center gap-2">
+                              <span className="text-red-500">✗</span>
+                              <span>Add your shipping address</span>
+                            </li>
+                          )}
+                          {totalGoingParticipants < 2 && (
+                            <li className="flex items-center gap-2">
+                              <span className="text-red-500">✗</span>
+                              <span>Invite at least 2 participants (currently: {totalGoingParticipants})</span>
+                            </li>
+                          )}
+                          {totalGoingParticipants >= 2 && !allReady && totalCount > 0 && (
+                            <li className="flex items-center gap-2">
+                              <span className="text-yellow-500">⏳</span>
+                              <span>Wait for all participants to be ready ({readyCount} of {totalCount} ready)</span>
+                            </li>
+                          )}
+                        </ul>
+                      </div>
+                    )}
+                    
+                    {canStart && (
+                      <div className="bg-green-50 border-2 border-green-300 rounded-lg p-4 mb-4">
+                        <p className="text-green-800 font-semibold mb-1">🎉 All set! You're ready to start the game!</p>
+                        <p className="text-sm text-green-700">All participants are ready and all requirements are met.</p>
+                      </div>
+                    )}
+                    
                     <Button
                       onClick={handleStartGame}
                       disabled={!canStart}
-                      className="px-8 py-3 text-lg"
+                      className="px-12 py-4 text-xl font-bold shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Start Game
+                      {canStart ? '🎮 Start Game' : 'Waiting...'}
                     </Button>
                     
-                    {/* Show validation messages */}
-                    {!hasShippingAddress && (
-                      <p className="text-sm text-red-600 mt-2">
-                        ⚠️ Please add your shipping address to your <a href="/profile" className="underline font-semibold">profile</a> before starting
+                    {canStart && (
+                      <p className="text-sm text-gray-600 mt-3">
+                        Once you start, the game will begin and participants can start selecting gifts!
                       </p>
                     )}
-                    {!hasGift && (
-                      <p className="text-sm text-red-600 mt-2">
-                        ⚠️ Please submit your gift before starting
-                      </p>
-                    )}
-                    {hasShippingAddress && hasGift && totalGoingParticipants >= 2 && !allReady && totalCount > 0 && (
-                      <p className="text-sm text-gray-500 mt-2">
-                        {readyCount} of {totalCount} participant{totalCount !== 1 ? 's' : ''} ready
-                      </p>
-                    )}
-                    {hasShippingAddress && hasGift && totalGoingParticipants < 2 && (
-                      <p className="text-sm text-gray-500 mt-2">
-                        Need at least 2 participants to start
-                      </p>
-                    )}
-                    {hasShippingAddress && hasGift && totalCount === 0 && totalGoingParticipants >= 2 && (
-                      <p className="text-sm text-gray-500 mt-2">
-                        Waiting for other participants to join
-                      </p>
-                    )}
-                  </>
+                  </div>
                 );
               })()}
             </>
@@ -664,26 +927,52 @@ export function PartyLobby({ partyId, onStartGame }) {
                   const canBeReady = userGift && hasShippingAddress;
                   
                   return (
-                    <>
+                    <div className="text-center space-y-4">
+                      <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                        {currentParticipant.ready ? "You're Ready!" : "Mark Yourself Ready"}
+                      </h3>
+                      
+                      {!canBeReady && (
+                        <div className="bg-white rounded-lg p-4 mb-4 space-y-2 text-left">
+                          <p className="font-semibold text-gray-900 mb-2">Complete these steps first:</p>
+                          <ul className="space-y-1 text-sm text-gray-600">
+                            {!userGift && (
+                              <li className="flex items-center gap-2">
+                                <span className="text-red-500">✗</span>
+                                <span>Submit your gift</span>
+                              </li>
+                            )}
+                            {!hasShippingAddress && (
+                              <li className="flex items-center gap-2">
+                                <span className="text-red-500">✗</span>
+                                <span>Add your shipping address</span>
+                              </li>
+                            )}
+                          </ul>
+                        </div>
+                      )}
+                      
+                      {canBeReady && currentParticipant.ready && (
+                        <div className="bg-green-50 border-2 border-green-300 rounded-lg p-4 mb-4">
+                          <p className="text-green-800 font-semibold">✓ You're all set! Waiting for the host to start the game.</p>
+                        </div>
+                      )}
+                      
                       <Button
                         onClick={handleToggleReady}
                         variant={currentParticipant.ready === true ? "secondary" : "primary"}
-                        className="px-8 py-3 text-lg"
+                        className="px-12 py-4 text-xl font-bold shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         disabled={!canBeReady}
                       >
-                        {currentParticipant.ready === true ? "Not Ready" : "Let's Party!"}
+                        {currentParticipant.ready === true ? "✓ I'm Ready!" : "🎉 Let's Party!"}
                       </Button>
-                      {!userGift && (
-                        <p className="text-sm text-red-600 mt-2">
-                          ⚠️ Please submit your gift before marking yourself as ready
+                      
+                      {canBeReady && !currentParticipant.ready && (
+                        <p className="text-sm text-gray-600 mt-3">
+                          Click the button above when you're ready for the game to start!
                         </p>
                       )}
-                      {userGift && !hasShippingAddress && (
-                        <p className="text-sm text-red-600 mt-2">
-                          ⚠️ Please add your shipping address to your <a href="/profile" className="underline font-semibold">profile</a> before marking yourself as ready
-                        </p>
-                      )}
-                    </>
+                    </div>
                   );
                 })()}
               </>
