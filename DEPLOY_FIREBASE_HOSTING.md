@@ -82,11 +82,11 @@ cd ..
 firebase deploy --only hosting
 ```
 
-## Continuous Deployment (Optional)
+## Continuous Deployment
 
-You can set up GitHub Actions for automatic deployment:
+GitHub Actions workflow is already set up! See `.github/workflows/deploy-firebase.yml`.
 
-1. Create `.github/workflows/deploy.yml`:
+To enable automatic deployment:
 
 ```yaml
 name: Deploy to Firebase Hosting
@@ -134,10 +134,13 @@ jobs:
           projectId: your-project-id
 ```
 
-2. Add secrets to GitHub repository:
+1. Add secrets to GitHub repository:
    - Go to Settings → Secrets and variables → Actions
    - Add all the VITE_* environment variables
    - Add FIREBASE_SERVICE_ACCOUNT (download from Firebase Console → Project Settings → Service Accounts)
+
+2. The workflow will automatically deploy on pushes to `main` branch
+   - Or manually trigger from Actions tab → Deploy to Firebase Hosting → Run workflow
 
 ## Troubleshooting
 

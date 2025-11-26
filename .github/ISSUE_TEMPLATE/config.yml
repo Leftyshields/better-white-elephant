@@ -1,0 +1,12 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Ask a Question
+    url: https://github.com/leftyshields/better-white-elephant/discussions
+    about: Ask questions and discuss ideas with the community
+  - name: 🐛 Report a Bug
+    url: https://github.com/leftyshields/better-white-elephant/issues/new?template=bug_report.md
+    about: Report a bug or unexpected behavior
+  - name: 💡 Request a Feature
+    url: https://github.com/leftyshields/better-white-elephant/issues/new?template=feature_request.md
+    about: Suggest a new feature or enhancement
+

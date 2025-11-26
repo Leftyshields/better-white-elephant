@@ -3,6 +3,7 @@
 A real-time White Elephant gift exchange platform built with React, Firebase, Node.js, Socket.io, and Redis.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![CI](https://github.com/leftyshields/better-white-elephant/workflows/CI/badge.svg)](https://github.com/leftyshields/better-white-elephant/actions)
 [![Firebase](https://img.shields.io/badge/Firebase-FFCA28?logo=firebase&logoColor=black)](https://firebase.google.com)
 [![React](https://img.shields.io/badge/React-20232A?logo=react&logoColor=61DAFB)](https://reactjs.org)
 
