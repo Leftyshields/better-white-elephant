@@ -63,8 +63,8 @@ export const sendPartyInvite = onRequest(
     }
 
     const party = partyDoc.data();
-    // Use production URL for invite links
-    const clientUrl = process.env.CLIENT_URL || 'https://better-white-elephant.web.app';
+    // Use production URL for invite links (prefer custom domain, fallback to Firebase domain)
+    const clientUrl = process.env.CLIENT_URL || 'https://stealorreveal.com' || 'https://better-white-elephant.web.app';
     const inviteLink = `${clientUrl}/party/${partyId}`;
     const partyTitle = party.title || 'White Elephant Party';
     const partyDate = party.date?.toDate ? party.date.toDate().toLocaleDateString() : 'TBD';
