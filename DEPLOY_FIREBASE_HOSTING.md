@@ -2,6 +2,8 @@
 
 This guide will help you deploy the Better White Elephant frontend to Firebase Hosting.
 
+**For complete setup including custom domain, see [FIREBASE_HOSTING_SETUP.md](./FIREBASE_HOSTING_SETUP.md)**
+
 ## Prerequisites
 
 1. Firebase CLI installed: `npm install -g firebase-tools`
