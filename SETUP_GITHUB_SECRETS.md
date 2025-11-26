@@ -38,8 +38,11 @@ Add these secrets (get values from your Firebase project):
 - **Where to find:** Firebase Console → Project Settings → General → Your apps → Web app
 - **Value:** `1:123456789012:web:abc123def456`
 
-#### VITE_SERVER_URL
-- **Value:** Your Node.js server URL (e.g., `https://your-server.railway.app` or `http://localhost:3001` for development)
+#### VITE_SERVER_URL (Optional - can add later)
+- **What it is:** The URL of your Node.js game server (Socket.io server)
+- **For now:** You can use `http://localhost:3001` as a placeholder
+- **Later:** When you deploy your server to Railway, Render, or another service, update this to the actual URL
+- **Value:** `http://localhost:3001` (placeholder) or your deployed server URL
 
 ### 3. Firebase Service Account (Most Important!)
 
@@ -67,14 +70,17 @@ This is required for deployment:
 
 ## Quick Checklist
 
+**Required for deployment:**
 - [ ] VITE_FIREBASE_API_KEY
 - [ ] VITE_FIREBASE_AUTH_DOMAIN
 - [ ] VITE_FIREBASE_PROJECT_ID
 - [ ] VITE_FIREBASE_STORAGE_BUCKET
 - [ ] VITE_FIREBASE_MESSAGING_SENDER_ID
 - [ ] VITE_FIREBASE_APP_ID
-- [ ] VITE_SERVER_URL
 - [ ] FIREBASE_SERVICE_ACCOUNT (JSON content)
+
+**Optional (can add later when server is deployed):**
+- [ ] VITE_SERVER_URL (use `http://localhost:3001` as placeholder for now)
 
 ## Verify Secrets Are Set
 
