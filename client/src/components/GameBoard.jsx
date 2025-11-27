@@ -225,9 +225,17 @@ export function GameBoard({ partyId }) {
   const unwrappedMap = new Map(unwrappedGifts || []);
   const turnActionMap = new Map(turnAction || []);
 
-  // Separate gifts into wrapped and unwrapped
-  const wrappedGiftList = gifts.filter((g) => wrappedGifts.includes(g.id));
-  const unwrappedGiftList = gifts.filter((g) => unwrappedMap.has(g.id));
+  // Limit gifts to number of players (one gift per player)
+  // Get the number of players from turnOrder (actual players in game) or going participants
+  const numPlayers = gameState?.turnOrder?.length || participants.filter(p => p.status === 'GOING').length;
+  
+  // Separate gifts into wrapped and unwrapped, limited to numPlayers
+  const allWrappedGifts = gifts.filter((g) => wrappedGifts.includes(g.id));
+  const allUnwrappedGifts = gifts.filter((g) => unwrappedMap.has(g.id));
+  
+  // Only show as many gifts as players (no more)
+  const wrappedGiftList = allWrappedGifts.slice(0, numPlayers);
+  const unwrappedGiftList = allUnwrappedGifts.slice(0, numPlayers);
 
   const currentAction = turnActionMap.get(currentPlayerId);
   const isAdmin = party?.adminId === user?.uid;
@@ -514,8 +522,53 @@ export function GameBoard({ partyId }) {
             {getCurrentPlayerName()}
           </p>
         </div>
+        
+        {/* Show boomerang rule if set */}
+        {party?.config?.returnToStart && (
+          <div className="mb-4 bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4">
+            <p className="text-yellow-800 font-semibold text-sm">
+              🔄 Boomerang Rule Active: After the last player, turns go back in reverse order!
+            </p>
+          </div>
+        )}
+        
         {gameState.isBoomerangPhase && (
-          <p className="text-yellow-600 font-semibold text-lg">🔄 Boomerang Round!</p>
+          <p className="text-yellow-600 font-semibold text-lg mb-4">🔄 Boomerang Round!</p>
+        )}
+        
+        {/* Player Queue/Order */}
+        {gameState?.turnOrder && gameState.turnOrder.length > 0 && (
+          <div className="mb-6 bg-white rounded-lg border-2 border-gray-200 p-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">Player Queue</h3>
+            <div className="flex flex-wrap gap-2">
+              {gameState.turnOrder.map((playerId, index) => {
+                const isCurrent = playerId === currentPlayerId;
+                const playerName = playerId === user?.uid 
+                  ? 'You' 
+                  : (userNames[playerId] || userEmails[playerId] || `Player ${playerId.slice(0, 8)}`);
+                const isPast = gameState.isBoomerangPhase 
+                  ? index > gameState.turnOrder.indexOf(currentPlayerId)
+                  : index < gameState.turnOrder.indexOf(currentPlayerId);
+                
+                return (
+                  <div
+                    key={playerId}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium ${
+                      isCurrent
+                        ? 'bg-blue-500 text-white border-2 border-blue-700'
+                        : isPast
+                        ? 'bg-gray-200 text-gray-600 border border-gray-300'
+                        : 'bg-gray-100 text-gray-800 border border-gray-300'
+                    }`}
+                  >
+                    <span className="font-bold mr-1">{index + 1}.</span>
+                    {playerName}
+                    {isCurrent && <span className="ml-2">👈</span>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         )}
 
         {/* End Game Button - Admin only */}

@@ -39,19 +39,15 @@ export function Header() {
   };
 
   return (
-    <header className="bg-white border-b border-gray-200 shadow-sm">
+    <header className="absolute top-0 left-0 right-0 z-50 bg-white/10 backdrop-blur-md border-b border-white/20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Title/Logo */}
           <Link to="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-500 rounded flex items-center justify-center">
-              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
-              </svg>
-            </div>
+            <span className="text-3xl">🎄</span>
             <div>
-              <h1 className="text-xl font-bold text-gray-900">StealOrReveal.com</h1>
-              <p className="text-xs text-gray-500">Better White Elephant</p>
+              <h1 className="text-xl font-bold text-white">StealOrReveal.com</h1>
+              <p className="text-xs text-gray-200">A Better White Elephant Gift Exchange</p>
             </div>
           </Link>
 
@@ -61,19 +57,19 @@ export function Header() {
               <>
                 <button
                   onClick={() => setShowUserMenu(!showUserMenu)}
-                  className="flex items-center gap-2 p-2 rounded-full hover:bg-gray-100 transition-colors"
+                  className="flex items-center gap-2 p-2 rounded-full hover:bg-white/20 transition-colors"
                   aria-label="User menu"
                 >
-                  <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-semibold">
+                  <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white font-semibold">
                     {user.displayName?.[0]?.toUpperCase() || user.email?.[0]?.toUpperCase() || 'U'}
                   </div>
                   {user.displayName && (
-                    <span className="hidden sm:block text-gray-700 font-medium">
+                    <span className="hidden sm:block text-white font-medium">
                       {user.displayName}
                     </span>
                   )}
                   <svg
-                    className={`w-4 h-4 text-gray-500 transition-transform ${
+                    className={`w-4 h-4 text-gray-200 transition-transform ${
                       showUserMenu ? 'transform rotate-180' : ''
                     }`}
                     fill="none"
@@ -89,24 +85,24 @@ export function Header() {
 
                 {/* Dropdown Menu */}
                 {showUserMenu && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 z-50">
+                  <div className="absolute right-0 mt-2 w-48 bg-slate-900/95 backdrop-blur-md rounded-md shadow-lg ring-1 ring-white/20 z-50">
                     <div className="py-1">
-                      <div className="px-4 py-2 border-b border-gray-200">
-                        <p className="text-sm font-medium text-gray-900">
+                      <div className="px-4 py-2 border-b border-white/20">
+                        <p className="text-sm font-medium text-white">
                           {user.displayName || 'User'}
                         </p>
-                        <p className="text-sm text-gray-500 truncate">{user.email}</p>
+                        <p className="text-sm text-gray-300 truncate">{user.email}</p>
                       </div>
                       <Link
                         to="/profile"
                         onClick={() => setShowUserMenu(false)}
-                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                        className="block px-4 py-2 text-sm text-gray-200 hover:bg-white/10 transition-colors"
                       >
                         Profile
                       </Link>
                       <button
                         onClick={handleSignOut}
-                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                        className="w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-white/10 transition-colors"
                       >
                         Sign out
                       </button>
@@ -117,7 +113,7 @@ export function Header() {
             ) : (
               <button
                 onClick={signInWithGoogle}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur-md text-white border border-white/20 rounded-md hover:bg-white/20 transition-colors"
               >
                 <svg
                   className="w-5 h-5"

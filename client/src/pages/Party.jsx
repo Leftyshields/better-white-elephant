@@ -47,12 +47,10 @@ export function Party() {
             }
           }
 
-          // Determine status - if pending invite was set to GOING, use that, otherwise PENDING
-          const inviteStatus = pendingInvite?.data()?.status === 'GOING' ? 'GOING' : 'PENDING';
-
-          // Auto-add user as participant
+          // Auto-add user as participant with GOING status
+          // Anyone who links to the party and signs in should be marked as GOING
           await setDoc(participantRef, {
-            status: inviteStatus,
+            status: 'GOING',
             turnNumber: null,
             ready: false,
             joinedAt: new Date(),
@@ -86,7 +84,7 @@ export function Party() {
   // If user is not authenticated, show sign-in prompt with redirect
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12">
+      <div className="min-h-screen flex items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black py-12">
         <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
           <h2 className="text-2xl font-bold mb-4">Join This Party</h2>
           <p className="text-gray-600 mb-6">

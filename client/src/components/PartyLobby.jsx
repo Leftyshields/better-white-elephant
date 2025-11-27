@@ -28,6 +28,11 @@ export function PartyLobby({ partyId, onStartGame }) {
   const { party, participants, pendingInvites, gifts, loading } = useParty(partyId);
   const [giftUrl, setGiftUrl] = useState('');
   const [scraping, setScraping] = useState(false);
+  const [showManualEntry, setShowManualEntry] = useState(false);
+  const [manualTitle, setManualTitle] = useState('');
+  const [manualImageUrl, setManualImageUrl] = useState('');
+  const [manualPrice, setManualPrice] = useState('');
+  const [pastedImage, setPastedImage] = useState(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
@@ -37,11 +42,13 @@ export function PartyLobby({ partyId, onStartGame }) {
   const [newPersonName, setNewPersonName] = useState('');
   const [newPersonEmail, setNewPersonEmail] = useState('');
   const [addingPerson, setAddingPerson] = useState(false);
-  const [maxSteals, setMaxSteals] = useState(party?.config?.maxSteals ?? 3);
+  const [showAddPeople, setShowAddPeople] = useState(false);
+  const [maxSteals, setMaxSteals] = useState(party?.config?.maxSteals ?? '');
   const [returnToStart, setReturnToStart] = useState(party?.config?.returnToStart ?? false);
   const [priceLimit, setPriceLimit] = useState(party?.config?.priceLimit ?? '');
   const [editingRules, setEditingRules] = useState(false);
   const [savingRules, setSavingRules] = useState(false);
+  const [openStep, setOpenStep] = useState(null); // Track which step is open
 
   const isAdmin = party?.adminId === user?.uid;
   const currentParticipant = participants.find((p) => p.id === user?.uid);
@@ -146,11 +153,64 @@ export function PartyLobby({ partyId, onStartGame }) {
   // Update local state when party config changes
   useEffect(() => {
     if (party?.config) {
-      setMaxSteals(party.config.maxSteals ?? 3);
+      setMaxSteals(party.config.maxSteals ?? '');
       setReturnToStart(party.config.returnToStart ?? false);
       setPriceLimit(party.config.priceLimit ?? '');
     }
   }, [party]);
+
+  // Compress image to reduce size for Firestore (max ~700KB to stay under 1MB limit)
+  const compressImage = (file, callback) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        
+        // Resize if too large (max 600px on longest side for better compression)
+        const maxDimension = 600;
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = Math.round((height / width) * maxDimension);
+            width = maxDimension;
+          } else {
+            width = Math.round((width / height) * maxDimension);
+            height = maxDimension;
+          }
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        // Try different quality levels until we get under 700KB
+        const tryCompress = (quality) => {
+          const dataUrl = canvas.toDataURL('image/jpeg', quality);
+          // More accurate base64 size calculation
+          const base64Length = dataUrl.length - (dataUrl.indexOf(',') + 1);
+          const sizeInBytes = (base64Length * 3) / 4;
+          
+          if (sizeInBytes > 700000 && quality > 0.3) {
+            // Try lower quality
+            return tryCompress(quality - 0.1);
+          }
+          return dataUrl;
+        };
+        
+        const compressedDataUrl = tryCompress(0.7);
+        callback(compressedDataUrl);
+      };
+      img.onerror = () => {
+        // If image fails to load, show error
+        alert('Failed to load image. Please try a different image.');
+      };
+      img.src = event.target?.result;
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleSubmitGift = async () => {
     if (!giftUrl.trim()) {
@@ -173,16 +233,15 @@ export function PartyLobby({ partyId, onStartGame }) {
       const { title, image, price, error } = await scrapeGiftUrl(normalizedUrl);
 
       // Check if scraping returned meaningful data
-      if (error || !title || title === 'Gift' || title === 'Untitled Gift') {
-        const proceed = confirm(
-          `Unable to automatically extract details from this URL. ${error ? `Error: ${error}` : 'The page may require JavaScript or have restricted access.'}\n\n` +
-          `You can still submit the gift with the URL, but you may want to manually add details later.\n\n` +
-          `Continue with submission?`
-        );
-        if (!proceed) {
-          setScraping(false);
-          return;
-        }
+      if (error || !title || title === 'Gift' || title === 'Untitled Gift' || !image) {
+        // Show manual entry form instead of just confirming
+        setShowManualEntry(true);
+        setManualTitle(title && title !== 'Gift' && title !== 'Untitled Gift' ? title : '');
+        setManualImageUrl(image || '');
+        setManualPrice(price || '');
+        setPastedImage(null);
+        setScraping(false);
+        return;
       }
 
       // Check price limit if set
@@ -205,29 +264,8 @@ export function PartyLobby({ partyId, onStartGame }) {
         }
       }
 
-      // Create or update gift
-      const giftData = {
-        partyId,
-        submitterId: user.uid,
-        url: normalizedUrl,
-        title,
-        image,
-        price,
-        isFrozen: false,
-        winnerId: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      if (userGift) {
-        // Update existing gift
-        await updateDoc(doc(db, 'gifts', userGift.id), giftData);
-      } else {
-        // Create new gift
-        await addDoc(collection(db, 'gifts'), giftData);
-      }
-
-      // Create or update participant status to GOING
+      // Ensure user is a participant BEFORE creating/updating gift
+      // This prevents permission errors
       const participantRef = doc(db, 'parties', partyId, 'participants', user.uid);
       const participantDoc = await getDoc(participantRef);
       if (participantDoc.exists()) {
@@ -245,9 +283,59 @@ export function PartyLobby({ partyId, onStartGame }) {
         });
       }
 
+      // Create or update gift
+      const giftData = {
+        partyId,
+        submitterId: user.uid,
+        url: normalizedUrl,
+        title,
+        image,
+        price,
+        isFrozen: false,
+        winnerId: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      if (userGift) {
+        // Update existing gift
+        await updateDoc(doc(db, 'gifts', userGift.id), giftData);
+        console.log('Gift updated successfully');
+      } else {
+        // Create new gift
+        const giftRef = await addDoc(collection(db, 'gifts'), giftData);
+        console.log('Gift created successfully with ID:', giftRef.id);
+      }
+
+      // Clear the form
       setGiftUrl('');
+      
+      // Auto-advance to next step
+      const currentIndex = setupSteps.findIndex(s => s.id === 'gift');
+      if (currentIndex < setupSteps.length - 1) {
+        setTimeout(() => {
+          setOpenStep(setupSteps[currentIndex + 1].id);
+        }, 500);
+      } else {
+        setOpenStep(null);
+      }
+      
+      // Show success message (the UI will update via the real-time listener)
+      // Give it a moment for the listener to pick up the change
+      setTimeout(() => {
+        // Check if gift appears in the list
+        const updatedGift = gifts.find((g) => g.submitterId === user.uid);
+        if (!updatedGift) {
+          console.warn('Gift created but not yet visible in UI - this is normal, it should appear shortly');
+        }
+      }, 500);
     } catch (error) {
       console.error('Error submitting gift:', error);
+      console.error('Error details:', {
+        code: error.code,
+        message: error.message,
+        stack: error.stack
+      });
       alert('Failed to submit gift: ' + error.message);
     } finally {
       setScraping(false);
@@ -274,6 +362,11 @@ export function PartyLobby({ partyId, onStartGame }) {
         ready: newReadyState,
         updatedAt: new Date(),
       });
+      
+      // If marking as ready, close the step
+      if (newReadyState && !isAdmin) {
+        setOpenStep(null);
+      }
     } catch (error) {
       console.error('Error toggling ready state:', error);
       alert('Failed to update ready state: ' + error.message);
@@ -432,6 +525,20 @@ export function PartyLobby({ partyId, onStartGame }) {
 
       setNewPersonName('');
       setNewPersonEmail('');
+      setShowAddPeople(false);
+      
+      // Auto-advance to next step if participants requirement is met
+      // Note: The participant count will update via real-time listener
+      setTimeout(() => {
+        const displayedInvites = pendingInvites.filter(inv => inv.status === 'GOING' || inv.status !== 'ACCEPTED');
+        const totalCount = participants.length + displayedInvites.length;
+        if (totalCount >= 2 && isAdmin) {
+          const currentIndex = setupSteps.findIndex(s => s.id === 'participants');
+          if (currentIndex < setupSteps.length - 1) {
+            setOpenStep(setupSteps[currentIndex + 1].id);
+          }
+        }
+      }, 500);
     } catch (error) {
       console.error('Error adding person:', error);
       alert('Failed to add person: ' + error.message);
@@ -485,17 +592,30 @@ export function PartyLobby({ partyId, onStartGame }) {
   };
 
   const handleUpdateRules = async () => {
+    // Validate maxSteals is required
+    if (!maxSteals || parseInt(maxSteals) < 1) {
+      alert('Max Steals is required and must be at least 1');
+      return;
+    }
+    
     setSavingRules(true);
     try {
       await updateDoc(doc(db, 'parties', partyId), {
         config: {
-          maxSteals: parseInt(maxSteals) || 3,
+          maxSteals: parseInt(maxSteals),
           returnToStart: returnToStart,
           priceLimit: priceLimit ? parseFloat(priceLimit) : null,
         },
         updatedAt: new Date(),
       });
       setEditingRules(false);
+      // Auto-advance to next step
+      const currentIndex = setupSteps.findIndex(s => s.id === 'rules');
+      if (currentIndex < setupSteps.length - 1) {
+        setOpenStep(setupSteps[currentIndex + 1].id);
+      } else {
+        setOpenStep(null);
+      }
     } catch (error) {
       console.error('Error updating rules:', error);
       alert('Failed to update game rules: ' + error.message);
@@ -503,6 +623,40 @@ export function PartyLobby({ partyId, onStartGame }) {
       setSavingRules(false);
     }
   };
+
+  // Calculate setup progress (must be before early returns to maintain hook order)
+  const setupSteps = isAdmin ? [
+    { id: 'rules', label: 'Set game rules', completed: (() => {
+      // Rules are complete if maxSteals is set (required field)
+      return !!(party?.config?.maxSteals);
+    })() },
+    { id: 'participants', label: 'Add participants', completed: (() => {
+      const displayedInvites = pendingInvites.filter(inv => inv.status === 'GOING' || inv.status !== 'ACCEPTED');
+      return participants.length + displayedInvites.length >= 2;
+    })() },
+    { id: 'gift', label: 'Submit your gift', completed: !!userGift },
+    { id: 'ready', label: 'All participants ready', completed: (() => {
+      const nonAdminParticipants = participants.filter((p) => p.status === 'GOING' && p.id !== party?.adminId);
+      return nonAdminParticipants.length > 0 && nonAdminParticipants.every((p) => p.ready === true);
+    })() },
+  ] : [
+    { id: 'gift', label: 'Submit your gift', completed: !!userGift },
+    { id: 'ready', label: 'Mark yourself as ready', completed: currentParticipant?.ready === true },
+  ];
+
+  const completedSteps = setupSteps.filter(s => s.completed).length;
+  const totalSteps = setupSteps.length;
+  const progressPercentage = (completedSteps / totalSteps) * 100;
+
+  // Auto-open first incomplete step, or keep current open step
+  useEffect(() => {
+    if (openStep === null) {
+      const firstIncomplete = setupSteps.findIndex(s => !s.completed);
+      if (firstIncomplete !== -1) {
+        setOpenStep(setupSteps[firstIncomplete].id);
+      }
+    }
+  }, [setupSteps, openStep]);
 
   if (loading) {
     return <div className="p-8 text-center">Loading...</div>;
@@ -512,37 +666,15 @@ export function PartyLobby({ partyId, onStartGame }) {
     return <div className="p-8 text-center">Party not found</div>;
   }
 
-  // Calculate setup progress
-  const setupSteps = isAdmin ? [
-    { id: 'gift', label: 'Submit your gift', completed: !!userGift },
-    { id: 'address', label: 'Add shipping address', completed: adminShippingAddress?.street && adminShippingAddress?.city },
-    { id: 'participants', label: 'Invite at least 2 participants', completed: (() => {
-      const displayedInvites = pendingInvites.filter(inv => inv.status === 'GOING' || inv.status !== 'ACCEPTED');
-      return participants.length + displayedInvites.length >= 2;
-    })() },
-    { id: 'ready', label: 'All participants ready', completed: (() => {
-      const nonAdminParticipants = participants.filter((p) => p.status === 'GOING' && p.id !== party?.adminId);
-      return nonAdminParticipants.length > 0 && nonAdminParticipants.every((p) => p.ready === true);
-    })() },
-  ] : [
-    { id: 'gift', label: 'Submit your gift', completed: !!userGift },
-    { id: 'address', label: 'Add shipping address', completed: userShippingAddress?.street && userShippingAddress?.city },
-    { id: 'ready', label: 'Mark yourself as ready', completed: currentParticipant?.ready === true },
-  ];
-
-  const completedSteps = setupSteps.filter(s => s.completed).length;
-  const totalSteps = setupSteps.length;
-  const progressPercentage = (completedSteps / totalSteps) * 100;
-
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-6">
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl shadow-lg p-8 text-white">
         <div className="flex justify-between items-start">
           <div>
-            {party.title && (
+        {party.title && (
               <h1 className="text-4xl font-bold mb-2">{party.title}</h1>
-            )}
+        )}
             <p className="text-blue-100 text-lg">
               {party.date?.toDate?.().toLocaleDateString('en-US', { 
                 weekday: 'long', 
@@ -550,7 +682,7 @@ export function PartyLobby({ partyId, onStartGame }) {
                 month: 'long', 
                 day: 'numeric' 
               }) || 'No date set'}
-            </p>
+        </p>
           </div>
           {isAdmin && (
             <div className="flex gap-2">
@@ -563,9 +695,9 @@ export function PartyLobby({ partyId, onStartGame }) {
         </div>
       </div>
 
-      {/* Setup Progress */}
-      <div className="bg-white rounded-xl shadow-md p-6">
-        <div className="mb-4">
+      {/* Setup Progress - Collapsible Accordion */}
+      <div className="bg-white rounded-xl shadow-md overflow-hidden">
+        <div className="p-6 border-b border-gray-200">
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Setup Progress</h2>
           <div className="flex items-center gap-4">
             <div className="flex-1 bg-gray-200 rounded-full h-3 overflow-hidden">
@@ -580,564 +712,794 @@ export function PartyLobby({ partyId, onStartGame }) {
           </div>
         </div>
         
-        <div className="space-y-3">
-          {setupSteps.map((step, index) => (
-            <div key={step.id} className="flex items-center gap-3 p-3 rounded-lg bg-gray-50">
-              <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-bold ${
-                step.completed 
-                  ? 'bg-green-500 text-white' 
-                  : 'bg-gray-300 text-gray-600'
-              }`}>
-                {step.completed ? '✓' : index + 1}
-              </div>
-              <span className={`flex-1 ${step.completed ? 'text-gray-600 line-through' : 'text-gray-900 font-medium'}`}>
-                {step.label}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Step 1: Submit Gift */}
-      <div className="bg-white rounded-xl shadow-md p-6">
-        <div className="flex items-center gap-3 mb-4">
-          <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${
-            userGift 
-              ? 'bg-green-500 text-white' 
-              : 'bg-blue-500 text-white'
-          }`}>
-            {userGift ? '✓' : '1'}
-          </div>
-          <h2 className="text-2xl font-bold text-gray-900">Submit Your Gift</h2>
-        </div>
-
-        {!userGift ? (
-          <div className="space-y-4">
-            <p className="text-gray-600">
-              Enter a URL to your gift. We'll automatically extract the title and image from the page.
-            </p>
-            <div className="flex gap-4">
-              <div className="flex-1">
-                <input
-                  type="url"
-                  placeholder="https://example.com/gift"
-                  value={giftUrl}
-                  onChange={(e) => setGiftUrl(e.target.value)}
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter' && !scraping && giftUrl.trim()) {
-                      handleSubmitGift();
-                    }
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-              <Button onClick={handleSubmitGift} disabled={scraping || !giftUrl.trim()} className="px-6">
-                {scraping ? 'Processing...' : 'Submit Gift'}
-              </Button>
-            </div>
-            <p className="text-sm text-gray-500">
-              💡 Tip: Use any product page URL from Amazon, Etsy, or other online stores
-            </p>
-          </div>
-        ) : (
-          <div className="bg-green-50 border-2 border-green-200 rounded-lg p-6">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex gap-6 flex-1">
-                {userGift.image && (
-                  <img
-                    src={userGift.image}
-                    alt={userGift.title || 'Gift image'}
-                    className="w-48 h-48 object-cover rounded-lg border-2 border-green-300 flex-shrink-0"
-                    onError={(e) => {
-                      e.target.style.display = 'none';
-                    }}
-                    loading="lazy"
-                  />
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-green-700 font-semibold">✓ Gift Submitted</span>
-                  </div>
-                  <h3 className="font-semibold text-gray-900 mb-2 text-lg">{userGift.title || 'Untitled Gift'}</h3>
-                  {userGift.price && (
-                    <p className="text-2xl font-bold text-gray-900 mb-3">{userGift.price}</p>
-                  )}
-                  {userGift.url && (() => {
-                    const url = String(userGift.url).trim();
-                    let fullUrl;
-                    try {
-                      if (url.includes(' ') || url.includes('Uncaught') || url.includes('Error:')) {
-                        return (
-                          <p className="text-red-600 text-sm">
-                            Invalid URL saved. Please delete and re-submit.
+        <div className="divide-y divide-gray-200">
+          {setupSteps.map((step, index) => {
+            const isOpen = openStep === step.id;
+            const stepContent = (() => {
+              switch (step.id) {
+                case 'rules':
+                  if (!isAdmin) return null;
+                  return (
+                    <div className="p-6">
+                      {editingRules ? (
+                        <div className="space-y-4">
+                          <Input
+                            type="number"
+                            label="Max Steals *"
+                            value={maxSteals}
+                            onChange={(e) => setMaxSteals(e.target.value)}
+                            min="1"
+                            placeholder="e.g., 3"
+                          />
+                          <Input
+                            type="number"
+                            label="Price Limit (optional)"
+                            placeholder="e.g., 25.00"
+                            value={priceLimit}
+                            onChange={(e) => setPriceLimit(e.target.value)}
+                            min="0"
+                            step="0.01"
+                          />
+                          <p className="text-xs text-gray-500">
+                            Set a maximum price for gifts. Participants will see a warning if their gift exceeds this limit.
                           </p>
-                        );
-                      }
-                      fullUrl = url.startsWith('http://') || url.startsWith('https://') 
-                        ? url 
-                        : `https://${url}`;
-                      new URL(fullUrl);
-                    } catch (e) {
-                      return (
-                        <p className="text-red-600 text-sm">
-                          Invalid URL format. Please delete and re-submit.
-                        </p>
-                      );
-                    }
-                    return (
-                      <a
-                        href={fullUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 text-sm hover:underline inline-block"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          try {
-                            window.open(fullUrl, '_blank', 'noopener,noreferrer');
-                          } catch (err) {
-                            alert('Invalid URL. Please delete and re-submit your gift.');
-                          }
-                        }}
-                      >
-                        View Gift →
-                      </a>
-                    );
-                  })()}
-                </div>
-              </div>
-              <Button
-                variant="danger"
-                onClick={async () => {
-                  if (confirm('Are you sure you want to delete your gift? You can submit a new one.')) {
-                    try {
-                      await deleteDoc(doc(db, 'gifts', userGift.id));
-                      const participantRef = doc(db, 'parties', partyId, 'participants', user.uid);
-                      await updateDoc(participantRef, {
-                        status: 'PENDING',
-                        updatedAt: new Date(),
-                      });
-                    } catch (error) {
-                      console.error('Error deleting gift:', error);
-                      alert('Failed to delete gift: ' + error.message);
-                    }
-                  }
-                }}
-                className="flex-shrink-0"
-              >
-                Change
-              </Button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Step 2: Add Shipping Address */}
-      {(() => {
-        const hasAddress = isAdmin 
-          ? (adminShippingAddress?.street && adminShippingAddress?.city)
-          : (userShippingAddress?.street && userShippingAddress?.city);
-        const stepNumber = userGift ? '2' : '1';
-        
-        return (
-          <div className="bg-white rounded-xl shadow-md p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${
-                hasAddress 
-                  ? 'bg-green-500 text-white' 
-                  : 'bg-blue-500 text-white'
-              }`}>
-                {hasAddress ? '✓' : stepNumber}
-              </div>
-              <h2 className="text-2xl font-bold text-gray-900">Shipping Address</h2>
-            </div>
-            
-            {hasAddress ? (
-              <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-green-700 font-semibold">✓ Address Added</span>
-                </div>
-                <p className="text-sm text-gray-600">
-                  Your shipping address is on file. Winners will need this to receive their gifts.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <p className="text-gray-600">
-                  Add your shipping address so winners can receive their gifts.
-                </p>
-                <Button 
-                  onClick={() => window.location.href = '/profile'}
-                  className="w-full sm:w-auto"
-                >
-                  Add Shipping Address →
-                </Button>
-                <p className="text-sm text-gray-500">
-                  {isAdmin 
-                    ? 'As the host, you need an address on file before starting the game.'
-                    : 'You need an address before marking yourself as ready.'}
-                </p>
-              </div>
-            )}
-          </div>
-        );
-      })()}
-
-      {/* Step 3: Participants (Admin only) */}
-      {isAdmin && (
-        <div className="bg-white rounded-xl shadow-md p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${
-              (() => {
-                const displayedInvites = pendingInvites.filter(inv => inv.status === 'GOING' || inv.status !== 'ACCEPTED');
-                return participants.length + displayedInvites.length >= 2;
-              })()
-                ? 'bg-green-500 text-white' 
-                : 'bg-blue-500 text-white'
-            }`}>
-              {(() => {
-                const displayedInvites = pendingInvites.filter(inv => inv.status === 'GOING' || inv.status !== 'ACCEPTED');
-                return participants.length + displayedInvites.length >= 2 ? '✓' : '3';
-              })()}
-            </div>
-            <h2 className="text-2xl font-bold text-gray-900">Participants</h2>
-          </div>
-          
-          <div className="mb-4">
-            <p className="text-gray-600 mb-4">
-              {(() => {
-                const displayedInvites = pendingInvites.filter(inv => inv.status === 'GOING' || inv.status !== 'ACCEPTED');
-                const totalCount = participants.length + displayedInvites.length;
-                return totalCount >= 2
-                  ? `Great! You have ${totalCount} participants.`
-                  : `You need at least 2 participants to start. Currently: ${totalCount}`;
-              })()}
-            </p>
-          </div>
-
-          {/* Add Participant Form */}
-          <div className="mb-6 p-4 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-            <h3 className="font-semibold text-gray-900 mb-3">Add Participant</h3>
-            <p className="text-sm text-gray-600 mb-4">
-              Add people by name and email. They'll be added to the participants list and an invite email will be sent automatically.
-            </p>
-            <div className="space-y-3">
-              <Input
-                type="text"
-                label="Name (optional)"
-                placeholder="John Doe"
-                value={newPersonName}
-                onChange={(e) => setNewPersonName(e.target.value)}
-              />
-              <Input
-                type="email"
-                label="Email"
-                placeholder="friend@example.com"
-                value={newPersonEmail}
-                onChange={(e) => setNewPersonEmail(e.target.value)}
-                required
-              />
-              <Button
-                onClick={handleAddPerson}
-                disabled={addingPerson || !newPersonEmail.trim()}
-                className="w-full sm:w-auto"
-              >
-                {addingPerson ? 'Adding...' : 'Add Person'}
-              </Button>
-            </div>
-          </div>
-
-          <div className="space-y-2 max-h-64 overflow-y-auto">
-            {participants.map((participant) => {
-              const isYou = participant.id === user?.uid;
-              const isAdminParticipant = participant.id === party?.adminId;
-              const displayName = isYou 
-                ? 'You (Host)' 
-                : (userNames[participant.id] && userNames[participant.id] !== participant.id 
-                    ? userNames[participant.id] 
-                    : null);
-              const email = userEmails[participant.id] || null;
-              
-              return (
-                <div
-                  key={participant.id}
-                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                >
-                  <div className="flex items-center gap-3">
-                    <div>
-                      <span className="text-gray-900 font-medium">
-                        {displayName || email || `User ${participant.id.slice(0, 8)}`}
-                      </span>
-                      {email && displayName && !isYou && (
-                        <span className="text-xs text-gray-500 ml-1">({email})</span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {!isAdminParticipant && (
-                      <Button
-                        variant="danger"
-                        onClick={() => handleRemoveParticipant(participant.id)}
-                        className="text-xs px-2 py-1"
-                      >
-                        Remove
-                      </Button>
-                    )}
-                    {isAdminParticipant && (
-                      <span className="text-xs text-gray-500">Cannot remove host</span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-            {pendingInvites
-              .filter(inv => inv.status === 'GOING' || inv.status !== 'ACCEPTED')
-              .map((invite) => (
-                <div
-                  key={invite.id}
-                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                >
-                  <div className="flex items-center gap-3">
-                    <div>
-                      {invite.name && (
-                        <span className="text-gray-900 font-medium">{invite.name}</span>
-                      )}
-                      {invite.email && (
-                        <span className={`${invite.name ? 'text-xs text-gray-500 ml-1' : 'text-gray-900 font-medium'}`}>
-                          {invite.name ? `(${invite.email})` : invite.email}
-                        </span>
-                      )}
-                    </div>
-                    {invite.emailFailed && (
-                      <span className="text-xs text-orange-600 ml-2">Email failed</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="danger"
-                      onClick={() => handleRemovePendingInvite(invite.id)}
-                      className="text-xs px-2 py-1"
-                    >
-                      Remove
-                    </Button>
-                  </div>
-                </div>
-              ))}
-          </div>
-          
-          {participants.length === 0 && pendingInvites.filter(inv => inv.status !== 'ACCEPTED').length === 0 && (
-            <p className="text-gray-500 text-center py-4">No participants yet. Add someone above or use the Share Link button to invite people!</p>
-          )}
-        </div>
-      )}
-
-      {/* Participants List (Non-admin) */}
-      {!isAdmin && (
-        <div className="bg-white rounded-xl shadow-md p-6">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Participants</h2>
-          <div className="space-y-2">
-            {participants.map((participant) => {
-              const isYou = participant.id === user?.uid;
-              const displayName = isYou 
-                ? 'You' 
-                : (userNames[participant.id] && userNames[participant.id] !== participant.id 
-                    ? userNames[participant.id] 
-                    : null);
-              const email = userEmails[participant.id] || null;
-              
-              return (
-                <div
-                  key={participant.id}
-                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                >
-                  <span className="text-gray-900 font-medium">
-                    {displayName || email || `User ${participant.id.slice(0, 8)}`}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Step 4: All Participants Ready (Admin only) */}
-      {isAdmin && (
-        <div className="bg-white rounded-xl shadow-md p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${
-              (() => {
-                const nonAdminParticipants = participants.filter((p) => p.status === 'GOING' && p.id !== party?.adminId);
-                return nonAdminParticipants.length > 0 && nonAdminParticipants.every((p) => p.ready === true);
-              })()
-                ? 'bg-green-500 text-white' 
-                : 'bg-blue-500 text-white'
-            }`}>
-              {(() => {
-                const nonAdminParticipants = participants.filter((p) => p.status === 'GOING' && p.id !== party?.adminId);
-                return nonAdminParticipants.length > 0 && nonAdminParticipants.every((p) => p.ready === true) ? '✓' : '4';
-              })()}
-            </div>
-            <h2 className="text-2xl font-bold text-gray-900">All Participants Ready</h2>
-          </div>
-
-          {(() => {
-            const nonAdminParticipants = participants.filter((p) => p.status === 'GOING' && p.id !== party?.adminId);
-            const allReady = nonAdminParticipants.length > 0 && nonAdminParticipants.every((p) => p.ready === true);
-            const readyCount = nonAdminParticipants.filter((p) => p.ready === true).length;
-            const totalCount = nonAdminParticipants.length;
-
-            if (allReady) {
-              return (
-                <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-green-700 font-semibold">✓ All Participants Ready</span>
-                  </div>
-                  <p className="text-sm text-gray-600">
-                    All {totalCount} participant{totalCount !== 1 ? 's are' : ' is'} ready. You can start the game!
-                  </p>
-                </div>
-              );
-            } else if (totalCount === 0) {
-              return (
-                <div className="space-y-3">
-                  <p className="text-gray-600">
-                    Waiting for participants to join and mark themselves as ready.
-                  </p>
-                </div>
-              );
-            } else {
-              return (
-                <div className="space-y-3">
-                  <p className="text-gray-600">
-                    {readyCount} of {totalCount} participant{totalCount !== 1 ? 's are' : ' is'} ready.
-                  </p>
-                  <div className="space-y-2">
-                    {participants
-                      .filter((p) => p.status === 'GOING' && p.id !== party?.adminId)
-                      .map((participant) => {
-                        const displayName = userNames[participant.id] && userNames[participant.id] !== participant.id 
-                          ? userNames[participant.id] 
-                          : (userEmails[participant.id] || `User ${participant.id.slice(0, 8)}`);
-                        
-                        return (
-                          <div
-                            key={participant.id}
-                            className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                          >
-                            <span className="text-gray-900 font-medium">{displayName}</span>
-                            <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                              participant.ready === true
-                                ? 'bg-green-100 text-green-800' 
-                                : 'bg-yellow-100 text-yellow-800'
-                            }`}>
-                              {participant.ready === true ? '✓ Ready' : 'Waiting...'}
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              id="returnToStart"
+                              checked={returnToStart}
+                              onChange={(e) => setReturnToStart(e.target.checked)}
+                              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                            />
+                            <label htmlFor="returnToStart" className="text-sm text-gray-700">
+                              Enable Boomerang Rule (reverse turn order after last player)
+                            </label>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button 
+                              onClick={handleUpdateRules} 
+                              disabled={savingRules}
+                            >
+                              {savingRules ? 'Saving...' : 'Save Rules'}
+                            </Button>
+                            <Button 
+                              variant="secondary" 
+                              onClick={() => {
+                                setEditingRules(false);
+                                setMaxSteals(party?.config?.maxSteals ?? '');
+                                setReturnToStart(party?.config?.returnToStart ?? false);
+                                setPriceLimit(party?.config?.priceLimit ?? '');
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                            <span className="text-gray-700 font-medium">Max Steals:</span>
+                            <span className="text-gray-900 font-semibold">
+                              {party?.config?.maxSteals ? party.config.maxSteals : 'Not set'}
                             </span>
                           </div>
-                        );
-                      })}
-                  </div>
-                </div>
-              );
-            }
-          })()}
-        </div>
-      )}
+                          <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                            <span className="text-gray-700 font-medium">Price Limit:</span>
+                            <span className="text-gray-900 font-semibold">
+                              {party?.config?.priceLimit ? `$${parseFloat(party.config.priceLimit).toFixed(2)}` : 'Not set'}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                            <span className="text-gray-700 font-medium">Boomerang Rule:</span>
+                            <span className={`font-semibold ${party?.config?.returnToStart ? 'text-green-600' : 'text-gray-600'}`}>
+                              {party?.config?.returnToStart ? 'Enabled' : 'Disabled'}
+                            </span>
+                          </div>
+                          {step.completed && (
+                            <Button
+                              variant="secondary"
+                              onClick={() => {
+                                setEditingRules(true);
+                                setOpenStep(step.id);
+                              }}
+                              className="w-full sm:w-auto"
+                            >
+                              Edit Rules
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                case 'participants':
+                  if (!isAdmin) return null;
+                  return (
+                    <div className="p-6">
+                      <div className="mb-4">
+          <p className="text-gray-600 mb-4">
+                          {(() => {
+                            const displayedInvites = pendingInvites.filter(inv => inv.status === 'GOING' || inv.status !== 'ACCEPTED');
+                            const totalCount = participants.length + displayedInvites.length;
+                            return totalCount >= 2
+                              ? `Great! You have ${totalCount} participants.`
+                              : `You need at least 2 participants to start. Currently: ${totalCount}`;
+                          })()}
+                        </p>
+                      </div>
 
-      {/* Game Rules Section (Admin only) */}
-      {isAdmin && (
-        <div className="bg-white rounded-xl shadow-md p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg bg-blue-500 text-white">
-              ⚙️
-            </div>
-            <h2 className="text-2xl font-bold text-gray-900">Game Rules</h2>
+                      <div className="mb-4">
+                        {!showAddPeople ? (
+                          <Button
+                            variant="secondary"
+                            onClick={() => setShowAddPeople(true)}
+                            className="w-full sm:w-auto"
+                          >
+                            Add Person
+                          </Button>
+                        ) : (
+                          <div className="space-y-3">
+            <Input
+                              type="text"
+                              label="Name (optional)"
+                              placeholder="John Doe"
+                              value={newPersonName}
+                              onChange={(e) => setNewPersonName(e.target.value)}
+                            />
+                            <div className="flex gap-2">
+                              <Input
+                                type="email"
+                                label="Email"
+                                placeholder="friend@example.com"
+                                value={newPersonEmail}
+                                onChange={(e) => setNewPersonEmail(e.target.value)}
+                                className="flex-1"
+                              />
+                              <div className="flex items-end gap-2">
+                                <Button
+                                  onClick={handleAddPerson}
+                                  disabled={!newPersonEmail.trim() || !newPersonEmail.includes('@') || addingPerson}
+                                >
+                                  {addingPerson ? 'Adding...' : 'Add'}
+                                </Button>
+                                <Button
+                                  variant="secondary"
+                                  onClick={() => {
+                                    setShowAddPeople(false);
+                                    setNewPersonName('');
+                                    setNewPersonEmail('');
+                                  }}
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            </div>
+                            <p className="text-xs text-gray-500">
+                              An email invite will be sent automatically, or they can use the share link.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="space-y-2 max-h-64 overflow-y-auto">
+                        {participants.map((participant) => {
+                          const isYou = participant.id === user?.uid;
+                          const isAdminParticipant = participant.id === party?.adminId;
+                          const displayName = isYou 
+                            ? 'You (Host)' 
+                            : (userNames[participant.id] && userNames[participant.id] !== participant.id 
+                                ? userNames[participant.id] 
+                                : null);
+                          const email = userEmails[participant.id] || null;
+                          
+                          return (
+                            <div
+                              key={participant.id}
+                              className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                            >
+                              <div className="flex items-center gap-3">
+                                <div>
+                                  <span className="text-gray-900 font-medium">
+                                    {displayName || email || `User ${participant.id.slice(0, 8)}`}
+                                  </span>
+                                  {email && displayName && !isYou && (
+                                    <span className="text-xs text-gray-500 ml-1">({email})</span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {!isAdminParticipant && (
+                                  <Button
+                                    variant="danger"
+                                    onClick={() => handleRemoveParticipant(participant.id)}
+                                    className="text-xs px-2 py-1"
+                                  >
+                                    Remove
+                                  </Button>
+                                )}
+                                {isAdminParticipant && (
+                                  <span className="text-xs text-gray-500">Cannot remove host</span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {pendingInvites
+                          .filter(inv => inv.status === 'GOING' || inv.status !== 'ACCEPTED')
+                          .map((invite) => (
+                            <div
+                              key={invite.id}
+                              className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                            >
+                              <div className="flex items-center gap-3">
+                                <div>
+                                  {invite.name && (
+                                    <span className="text-gray-900 font-medium">{invite.name}</span>
+                                  )}
+                                  {invite.email && (
+                                    <span className={`${invite.name ? 'text-xs text-gray-500 ml-1' : 'text-gray-900 font-medium'}`}>
+                                      {invite.name ? `(${invite.email})` : invite.email}
+                                    </span>
+                                  )}
+                                </div>
+                                {invite.emailFailed && (
+                                  <span className="text-xs text-orange-600 ml-2">Email failed</span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  variant="danger"
+                                  onClick={() => handleRemovePendingInvite(invite.id)}
+                                  className="text-xs px-2 py-1"
+                                >
+                                  Remove
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                      
+                      {participants.length === 0 && pendingInvites.filter(inv => inv.status !== 'ACCEPTED').length === 0 && (
+                        <p className="text-gray-500 text-center py-4">No participants yet. Add someone above or use the Share Link button to invite people!</p>
+                      )}
+                    </div>
+                  );
+                case 'gift':
+                  return (
+                    <div className="p-6">
+                      {!userGift ? (
+                        <div className="space-y-4">
+                          {!showManualEntry ? (
+                            <>
+                              <p className="text-gray-600">
+                                Enter a URL to your gift. We'll automatically extract the title and image from the page.
+                              </p>
+                              <div className="flex gap-4">
+                                <div className="flex-1">
+                                  <input
+              type="url"
+              placeholder="https://example.com/gift"
+              value={giftUrl}
+              onChange={(e) => setGiftUrl(e.target.value)}
+                                    onKeyPress={(e) => {
+                                      if (e.key === 'Enter' && !scraping && giftUrl.trim()) {
+                                        handleSubmitGift();
+                                      }
+                                    }}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+            />
+                                </div>
+                                <Button onClick={handleSubmitGift} disabled={scraping || !giftUrl.trim()} className="px-6">
+              {scraping ? 'Processing...' : 'Submit Gift'}
+            </Button>
           </div>
-
-          {editingRules ? (
-            <div className="space-y-4">
-              <Input
-                type="number"
-                label="Max Steals"
-                value={maxSteals}
-                onChange={(e) => setMaxSteals(e.target.value)}
-                min="1"
-              />
-              <Input
-                type="number"
-                label="Price Limit (optional)"
-                placeholder="e.g., 25.00"
-                value={priceLimit}
-                onChange={(e) => setPriceLimit(e.target.value)}
-                min="0"
-                step="0.01"
-              />
-              <p className="text-xs text-gray-500">
-                Set a maximum price for gifts. Participants will see a warning if their gift exceeds this limit.
-              </p>
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="returnToStart"
-                  checked={returnToStart}
-                  onChange={(e) => setReturnToStart(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <label htmlFor="returnToStart" className="text-sm text-gray-700">
-                  Enable Boomerang Rule (reverse turn order after last player)
-                </label>
-              </div>
-              <div className="flex gap-2">
-                <Button 
-                  onClick={handleUpdateRules} 
-                  disabled={savingRules}
-                >
-                  {savingRules ? 'Saving...' : 'Save Rules'}
-                </Button>
-                <Button 
-                  variant="secondary" 
-                  onClick={() => {
-                    setEditingRules(false);
-                    setMaxSteals(party?.config?.maxSteals || 3);
-                    setReturnToStart(party?.config?.returnToStart || false);
-                    setPriceLimit(party?.config?.priceLimit ?? '');
-                  }}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <span className="text-gray-700 font-medium">Max Steals:</span>
-                <span className="text-gray-900 font-semibold">{party?.config?.maxSteals || 3}</span>
-              </div>
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <span className="text-gray-700 font-medium">Price Limit:</span>
-                <span className="text-gray-900 font-semibold">
-                  {party?.config?.priceLimit ? `$${parseFloat(party.config.priceLimit).toFixed(2)}` : 'Not set'}
-                </span>
-              </div>
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <span className="text-gray-700 font-medium">Boomerang Rule:</span>
-                <span className={`font-semibold ${party?.config?.returnToStart ? 'text-green-600' : 'text-gray-600'}`}>
-                  {party?.config?.returnToStart ? 'Enabled' : 'Disabled'}
-                </span>
-              </div>
-              <Button
-                variant="secondary"
-                onClick={() => setEditingRules(true)}
-                className="w-full sm:w-auto"
-              >
-                Edit Rules
-              </Button>
-            </div>
-          )}
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm text-gray-500">
+                                  💡 Tip: Use any product page URL from Amazon, Etsy, or other online stores
+                                </p>
+                                <span className="text-gray-400">•</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowManualEntry(true)}
+                                  className="text-sm text-blue-600 hover:underline"
+                                >
+                                  Or enter details manually
+                                </button>
+                              </div>
+                            </>
+                          ) : (
+                            <div 
+                              className="space-y-4"
+                              onPaste={(e) => {
+                                const items = e.clipboardData?.items;
+                                if (items) {
+                                  for (let i = 0; i < items.length; i++) {
+                                    if (items[i].type.indexOf('image') !== -1) {
+                                      const blob = items[i].getAsFile();
+                                      compressImage(blob, (compressedDataUrl) => {
+                                        setPastedImage(compressedDataUrl);
+                                        setManualImageUrl('');
+                                      });
+                                      e.preventDefault();
+                                      break;
+                                    }
+                                  }
+                                }
+                              }}
+                            >
+                              <div className="flex items-center justify-between">
+                                <p className="text-gray-600">
+                                  Enter your gift details manually. Some sites block automatic extraction.
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setShowManualEntry(false);
+                                    setManualTitle('');
+                                    setManualImageUrl('');
+                                    setManualPrice('');
+                                    setPastedImage(null);
+                                  }}
+                                  className="text-sm text-blue-600 hover:underline"
+                                >
+                                  Try URL again
+                                </button>
+                              </div>
+                              <Input
+                                type="url"
+                                label="Gift URL"
+                                placeholder="https://example.com/gift"
+                                value={giftUrl}
+                                onChange={(e) => setGiftUrl(e.target.value)}
+                                required
+                              />
+                              <Input
+                                type="text"
+                                label="Gift Title"
+                                placeholder="e.g., Wireless Headphones"
+                                value={manualTitle}
+                                onChange={(e) => setManualTitle(e.target.value)}
+                                required
+                              />
+                              <div className="space-y-2">
+                                <label className="block text-sm font-medium text-gray-700">
+                                  Image (optional)
+                                </label>
+                                <div className="flex gap-2">
+                                  <Input
+                                    type="url"
+                                    placeholder="https://example.com/image.jpg"
+                                    value={manualImageUrl}
+                                    onChange={(e) => {
+                                      setManualImageUrl(e.target.value);
+                                      setPastedImage(null);
+                                    }}
+                                    className="flex-1"
+                                  />
+                                  <span className="text-gray-400 self-center">or</span>
+                                  <label className="px-4 py-2 border border-gray-300 rounded-md cursor-pointer hover:bg-gray-50 text-sm text-gray-700 whitespace-nowrap">
+                                    📋 Paste Image
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      className="hidden"
+                                      onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) {
+                                          compressImage(file, (compressedDataUrl) => {
+                                            setPastedImage(compressedDataUrl);
+                                            setManualImageUrl('');
+                                          });
+                                        }
+                                      }}
+                                    />
+                                  </label>
+                                </div>
+                                {pastedImage && (
+                                  <div className="relative">
+                                    <img
+                                      src={pastedImage}
+                                      alt="Pasted gift image"
+                                      className="w-32 h-32 object-cover rounded-lg border border-gray-300"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => setPastedImage(null)}
+                                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600"
+                                    >
+                                      ×
+                                    </button>
         </div>
       )}
+                                <p className="text-xs text-gray-500">
+                                  Paste an image from your clipboard or enter an image URL
+                                </p>
+                              </div>
+                              <Input
+                                type="text"
+                                label="Price (optional)"
+                                placeholder="e.g., $25.99"
+                                value={manualPrice}
+                                onChange={(e) => setManualPrice(e.target.value)}
+                              />
+                              <div className="flex gap-2">
+            <Button
+              onClick={async () => {
+                                    if (!giftUrl.trim() || !manualTitle.trim()) {
+                                      alert('Please enter a URL and title');
+                                      return;
+                                    }
+                                    
+                                    setScraping(true);
+                                    try {
+                                      const normalizedUrl = giftUrl.startsWith('http') ? giftUrl : `https://${giftUrl}`;
+                                      
+                                      // Check price limit if set
+                                      const partyPriceLimit = party?.config?.priceLimit;
+                                      if (partyPriceLimit && manualPrice) {
+                                        const priceMatch = manualPrice.match(/[\d.]+/);
+                                        if (priceMatch) {
+                                          const giftPrice = parseFloat(priceMatch[0]);
+                                          const limit = parseFloat(partyPriceLimit);
+                                          if (giftPrice > limit) {
+                                            const proceed = confirm(
+                                              `Warning: This gift's price (${manualPrice}) exceeds the party's price limit of $${limit.toFixed(2)}. Do you want to submit it anyway?`
+                                            );
+                                            if (!proceed) {
+                                              setScraping(false);
+                                              return;
+                                            }
+                                          }
+                                        }
+                                      }
+
+                                      // Ensure user is a participant BEFORE creating/updating gift
+                    const participantRef = doc(db, 'parties', partyId, 'participants', user.uid);
+                                      const participantDoc = await getDoc(participantRef);
+                                      if (participantDoc.exists()) {
+                    await updateDoc(participantRef, {
+                                          status: 'GOING',
+                      updatedAt: new Date(),
+                    });
+                                      } else {
+                                        await setDoc(participantRef, {
+                                          status: 'GOING',
+                                          turnNumber: null,
+                                          ready: false,
+                                          joinedAt: new Date(),
+                                          updatedAt: new Date(),
+                                        });
+                                      }
+
+                                      const giftData = {
+                                        partyId,
+                                        submitterId: user.uid,
+                                        url: normalizedUrl,
+                                        title: manualTitle.trim(),
+                                        image: pastedImage || manualImageUrl.trim() || null,
+                                        price: manualPrice.trim() || null,
+                                        isFrozen: false,
+                                        winnerId: null,
+                                        createdAt: new Date(),
+                                        updatedAt: new Date(),
+                                      };
+
+                                      if (userGift) {
+                                        await updateDoc(doc(db, 'gifts', userGift.id), giftData);
+                                      } else {
+                                        await addDoc(collection(db, 'gifts'), giftData);
+                                      }
+
+                                      // Clear the form
+                                      setGiftUrl('');
+                                      setManualTitle('');
+                                      setManualImageUrl('');
+                                      setManualPrice('');
+                                      setPastedImage(null);
+                                      setShowManualEntry(false);
+                                      
+                                      // Auto-advance to next step
+                                      const currentIndex = setupSteps.findIndex(s => s.id === 'gift');
+                                      if (currentIndex < setupSteps.length - 1) {
+                                        setTimeout(() => {
+                                          setOpenStep(setupSteps[currentIndex + 1].id);
+                                        }, 500);
+                                      } else {
+                                        setOpenStep(null);
+                                      }
+                                    } catch (error) {
+                                      console.error('Error submitting gift (manual entry):', error);
+                                      alert('Failed to submit gift: ' + error.message);
+                                    } finally {
+                                      setScraping(false);
+                }
+              }}
+                                  disabled={scraping || !giftUrl.trim() || !manualTitle.trim()}
+                                  className="px-6"
+                                >
+                                  {scraping ? 'Submitting...' : 'Submit Gift'}
+                                </Button>
+                                <Button
+                                  variant="secondary"
+                                  onClick={() => {
+                                    setShowManualEntry(false);
+                                    setManualTitle('');
+                                    setManualImageUrl('');
+                                    setManualPrice('');
+                                  }}
+                                >
+                                  Cancel
+            </Button>
+          </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="bg-green-50 border-2 border-green-200 rounded-lg p-6">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex gap-6 flex-1">
+            {userGift.image && (
+              <img
+                src={userGift.image}
+                alt={userGift.title || 'Gift image'}
+                                  className="w-48 h-48 object-cover rounded-lg border-2 border-green-300 flex-shrink-0"
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                }}
+                loading="lazy"
+              />
+            )}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-3">
+                                  <span className="text-green-700 font-semibold">✓ Gift Submitted</span>
+                                </div>
+                                <h3 className="font-semibold text-gray-900 mb-2 text-lg">{userGift.title || 'Untitled Gift'}</h3>
+                                {userGift.price && (
+                                  <p className="text-2xl font-bold text-gray-900 mb-3">{userGift.price}</p>
+                                )}
+              {userGift.url && (() => {
+                const url = String(userGift.url).trim();
+                let fullUrl;
+                try {
+                                    if (url.includes(' ') || url.includes('Uncaught') || url.includes('Error:')) {
+                    return (
+                      <p className="text-red-600 text-sm">
+                                          Invalid URL saved. Please delete and re-submit.
+                      </p>
+                    );
+                  }
+                  fullUrl = url.startsWith('http://') || url.startsWith('https://') 
+                    ? url 
+                    : `https://${url}`;
+                  new URL(fullUrl);
+                } catch (e) {
+                  return (
+                    <p className="text-red-600 text-sm">
+                                        Invalid URL format. Please delete and re-submit.
+                    </p>
+                  );
+                }
+                return (
+                  <a
+                    href={fullUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                                      className="text-blue-600 text-sm hover:underline inline-block"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      try {
+                        window.open(fullUrl, '_blank', 'noopener,noreferrer');
+                      } catch (err) {
+                        alert('Invalid URL. Please delete and re-submit your gift.');
+                      }
+                    }}
+                  >
+                                      View Gift →
+                  </a>
+                );
+              })()}
+            </div>
+                            </div>
+                            <Button
+                              variant="danger"
+                              onClick={async () => {
+                                if (confirm('Are you sure you want to delete your gift? You can submit a new one.')) {
+                                  try {
+                                    await deleteDoc(doc(db, 'gifts', userGift.id));
+                                    const participantRef = doc(db, 'parties', partyId, 'participants', user.uid);
+                                    await updateDoc(participantRef, {
+                                      status: 'PENDING',
+                                      updatedAt: new Date(),
+                                    });
+                                    setOpenStep(step.id);
+                                  } catch (error) {
+                                    console.error('Error deleting gift:', error);
+                                    alert('Failed to delete gift: ' + error.message);
+                                  }
+                                }
+                              }}
+                              className="flex-shrink-0"
+                            >
+                              Change
+                            </Button>
+          </div>
+        </div>
+      )}
+                    </div>
+                  );
+                case 'ready':
+                  if (isAdmin) {
+                    const nonAdminParticipants = participants.filter((p) => p.status === 'GOING' && p.id !== party?.adminId);
+                    const allReady = nonAdminParticipants.length > 0 && nonAdminParticipants.every((p) => p.ready === true);
+                    const readyCount = nonAdminParticipants.filter((p) => p.ready === true).length;
+                    const totalCount = nonAdminParticipants.length;
+                    
+                    return (
+                      <div className="p-6">
+                        {allReady ? (
+                          <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4">
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="text-green-700 font-semibold">✓ All Participants Ready</span>
+          </div>
+                            <p className="text-sm text-gray-600">
+                              All {totalCount} participant{totalCount !== 1 ? 's are' : ' is'} ready. You can start the game!
+                            </p>
+        </div>
+                        ) : totalCount === 0 ? (
+                          <div className="space-y-3">
+                            <p className="text-gray-600">
+                              Waiting for participants to join and mark themselves as ready.
+                            </p>
+                            <Button
+                              onClick={() => setShowShareModal(true)}
+                              className="w-full sm:w-auto"
+                            >
+                              📤 Share Party Link
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            <p className="text-gray-600">
+                              {readyCount} of {totalCount} participant{totalCount !== 1 ? 's are' : ' is'} ready.
+                            </p>
+                            <div className="space-y-2">
+                              {participants
+                                .filter((p) => p.status === 'GOING' && p.id !== party?.adminId)
+                                .map((participant) => {
+                                  const displayName = userNames[participant.id] && userNames[participant.id] !== participant.id 
+                  ? userNames[participant.id] 
+                                    : (userEmails[participant.id] || `User ${participant.id.slice(0, 8)}`);
+            
+            return (
+                                    <div
+                key={participant.id}
+                                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                                    >
+                                      <span className="text-gray-900 font-medium">{displayName}</span>
+                                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                        participant.ready === true
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-yellow-100 text-yellow-800'
+                                      }`}>
+                                        {participant.ready === true ? '✓ Ready' : 'Waiting...'}
+                    </span>
+                  </div>
+            );
+          })}
+                            </div>
+                            <Button
+                              onClick={() => setShowShareModal(true)}
+                              variant="secondary"
+                              className="w-full sm:w-auto"
+                            >
+                              📤 Share Party Link
+                            </Button>
+                  </div>
+                  )}
+                </div>
+                    );
+                  } else {
+                    return (
+                      <div className="p-6">
+                        {currentParticipant?.ready === true ? (
+                          <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4">
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="text-green-700 font-semibold">✓ You're Ready!</span>
+                            </div>
+                            <p className="text-sm text-gray-600 mb-4">
+                              You've marked yourself as ready. Waiting for other participants and the host to start the game.
+                            </p>
+                            <Button
+                              variant="secondary"
+                              onClick={handleToggleReady}
+                              className="w-full sm:w-auto"
+                            >
+                              Mark as Not Ready
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            <p className="text-gray-600">
+                              Once you've submitted your gift, mark yourself as ready to let the host know you're prepared for the game.
+                            </p>
+                            <Button
+                              onClick={handleToggleReady}
+                              disabled={!userGift}
+                              className="w-full sm:w-auto"
+                            >
+                              I'm Ready!
+                            </Button>
+                            {!userGift && (
+                              <p className="text-sm text-gray-500">
+                                Please submit your gift first before marking yourself as ready.
+                              </p>
+                    )}
+                  </div>
+                  )}
+                </div>
+                    );
+                  }
+                default:
+                  return null;
+              }
+            })();
+            
+            if (!stepContent && step.id === 'rules' && !isAdmin) return null;
+            
+            return (
+              <div key={step.id} className="transition-all duration-300">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isOpen) {
+                      setOpenStep(null);
+                    } else {
+                      setOpenStep(step.id);
+                      if (step.id === 'rules' && !editingRules) {
+                        setEditingRules(false);
+                      }
+                    }
+                  }}
+                  className="w-full flex items-center gap-3 p-4 hover:bg-gray-50 transition-colors"
+                >
+                  <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg transition-colors ${
+                    step.completed 
+                      ? 'bg-green-500 text-white' 
+                      : isOpen
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-gray-300 text-gray-600'
+                  }`}>
+                    {step.completed ? '✓' : index + 1}
+                  </div>
+                  <span className={`flex-1 text-left font-medium ${
+                    step.completed ? 'text-gray-600' : 'text-gray-900'
+                  }`}>
+                    {step.label}
+                </span>
+                  <svg
+                    className={`w-5 h-5 text-gray-500 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                <div
+                  className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                    isOpen ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
+                  }`}
+                >
+                  {stepContent}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Action Section */}
       {party.status === 'LOBBY' && (
-        <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl shadow-lg p-8 border-2 border-blue-200">
+        <div key="action-section" className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl shadow-lg p-8 border-2 border-blue-200">
           {isAdmin ? (
             <>
               {(() => {

@@ -22,6 +22,7 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
   const [returnToStart, setReturnToStart] = useState(party?.config?.returnToStart ?? false);
   const [priceLimit, setPriceLimit] = useState(party?.config?.priceLimit ?? '');
   const [userNames, setUserNames] = useState({});
+  const [userEmails, setUserEmails] = useState({});
   const [showAddPeople, setShowAddPeople] = useState(false);
   const [newPersonName, setNewPersonName] = useState('');
   const [newPersonEmail, setNewPersonEmail] = useState('');
@@ -38,11 +39,12 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
     }
   }, [party]);
 
-  // Fetch user names for participants
+  // Fetch user names and emails for participants
   useEffect(() => {
-    const fetchUserNames = async () => {
+    const fetchUserInfo = async () => {
       if (participants.length === 0) {
         setUserNames({});
+        setUserEmails({});
         return;
       }
 
@@ -56,6 +58,9 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
         if (response.users) {
           setUserNames(response.users);
         }
+        if (response.emails) {
+          setUserEmails(response.emails);
+        }
       } catch (error) {
         console.error('Error fetching user names:', error);
         // Fallback to participant IDs
@@ -64,10 +69,11 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
           names[p.id] = p.id;
         });
         setUserNames(names);
+        setUserEmails({});
       }
     };
 
-    fetchUserNames();
+    fetchUserInfo();
   }, [participants]);
 
   const handleUpdateTitle = async () => {
@@ -612,60 +618,75 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
               {participants.map((participant) => {
                 const isAdmin = participant.id === party?.adminId;
                 return (
-                  <div
-                    key={participant.id}
-                    className="flex items-center justify-between p-3 bg-gray-50 rounded border"
-                  >
-                    <div className="flex-1 min-w-0">
+                <div
+                  key={participant.id}
+                  className="flex items-center justify-between p-3 bg-gray-50 rounded border"
+                >
+                  <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <p className="font-medium text-gray-900 break-words">
-                          {userNames[participant.id] && userNames[participant.id] !== participant.id
-                            ? userNames[participant.id]
-                            : `User ${participant.id.slice(0, 8)}...`}
-                        </p>
+                    <p className="font-medium text-gray-900 break-words">
+                      {userNames[participant.id] && userNames[participant.id] !== participant.id
+                        ? userNames[participant.id]
+                        : `User ${participant.id.slice(0, 8)}...`}
+                    </p>
                         {isAdmin && (
                           <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
                             Host
                           </span>
                         )}
                       </div>
-                      {userNames[participant.id] === participant.id && (
-                        <p className="text-xs text-gray-400 mt-1 break-all">ID: {participant.id}</p>
-                      )}
-                      <div className="flex items-center gap-2 mt-1">
-                        <select
-                          value={participant.status || 'PENDING'}
-                          onChange={(e) => handleUpdateParticipantStatus(participant.id, e.target.value)}
+                    {userNames[participant.id] === participant.id && (
+                      <p className="text-xs text-gray-400 mt-1 break-all">ID: {participant.id}</p>
+                    )}
+                    <div className="flex items-center gap-2 mt-1">
+                      <select
+                        value={participant.status || 'PENDING'}
+                        onChange={(e) => handleUpdateParticipantStatus(participant.id, e.target.value)}
                           className="text-sm border rounded px-2 py-1 text-gray-900 bg-white"
                           disabled={isAdmin}
-                        >
-                          <option value="PENDING">PENDING</option>
-                          <option value="GOING">GOING</option>
-                        </select>
-                        {participant.turnNumber !== null && (
-                          <span className="text-sm text-gray-500">
-                            Turn #{participant.turnNumber}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    {!isAdmin ? (
-                      <Button
-                        variant="danger"
-                        onClick={() => handleRemoveParticipant(participant.id)}
-                        className="ml-2"
                       >
-                        Remove
-                      </Button>
+                        <option value="PENDING">PENDING</option>
+                        <option value="GOING">GOING</option>
+                      </select>
+                      {participant.turnNumber !== null && (
+                        <span className="text-sm text-gray-500">
+                          Turn #{participant.turnNumber}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                    {!isAdmin ? (
+                  <Button
+                    variant="danger"
+                    onClick={() => handleRemoveParticipant(participant.id)}
+                    className="ml-2"
+                  >
+                    Remove
+                  </Button>
                     ) : (
                       <span className="text-xs text-gray-500 ml-2 italic">Cannot remove host</span>
                     )}
-                  </div>
+                </div>
                 );
               })}
               {/* All pending invites - show in participants list so they can be managed */}
               {pendingInvites
-                .filter(inv => inv.status !== 'ACCEPTED')
+                .filter(inv => {
+                  // Don't show if already accepted
+                  if (inv.status === 'ACCEPTED') return false;
+                  
+                  // Don't show if there's a participant with matching userId
+                  if (inv.userId && participants.some(p => p.id === inv.userId)) return false;
+                  
+                  // Don't show if there's a participant with matching email
+                  const inviteEmail = inv.email?.toLowerCase();
+                  if (inviteEmail) {
+                    const participantEmails = Object.values(userEmails).map(e => e?.toLowerCase());
+                    if (participantEmails.includes(inviteEmail)) return false;
+                  }
+                  
+                  return true;
+                })
                 .map((invite) => (
                   <div
                     key={invite.id}

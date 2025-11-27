@@ -10,7 +10,7 @@ import { Profile } from './pages/Profile.jsx';
 function App() {
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black">
         <Header />
         <Routes>
           <Route path="/" element={<Home />} />

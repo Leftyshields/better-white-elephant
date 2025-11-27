@@ -52,13 +52,17 @@ service cloud.firestore {
       // Only party admin can update party
       allow update: if isPartyAdmin(partyId);
       
-      // Only party admin can delete party
-      allow delete: if isPartyAdmin(partyId);
+      // Only party admin can delete party, and only if it's ended or cancelled
+      allow delete: if isPartyAdmin(partyId) && 
+                      (resource.data.status == 'ENDED' || resource.data.status == 'CANCELLED');
       
       // Participants subcollection
       match /participants/{participantId} {
         // Participants can read all participants in their party
-        allow read: if isParticipant(partyId);
+        // Also allow authenticated users to read if party is in LOBBY (so they can see list while joining)
+        allow read: if isAuthenticated() && 
+                     (isParticipant(partyId) || 
+                      get(/databases/$(database)/documents/parties/$(partyId)).data.status == 'LOBBY');
         
         // Users can create their own participant record (when joining)
         allow create: if isAuthenticated() && 
@@ -82,12 +86,14 @@ service cloud.firestore {
     // Gifts collection
     match /gifts/{giftId} {
       // Participants can read gifts in their party
+      // Also allow authenticated users to read if party is in LOBBY (so they can see gifts while joining)
       allow read: if isAuthenticated() && 
-                     isParticipant(resource.data.partyId);
+                     (isParticipant(resource.data.partyId) || 
+                      get(/databases/$(database)/documents/parties/$(resource.data.partyId)).data.status == 'LOBBY');
       
-      // Users can create gifts for parties they're in
+      // Users can create gifts - they'll be added as participants when they submit
+      // Allow if authenticated and submitting for themselves
       allow create: if isAuthenticated() && 
-                       isParticipant(request.resource.data.partyId) &&
                        request.resource.data.submitterId == request.auth.uid;
       
       // Users can update their own gifts (before game starts)

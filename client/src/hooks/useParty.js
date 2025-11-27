@@ -48,6 +48,11 @@ export function useParty(partyId) {
           ...doc.data(),
         }));
         setParticipants(participantsList);
+      },
+      (error) => {
+        console.error('Error fetching participants:', error);
+        // Set empty array on error so UI doesn't break
+        setParticipants([]);
       }
     );
 
@@ -62,7 +67,17 @@ export function useParty(partyId) {
           id: doc.id,
           ...doc.data(),
         }));
+        console.log('Gifts updated:', giftsList.length, 'gifts');
         setGifts(giftsList);
+      },
+      (error) => {
+        console.error('Error fetching gifts:', error);
+        console.error('Error details:', {
+          code: error.code,
+          message: error.message
+        });
+        // Set empty array on error so UI doesn't break
+        setGifts([]);
       }
     );
 
