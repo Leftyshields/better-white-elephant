@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Christmas Tree -->
+  
+  <!-- Tree Trunk -->
+  <rect x="45" y="80" width="10" height="15" fill="#92400e" rx="2"/>
+  
+  <!-- Tree Layers - Bottom -->
+  <polygon points="50,75 30,60 70,60" fill="#16a34a"/>
+  <polygon points="50,75 32,62 68,62" fill="#22c55e" opacity="0.8"/>
+  
+  <!-- Tree Layers - Middle -->
+  <polygon points="50,60 35,48 65,48" fill="#16a34a"/>
+  <polygon points="50,60 37,50 63,50" fill="#22c55e" opacity="0.8"/>
+  
+  <!-- Tree Layers - Top -->
+  <polygon points="50,48 40,38 60,38" fill="#16a34a"/>
+  <polygon points="50,48 42,40 58,40" fill="#22c55e" opacity="0.8"/>
+  
+  <!-- Star on Top -->
+  <path d="M50,20 L52,28 L60,28 L54,32 L56,40 L50,36 L44,40 L46,32 L40,28 L48,28 Z" fill="#fbbf24"/>
+  <path d="M50,20 L52,28 L60,28 L54,32 L56,40 L50,36 L44,40 L46,32 L40,28 L48,28 Z" fill="#fde047" opacity="0.7"/>
+  
+  <!-- Ornaments/Decorations -->
+  <circle cx="42" cy="55" r="2.5" fill="#dc2626"/>
+  <circle cx="58" cy="55" r="2.5" fill="#3b82f6"/>
+  <circle cx="50" cy="65" r="2.5" fill="#fbbf24"/>
+  <circle cx="38" cy="68" r="2.5" fill="#dc2626"/>
+  <circle cx="62" cy="68" r="2.5" fill="#3b82f6"/>
+  
+  <!-- Snow/Sparkles -->
+  <circle cx="20" cy="30" r="1.5" fill="#ffffff" opacity="0.8"/>
+  <circle cx="80" cy="40" r="1.5" fill="#ffffff" opacity="0.8"/>
+  <circle cx="25" cy="50" r="1" fill="#ffffff" opacity="0.6"/>
+  <circle cx="75" cy="60" r="1" fill="#ffffff" opacity="0.6"/>
+</svg>

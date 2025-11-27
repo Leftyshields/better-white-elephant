@@ -113,6 +113,12 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
   };
 
   const handleRemoveParticipant = async (participantId) => {
+    // Prevent admin from removing themselves
+    if (participantId === party?.adminId) {
+      alert('You cannot remove yourself as the host.');
+      return;
+    }
+
     if (!confirm('Are you sure you want to remove this participant?')) {
       return;
     }
@@ -584,45 +590,60 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
             </p>
             <div className="space-y-2 max-h-96 overflow-y-auto">
               {/* Actual participants (signed up users) */}
-              {participants.map((participant) => (
-                <div
-                  key={participant.id}
-                  className="flex items-center justify-between p-3 bg-gray-50 rounded border"
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-gray-900 break-words">
-                      {userNames[participant.id] && userNames[participant.id] !== participant.id
-                        ? userNames[participant.id]
-                        : `User ${participant.id.slice(0, 8)}...`}
-                    </p>
-                    {userNames[participant.id] === participant.id && (
-                      <p className="text-xs text-gray-400 mt-1 break-all">ID: {participant.id}</p>
-                    )}
-                    <div className="flex items-center gap-2 mt-1">
-                      <select
-                        value={participant.status || 'PENDING'}
-                        onChange={(e) => handleUpdateParticipantStatus(participant.id, e.target.value)}
-                        className="text-sm border rounded px-2 py-1"
-                      >
-                        <option value="PENDING">PENDING</option>
-                        <option value="GOING">GOING</option>
-                      </select>
-                      {participant.turnNumber !== null && (
-                        <span className="text-sm text-gray-500">
-                          Turn #{participant.turnNumber}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <Button
-                    variant="danger"
-                    onClick={() => handleRemoveParticipant(participant.id)}
-                    className="ml-2"
+              {participants.map((participant) => {
+                const isAdmin = participant.id === party?.adminId;
+                return (
+                  <div
+                    key={participant.id}
+                    className="flex items-center justify-between p-3 bg-gray-50 rounded border"
                   >
-                    Remove
-                  </Button>
-                </div>
-              ))}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-gray-900 break-words">
+                          {userNames[participant.id] && userNames[participant.id] !== participant.id
+                            ? userNames[participant.id]
+                            : `User ${participant.id.slice(0, 8)}...`}
+                        </p>
+                        {isAdmin && (
+                          <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                            Host
+                          </span>
+                        )}
+                      </div>
+                      {userNames[participant.id] === participant.id && (
+                        <p className="text-xs text-gray-400 mt-1 break-all">ID: {participant.id}</p>
+                      )}
+                      <div className="flex items-center gap-2 mt-1">
+                        <select
+                          value={participant.status || 'PENDING'}
+                          onChange={(e) => handleUpdateParticipantStatus(participant.id, e.target.value)}
+                          className="text-sm border rounded px-2 py-1 text-gray-900 bg-white"
+                          disabled={isAdmin}
+                        >
+                          <option value="PENDING">PENDING</option>
+                          <option value="GOING">GOING</option>
+                        </select>
+                        {participant.turnNumber !== null && (
+                          <span className="text-sm text-gray-500">
+                            Turn #{participant.turnNumber}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {!isAdmin ? (
+                      <Button
+                        variant="danger"
+                        onClick={() => handleRemoveParticipant(participant.id)}
+                        className="ml-2"
+                      >
+                        Remove
+                      </Button>
+                    ) : (
+                      <span className="text-xs text-gray-500 ml-2 italic">Cannot remove host</span>
+                    )}
+                  </div>
+                );
+              })}
               {/* All pending invites - show in participants list so they can be managed */}
               {pendingInvites
                 .filter(inv => inv.status !== 'ACCEPTED')
@@ -645,7 +666,7 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
                         <select
                           value={invite.status || 'PENDING'}
                           onChange={(e) => handleOverrideStatus(invite.id, e.target.value)}
-                          className="text-sm border rounded px-2 py-1"
+                          className="text-sm border rounded px-2 py-1 text-gray-900 bg-white"
                         >
                           <option value="PENDING">PENDING</option>
                           <option value="GOING">GOING</option>

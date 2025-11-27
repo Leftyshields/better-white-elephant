@@ -234,12 +234,12 @@ export function Home() {
   if (!user) {
     return (
       <>
-      <div className="min-h-screen bg-gradient-to-br from-red-50 via-green-50 to-blue-50 relative overflow-hidden">
-        {/* Snowflakes Animation */}
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-purple-50 relative overflow-hidden">
+        {/* Subtle Snowflakes Animation */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-          {[...Array(50)].map((_, i) => {
-            const size = Math.random() * 20 + 10; // Random size between 10-30px
-            const opacity = Math.random() * 0.5 + 0.3; // Random opacity between 0.3-0.8
+          {[...Array(15)].map((_, i) => {
+            const size = Math.random() * 12 + 8;
+            const opacity = Math.random() * 0.2 + 0.1;
             return (
               <div
                 key={i}
@@ -250,28 +250,7 @@ export function Home() {
                   fontSize: `${size}px`,
                   opacity: opacity,
                   animationDelay: `${Math.random() * 5}s`,
-                  animationDuration: `${8 + Math.random() * 7}s`,
-                }}
-              >
-                ❄️
-              </div>
-            );
-          })}
-          {/* Additional smaller snowflakes */}
-          {[...Array(30)].map((_, i) => {
-            const size = Math.random() * 15 + 8;
-            const opacity = Math.random() * 0.4 + 0.2;
-            return (
-              <div
-                key={`small-${i}`}
-                className="absolute animate-float"
-                style={{
-                  left: `${Math.random() * 100}%`,
-                  top: `${-Math.random() * 20}%`,
-                  fontSize: `${size}px`,
-                  opacity: opacity,
-                  animationDelay: `${Math.random() * 5}s`,
-                  animationDuration: `${6 + Math.random() * 6}s`,
+                  animationDuration: `${10 + Math.random() * 8}s`,
                 }}
               >
                 ❄
@@ -284,43 +263,47 @@ export function Home() {
         <div className="relative overflow-hidden">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-16">
             <div className="text-center">
-              <div className="mb-4 text-6xl">🎄🎁</div>
-              <h1 className="text-5xl md:text-6xl font-extrabold text-gray-900 mb-4">
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-600 via-green-600 to-red-600">
-                  StealOrReveal.com
-                </span>
-              </h1>
-              <h2 className="text-3xl md:text-4xl font-bold text-gray-800 mb-6">
+              <div className="text-8xl md:text-9xl mb-6">🎁</div>
+              <h1 className="text-3xl md:text-4xl font-semibold text-gray-700 mb-6">
                 A Better White Elephant Gift Exchange
-              </h2>
-              <p className="text-xl md:text-2xl text-gray-700 mb-4 max-w-3xl mx-auto font-medium">
-                🎅 The modern way to host unforgettable White Elephant gift exchanges! 
-                Real-time gameplay, automatic gift tracking, and endless holiday fun! 🎉
+              </h1>
+              <p className="text-lg md:text-xl text-gray-600 mb-6 max-w-3xl mx-auto leading-relaxed">
+                The modern way to host White Elephant gift exchanges. Real-time gameplay, 
+                automatic gift tracking, and seamless party management.
               </p>
-              <p className="text-lg text-gray-600 mb-4 max-w-2xl mx-auto">
-                Open source and free forever. View the source code on{' '}
-                <a 
-                  href="https://github.com/Leftyshields/better-white-elephant" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-blue-600 hover:text-blue-800 font-semibold underline"
-                >
-                  GitHub
-                </a>
-                .
-              </p>
-              <div className="inline-flex items-center gap-2 bg-green-100 border-2 border-green-300 rounded-full px-6 py-2 mb-8">
-                <span className="text-2xl">🎁</span>
-                <span className="text-lg font-bold text-green-800">100% Free - No Credit Card Required!</span>
-                <span className="text-2xl">✨</span>
+              <div className="flex flex-wrap items-center justify-center gap-4 mb-8 text-sm text-gray-500">
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>Free to use</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                  <span>Secure & private</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                  </svg>
+                  <a 
+                    href="https://github.com/Leftyshields/better-white-elephant" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-gray-600 hover:text-gray-900 font-medium"
+                  >
+                    Open source
+                  </a>
+                </div>
               </div>
               
               {/* Auth Card */}
-              <div className="max-w-md mx-auto bg-white rounded-2xl shadow-2xl p-8 border-4 border-red-200 relative">
-                <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 text-4xl">🎁</div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-4 mt-4">Get Started</h2>
-                <p className="text-gray-600 mb-6">
-                  Sign in to create or join a White Elephant gift exchange party 🎄
+              <div className="max-w-md mx-auto bg-white rounded-xl shadow-lg p-8 border border-gray-200">
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">Get Started</h2>
+                <p className="text-gray-600 mb-6 text-sm">
+                  Sign in to create or join a White Elephant gift exchange party
                 </p>
                 
                 {!showEmailAuth ? (
@@ -412,21 +395,33 @@ export function Home() {
 
           {/* Features Section */}
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20">
-            <div className="grid md:grid-cols-3 gap-8 mt-16">
-              <div className="text-center p-6 bg-white/80 backdrop-blur-sm rounded-xl border-2 border-red-200 shadow-lg hover:shadow-xl transition-all">
-                <div className="text-5xl mb-4">⚡</div>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">Real-Time Gameplay</h3>
-                <p className="text-gray-600">Watch the action unfold live as players steal and unwrap gifts in real-time! 🎮</p>
+            <div className="grid md:grid-cols-3 gap-6 mt-16">
+              <div className="text-center p-6 bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-all">
+                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Real-Time Gameplay</h3>
+                <p className="text-sm text-gray-600">Watch the action unfold live as players steal and unwrap gifts in real-time</p>
               </div>
-              <div className="text-center p-6 bg-white/80 backdrop-blur-sm rounded-xl border-2 border-green-200 shadow-lg hover:shadow-xl transition-all">
-                <div className="text-5xl mb-4">🎁</div>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">Easy Gift Submission</h3>
-                <p className="text-gray-600">Just paste a URL - we'll automatically extract the gift details and images! ✨</p>
+              <div className="text-center p-6 bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-all">
+                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Easy Gift Submission</h3>
+                <p className="text-sm text-gray-600">Paste a URL and we'll automatically extract the gift details and images</p>
               </div>
-              <div className="text-center p-6 bg-white/80 backdrop-blur-sm rounded-xl border-2 border-red-200 shadow-lg hover:shadow-xl transition-all">
-                <div className="text-5xl mb-4">👥</div>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">Invite Friends</h3>
-                <p className="text-gray-600">Share a link or send email invites. Everyone can join the fun instantly! 🎉</p>
+              <div className="text-center p-6 bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-all">
+                <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Invite Friends</h3>
+                <p className="text-sm text-gray-600">Share a link or send email invites. Everyone can join instantly</p>
               </div>
             </div>
           </div>
@@ -440,11 +435,11 @@ export function Home() {
   return (
     <>
     <div className="min-h-screen bg-gradient-to-br from-red-50 via-green-50 to-blue-50 relative overflow-hidden">
-      {/* Snowflakes Animation */}
+      {/* Subtle Snowflakes Animation */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-        {[...Array(50)].map((_, i) => {
-          const size = Math.random() * 20 + 10;
-          const opacity = Math.random() * 0.5 + 0.3;
+        {[...Array(15)].map((_, i) => {
+          const size = Math.random() * 12 + 8;
+          const opacity = Math.random() * 0.2 + 0.1;
           return (
             <div
               key={i}
@@ -455,28 +450,7 @@ export function Home() {
                 fontSize: `${size}px`,
                 opacity: opacity,
                 animationDelay: `${Math.random() * 5}s`,
-                animationDuration: `${8 + Math.random() * 7}s`,
-              }}
-            >
-              ❄️
-            </div>
-          );
-        })}
-        {/* Additional smaller snowflakes */}
-        {[...Array(30)].map((_, i) => {
-          const size = Math.random() * 15 + 8;
-          const opacity = Math.random() * 0.4 + 0.2;
-          return (
-            <div
-              key={`small-${i}`}
-              className="absolute animate-float"
-              style={{
-                left: `${Math.random() * 100}%`,
-                top: `${-Math.random() * 20}%`,
-                fontSize: `${size}px`,
-                opacity: opacity,
-                animationDelay: `${Math.random() * 5}s`,
-                animationDuration: `${6 + Math.random() * 6}s`,
+                animationDuration: `${10 + Math.random() * 8}s`,
               }}
             >
               ❄
@@ -486,10 +460,10 @@ export function Home() {
       </div>
       
       {/* Hero Section */}
-      <div className="relative bg-gradient-to-r from-red-600 via-green-600 to-red-600 text-white overflow-hidden">
-        <div className="absolute inset-0 opacity-20">
-          {[...Array(25)].map((_, i) => {
-            const size = Math.random() * 30 + 20;
+      <div className="relative bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 text-white overflow-hidden">
+        <div className="absolute inset-0 opacity-10">
+          {[...Array(8)].map((_, i) => {
+            const size = Math.random() * 20 + 15;
             return (
               <div
                 key={i}
@@ -499,54 +473,60 @@ export function Home() {
                   top: `${Math.random() * 100}%`,
                   fontSize: `${size}px`,
                   animationDelay: `${Math.random() * 5}s`,
-                  animationDuration: `${8 + Math.random() * 7}s`,
+                  animationDuration: `${10 + Math.random() * 8}s`,
                 }}
               >
-                ❄️
+                ❄
               </div>
             );
           })}
         </div>
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
           <div className="text-center mb-12">
-            <div className="text-7xl mb-6 animate-bounce">🎄🎁🎅</div>
-            <h1 className="text-5xl md:text-6xl font-extrabold mb-3">
-              Welcome Back! 🎉
+            <div className="text-8xl md:text-9xl mb-6">🎁</div>
+            <h1 className="text-3xl md:text-4xl font-semibold mb-4 text-white">
+              Welcome Back
             </h1>
-            <h2 className="text-3xl md:text-4xl font-bold text-white/95 mb-4">
-              StealOrReveal.com
-            </h2>
-            <p className="text-xl md:text-2xl text-white/90 max-w-3xl mx-auto font-medium mb-6">
-              A Better White Elephant Gift Exchange - Create a new party or manage your existing ones! 🎄✨
+            <p className="text-lg md:text-xl text-white/90 max-w-2xl mx-auto mb-6">
+              A Better White Elephant Gift Exchange. Create a new party or manage your existing ones.
             </p>
-            <div className="inline-flex items-center gap-2 bg-white/25 backdrop-blur-sm border-2 border-white/40 rounded-full px-8 py-3 shadow-lg mb-4">
-              <span className="text-2xl">🎁</span>
-              <span className="text-lg font-bold text-white">Completely Free - No Hidden Costs!</span>
-              <span className="text-2xl">✨</span>
-            </div>
-            <p className="text-sm text-white/80 max-w-2xl mx-auto">
-              Open source and free forever. View the source code on{' '}
+            <div className="flex flex-wrap items-center justify-center gap-4 mb-6 text-sm text-white/80">
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>Free to use</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+                <span>Secure</span>
+              </div>
               <a 
                 href="https://github.com/Leftyshields/better-white-elephant" 
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="text-white font-semibold underline hover:text-yellow-200 transition-colors"
+                className="flex items-center gap-2 text-white/80 hover:text-white transition-colors"
               >
-                GitHub
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path fillRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clipRule="evenodd" />
+                </svg>
+                <span>Open source</span>
               </a>
-              .
-            </p>
+            </div>
           </div>
 
           {/* Create Party Card */}
-          <div className="max-w-2xl mx-auto bg-white rounded-2xl shadow-2xl p-8 border-4 border-red-300 relative z-10">
-            <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 text-6xl animate-bounce">🎁</div>
-            <div className="text-center mb-6 mt-6">
-              <div className="w-24 h-24 bg-gradient-to-br from-red-500 to-green-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-xl animate-pulse">
-                <span className="text-5xl">🎄</span>
+          <div className="max-w-2xl mx-auto bg-white rounded-xl shadow-lg p-8 border border-gray-200 relative z-10">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-500 rounded-lg flex items-center justify-center mx-auto mb-4 shadow-md">
+                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
               </div>
-              <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">Create a New Party</h2>
-              <p className="text-lg text-gray-600 font-medium">Set up your gift exchange in seconds! 🎅✨</p>
+              <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">Create a New Party</h2>
+              <p className="text-gray-600">Set up your gift exchange in seconds</p>
             </div>
             
             <div className="space-y-4">
@@ -559,7 +539,7 @@ export function Home() {
                   placeholder="e.g., Family Christmas Exchange 2025"
                   value={partyTitle}
                   onChange={(e) => setPartyTitle(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder:text-gray-400"
                 />
               </div>
               <div>
@@ -571,19 +551,15 @@ export function Home() {
                   value={partyDate}
                   onChange={(e) => setPartyDate(e.target.value)}
                   required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
                 />
               </div>
               <Button 
                 onClick={handleCreateParty} 
-                className="w-full py-4 text-lg font-semibold shadow-lg hover:shadow-xl transition-all mt-6 bg-gradient-to-r from-red-600 to-green-600 hover:from-red-700 hover:to-green-700"
+                className="w-full py-3 text-base font-semibold shadow-md hover:shadow-lg transition-all mt-6"
                 disabled={!partyDate}
               >
-                <span className="flex items-center justify-center gap-2">
-                  <span className="text-xl">🎄</span>
-                  Create Party
-                  <span className="text-xl">🎁</span>
-                </span>
+                Create Party
               </Button>
             </div>
           </div>
@@ -592,10 +568,9 @@ export function Home() {
 
       {/* My Parties Section */}
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 z-10">
-        <div className="mb-8 text-center">
-          <div className="text-5xl mb-3 animate-bounce">🎅</div>
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">My Parties</h2>
-          <p className="text-lg text-gray-600 font-medium">Manage your gift exchanges and join ongoing games! 🎄</p>
+        <div className="mb-8">
+          <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">My Parties</h2>
+          <p className="text-gray-600">Manage your gift exchanges and join ongoing games</p>
         </div>
 
         {loadingParties && (
@@ -629,10 +604,12 @@ export function Home() {
         )}
 
         {myParties.length === 0 && !loadingParties && !partiesError && (
-          <div className="text-center py-16 bg-white rounded-2xl shadow-lg border-4 border-dashed border-red-300">
-            <div className="text-6xl mb-4">🎁</div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">No parties yet</h3>
-            <p className="text-gray-600 mb-6 font-medium">Create your first White Elephant gift exchange above! 🎄✨</p>
+          <div className="text-center py-16 bg-white rounded-lg border-2 border-dashed border-gray-300">
+            <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+            </svg>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">No parties yet</h3>
+            <p className="text-gray-600">Create your first White Elephant gift exchange above</p>
           </div>
         )}
 
@@ -684,20 +661,26 @@ export function Home() {
                   </div>
                   
                   <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-                    <div className="text-sm text-gray-500 font-medium">
+                    <div className="text-sm text-gray-500">
                       {party.isAdmin ? (
                         <span className="flex items-center gap-1">
-                          <span className="text-lg">⭐</span>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                          </svg>
                           You're the host
                         </span>
                       ) : (
                         <span className="flex items-center gap-1">
-                          <span className="text-lg">👤</span>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
                           Participant
                         </span>
                       )}
                     </div>
-                    <span className="text-xl group-hover:translate-x-1 transition-all">🎁</span>
+                    <svg className="w-5 h-5 text-gray-400 group-hover:text-gray-600 group-hover:translate-x-1 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
                   </div>
                 </div>
               </Link>

@@ -6,7 +6,7 @@ import * as cheerio from 'cheerio';
 /**
  * Scrape gift metadata from URL
  * @param {string} url - Gift URL to scrape
- * @returns {Promise<{title: string, image: string}>}
+ * @returns {Promise<{title: string, image: string, price: string|null}>}
  */
 export async function scrapeGiftMetadata(url) {
   try {
@@ -74,9 +74,58 @@ export async function scrapeGiftMetadata(url) {
       }
     }
 
+    // Extract price - try multiple common selectors
+    let price = null;
+    // Try OG price tags
+    price = $('meta[property="product:price:amount"]').attr('content') ||
+            $('meta[property="og:price:amount"]').attr('content') ||
+            null;
+    
+    // If no OG price, try common price selectors
+    if (!price) {
+      // Amazon - try multiple selectors
+      let amazonPrice = $('.a-price .a-offscreen').first().text().trim();
+      if (!amazonPrice) {
+        const priceWhole = $('.a-price-whole').first().text().trim();
+        const priceSymbol = $('.a-price-symbol').first().text().trim();
+        if (priceWhole) {
+          amazonPrice = (priceSymbol || '$') + priceWhole;
+        }
+      }
+      if (!amazonPrice) {
+        amazonPrice = $('#priceblock_ourprice').text().trim() || 
+                     $('#priceblock_dealprice').text().trim() ||
+                     null;
+      }
+      
+      // Etsy
+      const etsyPrice = $('.currency-value').first().text().trim() || null;
+      
+      // Generic
+      const genericPrice = $('[itemprop="price"]').attr('content')?.trim() ||
+                          $('[itemprop="price"]').text().trim() ||
+                          $('.price').first().text().trim() ||
+                          $('.product-price').first().text().trim() ||
+                          null;
+      
+      price = amazonPrice || etsyPrice || genericPrice || null;
+    }
+    
+    // Clean up price string - preserve currency symbols and numbers
+    if (price) {
+      price = price.trim();
+      // Remove extra whitespace but keep currency symbols and numbers
+      price = price.replace(/\s+/g, ' ');
+      // If no digits, it's not a valid price
+      if (!price.match(/[\d]/)) {
+        price = null;
+      }
+    }
+
     return {
       title: title.trim(),
       image: imageUrl,
+      price: price || null,
     };
   } catch (error) {
     console.error('Scraper error:', error);
@@ -84,6 +133,7 @@ export async function scrapeGiftMetadata(url) {
     return {
       title: 'Gift',
       image: null,
+      price: null,
     };
   }
 }

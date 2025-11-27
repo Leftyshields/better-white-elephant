@@ -17,6 +17,9 @@ import {
   addDoc,
   getDoc,
   deleteDoc,
+  query,
+  where,
+  getDocs,
 } from 'firebase/firestore';
 import { db } from '../utils/firebase.js';
 
@@ -31,6 +34,13 @@ export function PartyLobby({ partyId, onStartGame }) {
   const [linkCopied, setLinkCopied] = useState(false);
   const [userNames, setUserNames] = useState({});
   const [userEmails, setUserEmails] = useState({});
+  const [newPersonName, setNewPersonName] = useState('');
+  const [newPersonEmail, setNewPersonEmail] = useState('');
+  const [addingPerson, setAddingPerson] = useState(false);
+  const [maxSteals, setMaxSteals] = useState(party?.config?.maxSteals ?? 3);
+  const [returnToStart, setReturnToStart] = useState(party?.config?.returnToStart ?? false);
+  const [editingRules, setEditingRules] = useState(false);
+  const [savingRules, setSavingRules] = useState(false);
 
   const isAdmin = party?.adminId === user?.uid;
   const currentParticipant = participants.find((p) => p.id === user?.uid);
@@ -132,6 +142,14 @@ export function PartyLobby({ partyId, onStartGame }) {
     fetchUserAddress();
   }, [isAdmin, user?.uid]);
 
+  // Update local state when party config changes
+  useEffect(() => {
+    if (party?.config) {
+      setMaxSteals(party.config.maxSteals ?? 3);
+      setReturnToStart(party.config.returnToStart ?? false);
+    }
+  }, [party]);
+
   const handleSubmitGift = async () => {
     if (!giftUrl.trim()) {
       alert('Please enter a gift URL');
@@ -148,10 +166,9 @@ export function PartyLobby({ partyId, onStartGame }) {
 
     setScraping(true);
     try {
-      const { title, image } = await scrapeGiftUrl(giftUrl);
-
-      // Normalize URL (ensure it has protocol)
+      // Normalize URL (ensure it has protocol) before sending to API
       const normalizedUrl = giftUrl.startsWith('http') ? giftUrl : `https://${giftUrl}`;
+      const { title, image, price } = await scrapeGiftUrl(normalizedUrl);
 
       // Create or update gift
       const giftData = {
@@ -160,6 +177,7 @@ export function PartyLobby({ partyId, onStartGame }) {
         url: normalizedUrl,
         title,
         image,
+        price,
         isFrozen: false,
         winnerId: null,
         createdAt: new Date(),
@@ -330,6 +348,127 @@ export function PartyLobby({ partyId, onStartGame }) {
     }
   };
 
+  const handleAddPerson = async () => {
+    if (!newPersonEmail.trim() || !newPersonEmail.includes('@')) {
+      alert('Please enter a valid email address');
+      return;
+    }
+
+    setAddingPerson(true);
+    const emailLower = newPersonEmail.trim().toLowerCase();
+    const inviteId = emailLower.replace(/[^a-z0-9]/g, '_');
+    const name = newPersonName.trim() || null;
+
+    try {
+      // Add/update them directly as GOING status
+      await setDoc(
+        doc(db, 'parties', partyId, 'pendingInvites', inviteId),
+        {
+          email: emailLower,
+          name: name,
+          status: 'GOING',
+          addedAt: new Date(),
+          updatedAt: new Date(),
+        },
+        { merge: true }
+      );
+
+      // Try to send email, but don't worry if it fails
+      try {
+        const functionUrl =
+          import.meta.env.VITE_FUNCTIONS_URL ||
+          'https://us-central1-better-white-elephant.cloudfunctions.net/sendPartyInvite';
+
+        const hostName = user?.displayName || user?.email?.split('@')[0] || 'Someone';
+
+        await fetch(functionUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email: emailLower,
+            partyId,
+            hostName,
+          }),
+        });
+      } catch (emailError) {
+        console.log('Email sending failed, but person added:', emailError);
+      }
+
+      setNewPersonName('');
+      setNewPersonEmail('');
+    } catch (error) {
+      console.error('Error adding person:', error);
+      alert('Failed to add person: ' + error.message);
+    } finally {
+      setAddingPerson(false);
+    }
+  };
+
+  const handleRemoveParticipant = async (participantId) => {
+    // Prevent admin from removing themselves
+    if (participantId === party?.adminId) {
+      alert('You cannot remove yourself as the host.');
+      return;
+    }
+
+    if (!confirm('Are you sure you want to remove this participant?')) {
+      return;
+    }
+
+    try {
+      await deleteDoc(doc(db, 'parties', partyId, 'participants', participantId));
+      // Also delete their gift if they have one
+      const giftsSnapshot = await getDocs(
+        query(
+          collection(db, 'gifts'),
+          where('partyId', '==', partyId),
+          where('submitterId', '==', participantId)
+        )
+      );
+      
+      for (const giftDoc of giftsSnapshot.docs) {
+        await deleteDoc(doc(db, 'gifts', giftDoc.id));
+      }
+    } catch (error) {
+      console.error('Error removing participant:', error);
+      alert('Failed to remove participant: ' + error.message);
+    }
+  };
+
+  const handleRemovePendingInvite = async (inviteId) => {
+    if (!confirm('Remove this person from the invite list?')) {
+      return;
+    }
+
+    try {
+      await deleteDoc(doc(db, 'parties', partyId, 'pendingInvites', inviteId));
+    } catch (error) {
+      console.error('Error removing invite:', error);
+      alert('Failed to remove: ' + error.message);
+    }
+  };
+
+  const handleUpdateRules = async () => {
+    setSavingRules(true);
+    try {
+      await updateDoc(doc(db, 'parties', partyId), {
+        config: {
+          maxSteals: parseInt(maxSteals) || 3,
+          returnToStart: returnToStart,
+        },
+        updatedAt: new Date(),
+      });
+      setEditingRules(false);
+    } catch (error) {
+      console.error('Error updating rules:', error);
+      alert('Failed to update game rules: ' + error.message);
+    } finally {
+      setSavingRules(false);
+    }
+  };
+
   if (loading) {
     return <div className="p-8 text-center">Loading...</div>;
   }
@@ -342,7 +481,10 @@ export function PartyLobby({ partyId, onStartGame }) {
   const setupSteps = isAdmin ? [
     { id: 'gift', label: 'Submit your gift', completed: !!userGift },
     { id: 'address', label: 'Add shipping address', completed: adminShippingAddress?.street && adminShippingAddress?.city },
-    { id: 'participants', label: 'Invite at least 2 participants', completed: participants.filter(p => p.status === 'GOING').length >= 2 },
+    { id: 'participants', label: 'Invite at least 2 participants', completed: (() => {
+      const displayedInvites = pendingInvites.filter(inv => inv.status === 'GOING' || inv.status !== 'ACCEPTED');
+      return participants.length + displayedInvites.length >= 2;
+    })() },
     { id: 'ready', label: 'All participants ready', completed: (() => {
       const nonAdminParticipants = participants.filter((p) => p.status === 'GOING' && p.id !== party?.adminId);
       return nonAdminParticipants.length > 0 && nonAdminParticipants.every((p) => p.ready === true);
@@ -463,25 +605,28 @@ export function PartyLobby({ partyId, onStartGame }) {
             </p>
           </div>
         ) : (
-          <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-4 flex-1">
+          <div className="bg-green-50 border-2 border-green-200 rounded-lg p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex gap-6 flex-1">
                 {userGift.image && (
                   <img
                     src={userGift.image}
                     alt={userGift.title || 'Gift image'}
-                    className="w-24 h-24 object-cover rounded-lg border-2 border-green-300"
+                    className="w-48 h-48 object-cover rounded-lg border-2 border-green-300 flex-shrink-0"
                     onError={(e) => {
                       e.target.style.display = 'none';
                     }}
                     loading="lazy"
                   />
                 )}
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-3">
                     <span className="text-green-700 font-semibold">✓ Gift Submitted</span>
                   </div>
-                  <h3 className="font-semibold text-gray-900 mb-1">{userGift.title || 'Untitled Gift'}</h3>
+                  <h3 className="font-semibold text-gray-900 mb-2 text-lg">{userGift.title || 'Untitled Gift'}</h3>
+                  {userGift.price && (
+                    <p className="text-2xl font-bold text-gray-900 mb-3">{userGift.price}</p>
+                  )}
                   {userGift.url && (() => {
                     const url = String(userGift.url).trim();
                     let fullUrl;
@@ -509,7 +654,7 @@ export function PartyLobby({ partyId, onStartGame }) {
                         href={fullUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-blue-600 text-sm hover:underline"
+                        className="text-blue-600 text-sm hover:underline inline-block"
                         onClick={(e) => {
                           e.preventDefault();
                           try {
@@ -542,7 +687,7 @@ export function PartyLobby({ partyId, onStartGame }) {
                     }
                   }
                 }}
-                className="ml-4"
+                className="flex-shrink-0"
               >
                 Change
               </Button>
@@ -550,104 +695,6 @@ export function PartyLobby({ partyId, onStartGame }) {
           </div>
         )}
       </div>
-
-      {/* Your Gift */}
-      {userGift && (
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold">Your Gift</h2>
-            <Button
-              variant="danger"
-              onClick={async () => {
-                if (confirm('Are you sure you want to delete your gift? You can submit a new one.')) {
-                  try {
-                    await deleteDoc(doc(db, 'gifts', userGift.id));
-                    // Also update participant status back to PENDING
-                    const participantRef = doc(db, 'parties', partyId, 'participants', user.uid);
-                    await updateDoc(participantRef, {
-                      status: 'PENDING',
-                      updatedAt: new Date(),
-                    });
-                  } catch (error) {
-                    console.error('Error deleting gift:', error);
-                    alert('Failed to delete gift: ' + error.message);
-                  }
-                }
-              }}
-            >
-              Delete Gift
-            </Button>
-          </div>
-          <div className="flex items-center gap-4">
-            {userGift.image && (
-              <img
-                src={userGift.image}
-                alt={userGift.title || 'Gift image'}
-                className="w-32 h-32 object-cover rounded border border-gray-200"
-                onError={(e) => {
-                  // Hide image if it fails to load
-                  e.target.style.display = 'none';
-                }}
-                loading="lazy"
-              />
-            )}
-            <div>
-              <h3 className="font-semibold">{userGift.title}</h3>
-              {userGift.url && (() => {
-                const url = String(userGift.url).trim();
-                
-                // Validate URL - must be a proper URL, not error text
-                let fullUrl;
-                try {
-                  // Check if it looks like a valid URL
-                  if (url.includes(' ') || url.includes('Uncaught') || url.includes('Error:') || url.includes('Uncaught (in promise)') || url.includes('13:18:') || url.includes('message channel')) {
-                    // This is corrupted data - don't show link
-                    return (
-                      <p className="text-red-600 text-sm">
-                        Invalid URL saved. Please delete and re-submit your gift.
-                      </p>
-                    );
-                  }
-                  
-                  fullUrl = url.startsWith('http://') || url.startsWith('https://') 
-                    ? url 
-                    : `https://${url}`;
-                  
-                  // Validate with URL constructor
-                  new URL(fullUrl);
-                } catch (e) {
-                  // Invalid URL
-                  return (
-                    <p className="text-red-600 text-sm">
-                      Invalid URL format. Please delete and re-submit your gift.
-                    </p>
-                  );
-                }
-                
-                return (
-                  <a
-                    href={fullUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 text-sm hover:underline"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      try {
-                        window.open(fullUrl, '_blank', 'noopener,noreferrer');
-                      } catch (err) {
-                        console.error('Failed to open URL:', err);
-                        alert('Invalid URL. Please delete and re-submit your gift.');
-                      }
-                    }}
-                  >
-                    View Gift
-                  </a>
-                );
-              })()}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Step 2: Add Shipping Address */}
       {(() => {
@@ -705,26 +752,69 @@ export function PartyLobby({ partyId, onStartGame }) {
         <div className="bg-white rounded-xl shadow-md p-6">
           <div className="flex items-center gap-3 mb-4">
             <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${
-              participants.filter(p => p.status === 'GOING').length >= 2
+              (() => {
+                const displayedInvites = pendingInvites.filter(inv => inv.status === 'GOING' || inv.status !== 'ACCEPTED');
+                return participants.length + displayedInvites.length >= 2;
+              })()
                 ? 'bg-green-500 text-white' 
                 : 'bg-blue-500 text-white'
             }`}>
-              {participants.filter(p => p.status === 'GOING').length >= 2 ? '✓' : '3'}
+              {(() => {
+                const displayedInvites = pendingInvites.filter(inv => inv.status === 'GOING' || inv.status !== 'ACCEPTED');
+                return participants.length + displayedInvites.length >= 2 ? '✓' : '3';
+              })()}
             </div>
             <h2 className="text-2xl font-bold text-gray-900">Participants</h2>
           </div>
           
           <div className="mb-4">
             <p className="text-gray-600 mb-4">
-              {participants.filter(p => p.status === 'GOING').length >= 2
-                ? `Great! You have ${participants.filter(p => p.status === 'GOING').length} participants.`
-                : `You need at least 2 participants to start. Currently: ${participants.filter(p => p.status === 'GOING').length}`}
+              {(() => {
+                const displayedInvites = pendingInvites.filter(inv => inv.status === 'GOING' || inv.status !== 'ACCEPTED');
+                const totalCount = participants.length + displayedInvites.length;
+                return totalCount >= 2
+                  ? `Great! You have ${totalCount} participants.`
+                  : `You need at least 2 participants to start. Currently: ${totalCount}`;
+              })()}
             </p>
+          </div>
+
+          {/* Add Participant Form */}
+          <div className="mb-6 p-4 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+            <h3 className="font-semibold text-gray-900 mb-3">Add Participant</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Add people by name and email. They'll be added to the participants list and an invite email will be sent automatically.
+            </p>
+            <div className="space-y-3">
+              <Input
+                type="text"
+                label="Name (optional)"
+                placeholder="John Doe"
+                value={newPersonName}
+                onChange={(e) => setNewPersonName(e.target.value)}
+              />
+              <Input
+                type="email"
+                label="Email"
+                placeholder="friend@example.com"
+                value={newPersonEmail}
+                onChange={(e) => setNewPersonEmail(e.target.value)}
+                required
+              />
+              <Button
+                onClick={handleAddPerson}
+                disabled={addingPerson || !newPersonEmail.trim()}
+                className="w-full sm:w-auto"
+              >
+                {addingPerson ? 'Adding...' : 'Add Person'}
+              </Button>
+            </div>
           </div>
 
           <div className="space-y-2 max-h-64 overflow-y-auto">
             {participants.map((participant) => {
               const isYou = participant.id === user?.uid;
+              const isAdminParticipant = participant.id === party?.adminId;
               const displayName = isYou 
                 ? 'You (Host)' 
                 : (userNames[participant.id] && userNames[participant.id] !== participant.id 
@@ -748,19 +838,17 @@ export function PartyLobby({ partyId, onStartGame }) {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {participant.status === 'GOING' && (
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                        participant.ready === true
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-yellow-100 text-yellow-800'
-                      }`}>
-                        {participant.ready === true ? '✓ Ready' : 'Waiting...'}
-                      </span>
+                    {!isAdminParticipant && (
+                      <Button
+                        variant="danger"
+                        onClick={() => handleRemoveParticipant(participant.id)}
+                        className="text-xs px-2 py-1"
+                      >
+                        Remove
+                      </Button>
                     )}
-                    {participant.status === 'PENDING' && (
-                      <span className="px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                        Pending
-                      </span>
+                    {isAdminParticipant && (
+                      <span className="text-xs text-gray-500">Cannot remove host</span>
                     )}
                   </div>
                 </div>
@@ -788,19 +876,21 @@ export function PartyLobby({ partyId, onStartGame }) {
                       <span className="text-xs text-orange-600 ml-2">Email failed</span>
                     )}
                   </div>
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                    invite.status === 'GOING' 
-                      ? 'bg-green-100 text-green-800'
-                      : 'bg-yellow-100 text-yellow-800'
-                  }`}>
-                    {invite.status}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="danger"
+                      onClick={() => handleRemovePendingInvite(invite.id)}
+                      className="text-xs px-2 py-1"
+                    >
+                      Remove
+                    </Button>
+                  </div>
                 </div>
               ))}
           </div>
           
           {participants.length === 0 && pendingInvites.filter(inv => inv.status !== 'ACCEPTED').length === 0 && (
-            <p className="text-gray-500 text-center py-4">No participants yet. Use the Share Link button above to invite people!</p>
+            <p className="text-gray-500 text-center py-4">No participants yet. Add someone above or use the Share Link button to invite people!</p>
           )}
         </div>
       )}
@@ -827,19 +917,167 @@ export function PartyLobby({ partyId, onStartGame }) {
                   <span className="text-gray-900 font-medium">
                     {displayName || email || `User ${participant.id.slice(0, 8)}`}
                   </span>
-                  {participant.status === 'GOING' && (
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      participant.ready === true
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {participant.ready === true ? '✓ Ready' : 'Not Ready'}
-                    </span>
-                  )}
                 </div>
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* Step 4: All Participants Ready (Admin only) */}
+      {isAdmin && (
+        <div className="bg-white rounded-xl shadow-md p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${
+              (() => {
+                const nonAdminParticipants = participants.filter((p) => p.status === 'GOING' && p.id !== party?.adminId);
+                return nonAdminParticipants.length > 0 && nonAdminParticipants.every((p) => p.ready === true);
+              })()
+                ? 'bg-green-500 text-white' 
+                : 'bg-blue-500 text-white'
+            }`}>
+              {(() => {
+                const nonAdminParticipants = participants.filter((p) => p.status === 'GOING' && p.id !== party?.adminId);
+                return nonAdminParticipants.length > 0 && nonAdminParticipants.every((p) => p.ready === true) ? '✓' : '4';
+              })()}
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900">All Participants Ready</h2>
+          </div>
+
+          {(() => {
+            const nonAdminParticipants = participants.filter((p) => p.status === 'GOING' && p.id !== party?.adminId);
+            const allReady = nonAdminParticipants.length > 0 && nonAdminParticipants.every((p) => p.ready === true);
+            const readyCount = nonAdminParticipants.filter((p) => p.ready === true).length;
+            const totalCount = nonAdminParticipants.length;
+
+            if (allReady) {
+              return (
+                <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-green-700 font-semibold">✓ All Participants Ready</span>
+                  </div>
+                  <p className="text-sm text-gray-600">
+                    All {totalCount} participant{totalCount !== 1 ? 's are' : ' is'} ready. You can start the game!
+                  </p>
+                </div>
+              );
+            } else if (totalCount === 0) {
+              return (
+                <div className="space-y-3">
+                  <p className="text-gray-600">
+                    Waiting for participants to join and mark themselves as ready.
+                  </p>
+                </div>
+              );
+            } else {
+              return (
+                <div className="space-y-3">
+                  <p className="text-gray-600">
+                    {readyCount} of {totalCount} participant{totalCount !== 1 ? 's are' : ' is'} ready.
+                  </p>
+                  <div className="space-y-2">
+                    {participants
+                      .filter((p) => p.status === 'GOING' && p.id !== party?.adminId)
+                      .map((participant) => {
+                        const displayName = userNames[participant.id] && userNames[participant.id] !== participant.id 
+                          ? userNames[participant.id] 
+                          : (userEmails[participant.id] || `User ${participant.id.slice(0, 8)}`);
+                        
+                        return (
+                          <div
+                            key={participant.id}
+                            className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                          >
+                            <span className="text-gray-900 font-medium">{displayName}</span>
+                            <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                              participant.ready === true
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-yellow-100 text-yellow-800'
+                            }`}>
+                              {participant.ready === true ? '✓ Ready' : 'Waiting...'}
+                            </span>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              );
+            }
+          })()}
+        </div>
+      )}
+
+      {/* Game Rules Section (Admin only) */}
+      {isAdmin && (
+        <div className="bg-white rounded-xl shadow-md p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg bg-blue-500 text-white">
+              ⚙️
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900">Game Rules</h2>
+          </div>
+
+          {editingRules ? (
+            <div className="space-y-4">
+              <Input
+                type="number"
+                label="Max Steals"
+                value={maxSteals}
+                onChange={(e) => setMaxSteals(e.target.value)}
+                min="1"
+              />
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="returnToStart"
+                  checked={returnToStart}
+                  onChange={(e) => setReturnToStart(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <label htmlFor="returnToStart" className="text-sm text-gray-700">
+                  Enable Boomerang Rule (reverse turn order after last player)
+                </label>
+              </div>
+              <div className="flex gap-2">
+                <Button 
+                  onClick={handleUpdateRules} 
+                  disabled={savingRules}
+                >
+                  {savingRules ? 'Saving...' : 'Save Rules'}
+                </Button>
+                <Button 
+                  variant="secondary" 
+                  onClick={() => {
+                    setEditingRules(false);
+                    setMaxSteals(party?.config?.maxSteals || 3);
+                    setReturnToStart(party?.config?.returnToStart || false);
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <span className="text-gray-700 font-medium">Max Steals:</span>
+                <span className="text-gray-900 font-semibold">{party?.config?.maxSteals || 3}</span>
+              </div>
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <span className="text-gray-700 font-medium">Boomerang Rule:</span>
+                <span className={`font-semibold ${party?.config?.returnToStart ? 'text-green-600' : 'text-gray-600'}`}>
+                  {party?.config?.returnToStart ? 'Enabled' : 'Disabled'}
+                </span>
+              </div>
+              <Button
+                variant="secondary"
+                onClick={() => setEditingRules(true)}
+                className="w-full sm:w-auto"
+              >
+                Edit Rules
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -853,11 +1091,12 @@ export function PartyLobby({ partyId, onStartGame }) {
                 const allReady = nonAdminParticipants.length > 0 && nonAdminParticipants.every((p) => p.ready === true);
                 const readyCount = nonAdminParticipants.filter((p) => p.ready === true).length;
                 const totalCount = nonAdminParticipants.length;
-                const totalGoingParticipants = participants.filter((p) => p.status === 'GOING').length;
+                const displayedInvites = pendingInvites.filter(inv => inv.status === 'GOING' || inv.status !== 'ACCEPTED');
+                const totalParticipants = participants.length + displayedInvites.length;
                 
                 const hasShippingAddress = adminShippingAddress && adminShippingAddress.street && adminShippingAddress.city;
                 const hasGift = !!userGift;
-                const canStart = allReady && totalGoingParticipants >= 2 && hasShippingAddress && hasGift;
+                const canStart = allReady && totalParticipants >= 2 && hasShippingAddress && hasGift;
                 
                 return (
                   <div className="text-center space-y-4">
@@ -879,13 +1118,13 @@ export function PartyLobby({ partyId, onStartGame }) {
                               <span>Add your shipping address</span>
                             </li>
                           )}
-                          {totalGoingParticipants < 2 && (
+                          {totalParticipants < 2 && (
                             <li className="flex items-center gap-2">
                               <span className="text-red-500">✗</span>
-                              <span>Invite at least 2 participants (currently: {totalGoingParticipants})</span>
+                              <span>Invite at least 2 participants (currently: {totalParticipants})</span>
                             </li>
                           )}
-                          {totalGoingParticipants >= 2 && !allReady && totalCount > 0 && (
+                          {totalParticipants >= 2 && !allReady && totalCount > 0 && (
                             <li className="flex items-center gap-2">
                               <span className="text-yellow-500">⏳</span>
                               <span>Wait for all participants to be ready ({readyCount} of {totalCount} ready)</span>
