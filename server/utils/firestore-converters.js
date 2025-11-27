@@ -45,6 +45,7 @@ export const partyConverter = {
     config: {
       maxSteals: party.config?.maxSteals || 3,
       returnToStart: party.config?.returnToStart || false,
+      priceLimit: party.config?.priceLimit || null,
     },
     createdAt: party.createdAt || new Date(),
     updatedAt: new Date(),
@@ -60,6 +61,7 @@ export const partyConverter = {
       config: {
         maxSteals: data.config?.maxSteals || 3,
         returnToStart: data.config?.returnToStart || false,
+        priceLimit: data.config?.priceLimit || null,
       },
       createdAt: data.createdAt?.toDate() || null,
       updatedAt: data.updatedAt?.toDate() || null,

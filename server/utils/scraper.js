@@ -36,12 +36,17 @@ export async function scrapeGiftMetadata(url) {
       throw new Error('Localhost URLs are not allowed');
     }
 
-    // Fetch the page
+    // Fetch the page with better headers to avoid blocking
     const response = await fetch(fullUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; WhiteElephantBot/1.0)',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
       },
-      signal: AbortSignal.timeout(10000), // 10 second timeout
+      signal: AbortSignal.timeout(15000), // 15 second timeout
     });
 
     if (!response.ok) {
@@ -52,17 +57,76 @@ export async function scrapeGiftMetadata(url) {
     const $ = cheerio.load(html);
 
     // Extract OG tags
-    const title =
+    let title =
       $('meta[property="og:title"]').attr('content') ||
       $('meta[name="twitter:title"]').attr('content') ||
       $('title').text() ||
       'Untitled Gift';
 
-    const image =
+    // Amazon-specific title extraction (often in #productTitle)
+    if (hostname.includes('amazon.')) {
+      const amazonTitle = $('#productTitle').text().trim() ||
+                         $('#title_feature_div h1').text().trim() ||
+                         $('h1.a-size-large').text().trim();
+      if (amazonTitle) {
+        title = amazonTitle;
+      }
+    }
+
+    let image =
       $('meta[property="og:image"]').attr('content') ||
       $('meta[name="twitter:image"]').attr('content') ||
       $('meta[property="og:image:url"]').attr('content') ||
       null;
+
+    // Amazon-specific image extraction
+    if (hostname.includes('amazon.')) {
+      // Try multiple Amazon image selectors in order of reliability
+      let amazonImage = null;
+      
+      // First try the main product image
+      amazonImage = $('#landingImage').attr('data-old-src') ||
+                    $('#landingImage').attr('src') ||
+                    $('#landingImage').attr('data-a-dynamic-image');
+      
+      // Try data-a-dynamic-image attribute (contains JSON with image URLs)
+      if (!amazonImage || amazonImage.includes('{')) {
+        const dynamicImage = $('#landingImage').attr('data-a-dynamic-image') ||
+                            $('#imgBlkFront').attr('data-a-dynamic-image');
+        if (dynamicImage) {
+          try {
+            const imageData = JSON.parse(dynamicImage);
+            if (imageData && typeof imageData === 'object') {
+              // Get the largest/highest quality image (usually first key)
+              const imageKeys = Object.keys(imageData);
+              if (imageKeys.length > 0) {
+                amazonImage = imageKeys[0];
+              }
+            }
+          } catch (e) {
+            // If JSON parse fails, try regex extraction
+            const urlMatch = dynamicImage.match(/"https?:\/\/[^"]+"/);
+            if (urlMatch && urlMatch[0]) {
+              amazonImage = urlMatch[0].replace(/"/g, '');
+            }
+          }
+        }
+      }
+      
+      // Try other Amazon image selectors
+      if (!amazonImage) {
+        amazonImage = $('.a-dynamic-image').first().attr('src') ||
+                     $('#main-image').attr('src') ||
+                     $('.a-button-selected img').first().attr('src') ||
+                     $('#imgTagWrapperId img').first().attr('src') ||
+                     null;
+      }
+      
+      // Use Amazon image if found, otherwise fall back to OG image
+      if (amazonImage) {
+        image = amazonImage;
+      }
+    }
 
     // Make image URL absolute if relative
     let imageUrl = null;
@@ -83,18 +147,34 @@ export async function scrapeGiftMetadata(url) {
     
     // If no OG price, try common price selectors
     if (!price) {
-      // Amazon - try multiple selectors
-      let amazonPrice = $('.a-price .a-offscreen').first().text().trim();
-      if (!amazonPrice) {
-        const priceWhole = $('.a-price-whole').first().text().trim();
-        const priceSymbol = $('.a-price-symbol').first().text().trim();
-        if (priceWhole) {
-          amazonPrice = (priceSymbol || '$') + priceWhole;
-        }
-      }
+      // Amazon - try multiple selectors (in order of reliability)
+      let amazonPrice = null;
+      
+      // Try hidden offscreen price first (most reliable)
+      amazonPrice = $('.a-price .a-offscreen').first().text().trim();
+      
+      // Try price block selectors
       if (!amazonPrice) {
         amazonPrice = $('#priceblock_ourprice').text().trim() || 
                      $('#priceblock_dealprice').text().trim() ||
+                     $('#priceblock_saleprice').text().trim() ||
+                     null;
+      }
+      
+      // Try price whole + symbol combination
+      if (!amazonPrice) {
+        const priceWhole = $('.a-price-whole').first().text().trim();
+        const priceFraction = $('.a-price-fraction').first().text().trim();
+        const priceSymbol = $('.a-price-symbol').first().text().trim();
+        if (priceWhole) {
+          amazonPrice = (priceSymbol || '$') + priceWhole + (priceFraction ? '.' + priceFraction : '');
+        }
+      }
+      
+      // Try base price
+      if (!amazonPrice) {
+        amazonPrice = $('.a-price-base').first().text().trim() ||
+                     $('.a-color-price').first().text().trim() ||
                      null;
       }
       
@@ -129,11 +209,12 @@ export async function scrapeGiftMetadata(url) {
     };
   } catch (error) {
     console.error('Scraper error:', error);
-    // Return fallback values
+    // Return fallback values but include error info
     return {
       title: 'Gift',
       image: null,
       price: null,
+      error: error.message || 'Failed to scrape URL',
     };
   }
 }

@@ -20,6 +20,7 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
   const [editingConfig, setEditingConfig] = useState(false);
   const [maxSteals, setMaxSteals] = useState(party?.config?.maxSteals ?? 3);
   const [returnToStart, setReturnToStart] = useState(party?.config?.returnToStart ?? false);
+  const [priceLimit, setPriceLimit] = useState(party?.config?.priceLimit ?? '');
   const [userNames, setUserNames] = useState({});
   const [showAddPeople, setShowAddPeople] = useState(false);
   const [newPersonName, setNewPersonName] = useState('');
@@ -33,6 +34,7 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
     if (party?.config) {
       setMaxSteals(party.config.maxSteals ?? 3);
       setReturnToStart(party.config.returnToStart ?? false);
+      setPriceLimit(party.config.priceLimit ?? '');
     }
   }, [party]);
 
@@ -102,6 +104,7 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
         config: {
           maxSteals: parseInt(maxSteals) || 3,
           returnToStart: returnToStart,
+          priceLimit: priceLimit ? parseFloat(priceLimit) : null,
         },
         updatedAt: new Date(),
       });
@@ -491,6 +494,18 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
                   onChange={(e) => setMaxSteals(e.target.value)}
                   min="1"
                 />
+                <Input
+                  type="number"
+                  label="Price Limit (optional)"
+                  placeholder="e.g., 25.00"
+                  value={priceLimit}
+                  onChange={(e) => setPriceLimit(e.target.value)}
+                  min="0"
+                  step="0.01"
+                />
+                <p className="text-xs text-gray-500">
+                  Set a maximum price for gifts. Participants will see a warning if their gift exceeds this limit.
+                </p>
                 <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
@@ -509,6 +524,7 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
                     setEditingConfig(false);
                     setMaxSteals(party?.config?.maxSteals || 3);
                     setReturnToStart(party?.config?.returnToStart || false);
+                    setPriceLimit(party?.config?.priceLimit ?? '');
                   }}>
                     Cancel
                   </Button>
@@ -517,6 +533,9 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
             ) : (
               <div className="text-gray-600 space-y-1">
                 <p>Max Steals: {party?.config?.maxSteals || 3}</p>
+                {party?.config?.priceLimit && (
+                  <p>Price Limit: ${parseFloat(party.config.priceLimit).toFixed(2)}</p>
+                )}
                 <p>Boomerang Rule: {party?.config?.returnToStart ? 'Enabled' : 'Disabled'}</p>
               </div>
             )}

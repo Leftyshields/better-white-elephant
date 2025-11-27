@@ -39,6 +39,7 @@ export function PartyLobby({ partyId, onStartGame }) {
   const [addingPerson, setAddingPerson] = useState(false);
   const [maxSteals, setMaxSteals] = useState(party?.config?.maxSteals ?? 3);
   const [returnToStart, setReturnToStart] = useState(party?.config?.returnToStart ?? false);
+  const [priceLimit, setPriceLimit] = useState(party?.config?.priceLimit ?? '');
   const [editingRules, setEditingRules] = useState(false);
   const [savingRules, setSavingRules] = useState(false);
 
@@ -147,6 +148,7 @@ export function PartyLobby({ partyId, onStartGame }) {
     if (party?.config) {
       setMaxSteals(party.config.maxSteals ?? 3);
       setReturnToStart(party.config.returnToStart ?? false);
+      setPriceLimit(party.config.priceLimit ?? '');
     }
   }, [party]);
 
@@ -168,7 +170,40 @@ export function PartyLobby({ partyId, onStartGame }) {
     try {
       // Normalize URL (ensure it has protocol) before sending to API
       const normalizedUrl = giftUrl.startsWith('http') ? giftUrl : `https://${giftUrl}`;
-      const { title, image, price } = await scrapeGiftUrl(normalizedUrl);
+      const { title, image, price, error } = await scrapeGiftUrl(normalizedUrl);
+
+      // Check if scraping returned meaningful data
+      if (error || !title || title === 'Gift' || title === 'Untitled Gift') {
+        const proceed = confirm(
+          `Unable to automatically extract details from this URL. ${error ? `Error: ${error}` : 'The page may require JavaScript or have restricted access.'}\n\n` +
+          `You can still submit the gift with the URL, but you may want to manually add details later.\n\n` +
+          `Continue with submission?`
+        );
+        if (!proceed) {
+          setScraping(false);
+          return;
+        }
+      }
+
+      // Check price limit if set
+      const partyPriceLimit = party?.config?.priceLimit;
+      if (partyPriceLimit && price) {
+        // Extract numeric value from price string (handles formats like "$25.99", "25.99", etc.)
+        const priceMatch = price.match(/[\d.]+/);
+        if (priceMatch) {
+          const giftPrice = parseFloat(priceMatch[0]);
+          const limit = parseFloat(partyPriceLimit);
+          if (giftPrice > limit) {
+            const proceed = confirm(
+              `Warning: This gift's price (${price}) exceeds the party's price limit of $${limit.toFixed(2)}. Do you want to submit it anyway?`
+            );
+            if (!proceed) {
+              setScraping(false);
+              return;
+            }
+          }
+        }
+      }
 
       // Create or update gift
       const giftData = {
@@ -211,7 +246,6 @@ export function PartyLobby({ partyId, onStartGame }) {
       }
 
       setGiftUrl('');
-      alert('Gift submitted successfully!');
     } catch (error) {
       console.error('Error submitting gift:', error);
       alert('Failed to submit gift: ' + error.message);
@@ -457,6 +491,7 @@ export function PartyLobby({ partyId, onStartGame }) {
         config: {
           maxSteals: parseInt(maxSteals) || 3,
           returnToStart: returnToStart,
+          priceLimit: priceLimit ? parseFloat(priceLimit) : null,
         },
         updatedAt: new Date(),
       });
@@ -1026,6 +1061,18 @@ export function PartyLobby({ partyId, onStartGame }) {
                 onChange={(e) => setMaxSteals(e.target.value)}
                 min="1"
               />
+              <Input
+                type="number"
+                label="Price Limit (optional)"
+                placeholder="e.g., 25.00"
+                value={priceLimit}
+                onChange={(e) => setPriceLimit(e.target.value)}
+                min="0"
+                step="0.01"
+              />
+              <p className="text-xs text-gray-500">
+                Set a maximum price for gifts. Participants will see a warning if their gift exceeds this limit.
+              </p>
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
@@ -1051,6 +1098,7 @@ export function PartyLobby({ partyId, onStartGame }) {
                     setEditingRules(false);
                     setMaxSteals(party?.config?.maxSteals || 3);
                     setReturnToStart(party?.config?.returnToStart || false);
+                    setPriceLimit(party?.config?.priceLimit ?? '');
                   }}
                 >
                   Cancel
@@ -1062,6 +1110,12 @@ export function PartyLobby({ partyId, onStartGame }) {
               <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                 <span className="text-gray-700 font-medium">Max Steals:</span>
                 <span className="text-gray-900 font-semibold">{party?.config?.maxSteals || 3}</span>
+              </div>
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <span className="text-gray-700 font-medium">Price Limit:</span>
+                <span className="text-gray-900 font-semibold">
+                  {party?.config?.priceLimit ? `$${parseFloat(party.config.priceLimit).toFixed(2)}` : 'Not set'}
+                </span>
               </div>
               <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                 <span className="text-gray-700 font-medium">Boomerang Rule:</span>
