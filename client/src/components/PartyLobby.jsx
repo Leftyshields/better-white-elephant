@@ -9,6 +9,7 @@ import { Input } from './ui/Input.jsx';
 import { Modal } from './ui/Modal.jsx';
 import { scrapeGiftUrl, apiRequest } from '../utils/api.js';
 import { PartyManagement } from './PartyManagement.jsx';
+import { trackSubmitGift, trackStartGame } from '../utils/analytics.js';
 import {
   collection,
   doc,
@@ -307,6 +308,9 @@ export function PartyLobby({ partyId, onStartGame }) {
         console.log('Gift created successfully with ID:', giftRef.id);
       }
 
+      // Track gift submission
+      trackSubmitGift(partyId);
+
       // Clear the form
       setGiftUrl('');
       
@@ -410,6 +414,8 @@ export function PartyLobby({ partyId, onStartGame }) {
 
       const data = await response.json();
       if (data.success) {
+        // Track game start
+        trackStartGame(partyId, goingParticipants.length);
         onStartGame();
       } else {
         alert('Failed to start game: ' + (data.error || 'Unknown error'));

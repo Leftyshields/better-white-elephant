@@ -9,6 +9,7 @@ import { Footer } from '../components/Footer.jsx';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { collection, addDoc, doc, setDoc, query, where, onSnapshot, orderBy, collectionGroup, getDocs, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../utils/firebase.js';
+import { trackCreateParty, trackSignUp, trackLogin, trackButtonClick } from '../utils/analytics.js';
 
 export function Home() {
   const { user, signInWithGoogle, signInWithEmailAndPassword, signUpWithEmailAndPassword } = useAuth();
@@ -217,6 +218,12 @@ export function Home() {
         updatedAt: new Date(),
       });
 
+      // Track party creation
+      trackCreateParty({
+        title: partyTitle,
+        date: partyDate,
+      });
+
       navigate(`/party/${partyRef.id}`);
     } catch (error) {
       console.error('Error creating party:', error);
@@ -244,6 +251,13 @@ export function Home() {
       if (!result.success) {
         setAuthError(result.error || 'Authentication failed');
       } else {
+        // Track authentication
+        if (isSignUp) {
+          trackSignUp('email');
+        } else {
+          trackLogin('email');
+        }
+
         // If signup, save shipping address to user profile
         if (isSignUp && result.user) {
           try {
@@ -385,13 +399,19 @@ export function Home() {
               {/* CTAs */}
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
                 <Button 
-                  onClick={signInWithGoogle} 
+                  onClick={() => {
+                    trackButtonClick('Start a Party for Free', 'hero');
+                    signInWithGoogle();
+                  }} 
                   className="px-8 py-4 text-lg font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-lg hover:shadow-xl transition-all"
                 >
                   Start a Party for Free
                 </Button>
                 <button
-                  onClick={scrollToFeatures}
+                  onClick={() => {
+                    trackButtonClick('See How It Works', 'hero');
+                    scrollToFeatures();
+                  }}
                   className="px-8 py-4 text-lg font-semibold bg-white/10 backdrop-blur-md text-gray-100 border border-white/25 rounded-lg hover:bg-white/10 transition-all"
                 >
                   See How It Works

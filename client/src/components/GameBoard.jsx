@@ -12,6 +12,7 @@ import { ShippingAddressViewModal } from './ShippingAddressViewModal.jsx';
 import { GiftToSendCard } from './GiftToSendCard.jsx';
 import { GameAuditTrail } from './GameAuditTrail.jsx';
 import { apiRequest } from '../utils/api.js';
+import { trackGameAction } from '../utils/analytics.js';
 
 export function GameBoard({ partyId }) {
   const { user } = useAuth();

@@ -13,6 +13,7 @@ import {
   signOut as firebaseSignOut,
 } from 'firebase/auth';
 import { auth } from '../utils/firebase.js';
+import { trackLogin, trackSignUp } from '../utils/analytics.js';
 
 export function useAuth() {
   const [user, setUser] = useState(null);
@@ -40,6 +41,13 @@ export function useAuth() {
     try {
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
+      // Track login - check if this is a new user (first time sign in)
+      const isNewUser = result.user.metadata.creationTime === result.user.metadata.lastSignInTime;
+      if (isNewUser) {
+        trackSignUp('google');
+      } else {
+        trackLogin('google');
+      }
       return { success: true, user: result.user };
     } catch (error) {
       return { success: false, error: error.message };

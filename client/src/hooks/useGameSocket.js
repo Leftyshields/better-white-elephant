@@ -4,6 +4,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { auth } from '../utils/firebase.js';
+import { trackGameAction } from '../utils/analytics.js';
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
 
@@ -74,9 +75,18 @@ export function useGameSocket(partyId) {
     gameState,
     connected,
     emitAction,
-    pickGift: (giftId) => emitAction('pick-gift', { giftId }),
-    stealGift: (giftId) => emitAction('steal-gift', { giftId }),
-    endTurn: () => emitAction('end-turn', {}),
+    pickGift: (giftId) => {
+      trackGameAction('reveal', partyId);
+      emitAction('pick-gift', { giftId });
+    },
+    stealGift: (giftId) => {
+      trackGameAction('steal', partyId);
+      emitAction('steal-gift', { giftId });
+    },
+    endTurn: () => {
+      trackGameAction('end_turn', partyId);
+      emitAction('end-turn', {});
+    },
   };
 }
 
