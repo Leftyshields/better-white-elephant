@@ -2,14 +2,17 @@
  * Header Component - App-wide navigation with title and user menu
  */
 import { useState, useRef, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth.js';
+import { usePartyModal } from '../contexts/PartyModalContext.jsx';
 
 export function Header() {
   const { user, signOut, signInWithGoogle } = useAuth();
+  const { setShowModal } = usePartyModal();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const menuRef = useRef(null);
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -51,15 +54,27 @@ export function Header() {
             </div>
           </Link>
 
-          {/* User Menu */}
-          <div className="relative" ref={menuRef}>
-            {user ? (
-              <>
-                <button
-                  onClick={() => setShowUserMenu(!showUserMenu)}
-                  className="flex items-center gap-2 p-2 rounded-full hover:bg-white/20 transition-colors"
-                  aria-label="User menu"
-                >
+          {/* Right Side Actions */}
+          <div className="flex items-center gap-3">
+            {/* Host Party Button - only show on home page when logged in */}
+            {user && location.pathname === '/' && (
+              <button
+                onClick={() => setShowModal(true)}
+                className="px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold rounded-lg hover:from-indigo-600 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl"
+              >
+                Host New Party
+              </button>
+            )}
+            
+            {/* User Menu */}
+            <div className="relative" ref={menuRef}>
+              {user ? (
+                <>
+                  <button
+                    onClick={() => setShowUserMenu(!showUserMenu)}
+                    className="flex items-center gap-2 p-2 rounded-full hover:bg-white/20 transition-colors"
+                    aria-label="User menu"
+                  >
                   <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white font-semibold">
                     {user.displayName?.[0]?.toUpperCase() || user.email?.[0]?.toUpperCase() || 'U'}
                   </div>
@@ -110,25 +125,26 @@ export function Header() {
                   </div>
                 )}
               </>
-            ) : (
-              <button
-                onClick={signInWithGoogle}
-                className="flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur-md text-white border border-white/20 rounded-md hover:bg-white/20 transition-colors"
-              >
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
+              ) : (
+                <button
+                  onClick={signInWithGoogle}
+                  className="flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur-md text-white border border-white/20 rounded-md hover:bg-white/20 transition-colors"
                 >
-                  <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-                <span>Sign in</span>
-              </button>
-            )}
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  <span>Sign in</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>

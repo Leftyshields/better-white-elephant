@@ -13,6 +13,7 @@ import { apiRequest } from '../utils/api.js';
 export function PartyManagement({ party, participants, pendingInvites = [] }) {
   const { user } = useAuth();
   const [showModal, setShowModal] = useState(false);
+  const [activeTab, setActiveTab] = useState('settings');
   const [editingTitle, setEditingTitle] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [editingDate, setEditingDate] = useState(false);
@@ -405,11 +406,39 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
         title="Party Management"
         className="max-w-3xl"
       >
-        <div className="space-y-6">
-          {/* Party Title */}
-          <div className="border-b pb-4">
+        {/* Tab Navigation */}
+        <div className="bg-slate-900/50 p-1 rounded-lg border border-white/10 mb-6">
+          <div className="flex gap-1">
+            <button
+              onClick={() => setActiveTab('settings')}
+              className={`px-4 py-2 rounded-md transition-colors ${
+                activeTab === 'settings'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Settings
+            </button>
+            <button
+              onClick={() => setActiveTab('guests')}
+              className={`px-4 py-2 rounded-md transition-colors ${
+                activeTab === 'guests'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Guests
+            </button>
+          </div>
+        </div>
+
+        {/* Tab Content */}
+        {activeTab === 'settings' && (
+          <div className="space-y-6">
+            {/* Party Title */}
+            <div className="border-b border-white/10 pb-4">
             <div className="flex justify-between items-center mb-2">
-              <h3 className="font-semibold">Party Title</h3>
+              <h3 className="font-semibold text-white">Party Title</h3>
               {!editingTitle && (
                 <Button variant="secondary" onClick={() => {
                   setEditingTitle(true);
@@ -426,6 +455,7 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
                   placeholder="e.g., Family Christmas Exchange 2025"
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
+                  className="bg-slate-950 border-slate-700 text-white placeholder:text-slate-500 focus:border-purple-500"
                 />
                 <div className="flex gap-2">
                   <Button onClick={handleUpdateTitle}>Save</Button>
@@ -438,16 +468,16 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
                 </div>
               </div>
             ) : (
-              <p className="text-gray-600">
+              <p className="text-slate-300">
                 {party.title || 'No title set'}
               </p>
             )}
           </div>
 
           {/* Party Date */}
-          <div className="border-b pb-4">
+          <div className="border-b border-white/10 pb-4">
             <div className="flex justify-between items-center mb-2">
-              <h3 className="font-semibold">Party Date</h3>
+              <h3 className="font-semibold text-white">Party Date</h3>
               {!editingDate && (
                 <Button variant="secondary" onClick={() => {
                   setEditingDate(true);
@@ -463,6 +493,7 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
                   type="datetime-local"
                   value={newDate}
                   onChange={(e) => setNewDate(e.target.value)}
+                  className="bg-slate-950 border-slate-700 text-white placeholder:text-slate-500 focus:border-purple-500"
                 />
                 <div className="flex gap-2">
                   <Button onClick={handleUpdateDate}>Save</Button>
@@ -475,16 +506,16 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
                 </div>
               </div>
             ) : (
-              <p className="text-gray-600">
+              <p className="text-slate-300">
                 {party.date?.toDate ? party.date.toDate().toLocaleString() : 'Not set'}
               </p>
             )}
           </div>
 
           {/* Game Configuration */}
-          <div className="border-b pb-4">
+          <div className="border-b border-white/10 pb-4">
             <div className="flex justify-between items-center mb-2">
-              <h3 className="font-semibold">Game Settings</h3>
+              <h3 className="font-semibold text-white">Game Settings</h3>
               {!editingConfig && (
                 <Button variant="secondary" onClick={() => setEditingConfig(true)}>
                   Edit
@@ -499,6 +530,7 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
                   value={maxSteals}
                   onChange={(e) => setMaxSteals(e.target.value)}
                   min="1"
+                  className="bg-slate-950 border-slate-700 text-white placeholder:text-slate-500 focus:border-purple-500"
                 />
                 <Input
                   type="number"
@@ -508,8 +540,9 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
                   onChange={(e) => setPriceLimit(e.target.value)}
                   min="0"
                   step="0.01"
+                  className="bg-slate-950 border-slate-700 text-white placeholder:text-slate-500 focus:border-purple-500"
                 />
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-slate-400">
                   Set a maximum price for gifts. Participants will see a warning if their gift exceeds this limit.
                 </p>
                 <div className="flex items-center gap-2">
@@ -518,9 +551,9 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
                     id="returnToStart"
                     checked={returnToStart}
                     onChange={(e) => setReturnToStart(e.target.checked)}
-                    className="w-4 h-4"
+                    className="w-4 h-4 text-purple-500 border-slate-600 rounded focus:ring-purple-500 bg-slate-800"
                   />
-                  <label htmlFor="returnToStart" className="text-sm">
+                  <label htmlFor="returnToStart" className="text-sm text-slate-300">
                     Enable Boomerang Rule (reverse turn order after last player)
                   </label>
                 </div>
@@ -537,7 +570,7 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
                 </div>
               </div>
             ) : (
-              <div className="text-gray-600 space-y-1">
+              <div className="text-slate-300 space-y-1">
                 <p>Max Steals: {party?.config?.maxSteals || 3}</p>
                 {party?.config?.priceLimit && (
                   <p>Price Limit: ${parseFloat(party.config.priceLimit).toFixed(2)}</p>
@@ -547,10 +580,29 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
             )}
           </div>
 
+          {/* Cancel Party Section - Danger Zone */}
+          <div className="border border-red-900/30 bg-red-900/10 rounded-lg p-4 mt-6">
+            <h3 className="text-red-400 text-xs uppercase font-semibold mb-2">Danger Zone</h3>
+            <p className="text-slate-300 text-sm mb-4">
+              This will permanently cancel the party. This action cannot be undone. All participants will lose access to this party.
+            </p>
+            <Button
+              variant="danger"
+              onClick={handleCancelParty}
+              className="w-auto px-4"
+            >
+              Cancel Party
+            </Button>
+          </div>
+          </div>
+        )}
+
+        {activeTab === 'guests' && (
+          <div className="space-y-6">
           {/* Add People Section */}
-          <div className="border-b pb-4">
+          <div className="border-b border-white/10 pb-4">
             <div className="flex justify-between items-center mb-2">
-              <h3 className="font-semibold">Add People</h3>
+              <h3 className="font-semibold text-white">Add People</h3>
               {!showAddPeople && (
                 <Button variant="secondary" onClick={() => setShowAddPeople(true)}>
                   Add Person
@@ -565,6 +617,7 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
                   placeholder="John Doe"
                   value={newPersonName}
                   onChange={(e) => setNewPersonName(e.target.value)}
+                  className="bg-slate-950 border-slate-700 text-white placeholder:text-slate-500 focus:border-purple-500"
                 />
                 <div className="flex gap-2">
                   <Input
@@ -573,7 +626,7 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
                     placeholder="friend@example.com"
                     value={newPersonEmail}
                     onChange={(e) => setNewPersonEmail(e.target.value)}
-                    className="flex-1"
+                    className="flex-1 bg-slate-950 border-slate-700 text-white placeholder:text-slate-500 focus:border-purple-500"
                   />
                   <div className="flex items-end gap-2">
                     <Button
@@ -596,7 +649,7 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
                 </div>
               </div>
             ) : (
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-slate-400">
                 Add people by name and email. They'll be added to the participants list and an invite email will be sent automatically.
               </p>
             )}
@@ -604,13 +657,13 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
 
           {/* Participants Management */}
           <div>
-            <h3 className="font-semibold mb-3">
+            <h3 className="font-semibold mb-3 text-white">
               Participants ({
                 participants.length + 
                 pendingInvites.filter(inv => inv.status !== 'ACCEPTED').length
               })
             </h3>
-            <p className="text-xs text-gray-500 mb-3">
+            <p className="text-xs text-slate-400 mb-3">
               Includes signed-up users and pending invites. Change status below to manage who's going.
             </p>
             <div className="space-y-2 max-h-96 overflow-y-auto">
@@ -620,36 +673,36 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
                 return (
                 <div
                   key={participant.id}
-                  className="flex items-center justify-between p-3 bg-gray-50 rounded border"
+                  className="flex items-center justify-between p-3 bg-white/5 border border-white/10 rounded-lg"
                 >
                   <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                    <p className="font-medium text-gray-900 break-words">
+                    <p className="font-medium text-white break-words">
                       {userNames[participant.id] && userNames[participant.id] !== participant.id
                         ? userNames[participant.id]
                         : `User ${participant.id.slice(0, 8)}...`}
                     </p>
                         {isAdmin && (
-                          <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                          <span className="text-xs bg-indigo-600/30 text-indigo-300 px-2 py-1 rounded border border-indigo-500/30">
                             Host
                           </span>
                         )}
                       </div>
                     {userNames[participant.id] === participant.id && (
-                      <p className="text-xs text-gray-400 mt-1 break-all">ID: {participant.id}</p>
+                      <p className="text-xs text-slate-400 mt-1 break-all">ID: {participant.id}</p>
                     )}
                     <div className="flex items-center gap-2 mt-1">
                       <select
                         value={participant.status || 'PENDING'}
                         onChange={(e) => handleUpdateParticipantStatus(participant.id, e.target.value)}
-                          className="text-sm border rounded px-2 py-1 text-gray-900 bg-white"
+                          className="text-sm border border-slate-700 rounded px-2 py-1 text-white bg-slate-950"
                           disabled={isAdmin}
                       >
                         <option value="PENDING">PENDING</option>
                         <option value="GOING">GOING</option>
                       </select>
                       {participant.turnNumber !== null && (
-                        <span className="text-sm text-gray-500">
+                        <span className="text-sm text-slate-400">
                           Turn #{participant.turnNumber}
                         </span>
                       )}
@@ -664,7 +717,7 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
                     Remove
                   </Button>
                     ) : (
-                      <span className="text-xs text-gray-500 ml-2 italic">Cannot remove host</span>
+                      <span className="text-xs text-slate-400 ml-2 italic">Cannot remove host</span>
                     )}
                 </div>
                 );
@@ -690,28 +743,28 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
                 .map((invite) => (
                   <div
                     key={invite.id}
-                    className="flex items-center justify-between p-3 bg-gray-50 rounded border"
+                    className="flex items-center justify-between p-3 bg-white/5 border border-white/10 rounded-lg"
                   >
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-900 break-words">
+                      <p className="font-medium text-white break-words">
                         {invite.name || invite.email}
                       </p>
                       {invite.email && invite.name && (
-                        <p className="text-xs text-gray-500 mt-1 break-all">{invite.email}</p>
+                        <p className="text-xs text-slate-400 mt-1 break-all">{invite.email}</p>
                       )}
                       {invite.emailFailed && (
-                        <p className="text-xs text-orange-600 mt-1">Email failed - use share link</p>
+                        <p className="text-xs text-orange-400 mt-1">Email failed - use share link</p>
                       )}
                       <div className="flex items-center gap-2 mt-1">
                         <select
                           value={invite.status || 'PENDING'}
                           onChange={(e) => handleOverrideStatus(invite.id, e.target.value)}
-                          className="text-sm border rounded px-2 py-1 text-gray-900 bg-white"
+                          className="text-sm border border-slate-700 rounded px-2 py-1 text-white bg-slate-950"
                         >
                           <option value="PENDING">PENDING</option>
                           <option value="GOING">GOING</option>
                         </select>
-                        <span className="text-xs text-gray-500 italic">Pending sign-up</span>
+                        <span className="text-xs text-slate-400 italic">Pending sign-up</span>
                       </div>
                     </div>
                     <Button
@@ -725,32 +778,8 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
                 ))}
             </div>
           </div>
-
-          {/* Cancel Party Section */}
-          <div className="border-t border-red-200 pt-6 mt-6">
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex-1">
-                <h3 className="text-lg font-semibold text-red-700 mb-2">⚠️ Cancel Party</h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  This will permanently cancel the party. This action cannot be undone. All participants will lose access to this party.
-                </p>
-              </div>
-            </div>
-            <Button
-              variant="danger"
-              onClick={handleCancelParty}
-              className="w-full"
-            >
-              Cancel Party
-            </Button>
           </div>
-
-          <div className="flex justify-end pt-4">
-            <Button variant="secondary" onClick={() => setShowModal(false)}>
-              Close
-            </Button>
-          </div>
-        </div>
+        )}
       </Modal>
 
       {/* Cancel Party Confirmation Modal */}

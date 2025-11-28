@@ -170,4 +170,15 @@ body {
   animation: float-reaction-4 3.8s ease-in-out infinite;
 }
 
+/* Style calendar icon in datetime-local inputs to be white */
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  cursor: pointer;
+}
+
+input[type="datetime-local"]::-moz-calendar-picker-indicator {
+  filter: invert(1);
+  cursor: pointer;
+}
+
 

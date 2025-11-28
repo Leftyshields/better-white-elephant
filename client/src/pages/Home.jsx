@@ -5,11 +5,14 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth.js';
 import { Button } from '../components/ui/Button.jsx';
 import { Input } from '../components/ui/Input.jsx';
-import { Footer } from '../components/Footer.jsx';
+import { Modal } from '../components/ui/Modal.jsx';
+import { Menu } from '@headlessui/react';
+import { GiftIcon, EllipsisVerticalIcon } from '@heroicons/react/24/outline';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { collection, addDoc, doc, setDoc, query, where, onSnapshot, orderBy, collectionGroup, getDocs, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../utils/firebase.js';
 import { trackCreateParty, trackSignUp, trackLogin, trackButtonClick } from '../utils/analytics.js';
+import { usePartyModal } from '../contexts/PartyModalContext.jsx';
 
 export function Home() {
   const { user, signInWithGoogle, signInWithEmailAndPassword, signUpWithEmailAndPassword } = useAuth();
@@ -32,6 +35,8 @@ export function Home() {
     zip: '',
     country: '',
   });
+  const { showModal: showCreatePartyModal, setShowModal: setShowCreatePartyModal } = usePartyModal();
+  const [participantCounts, setParticipantCounts] = useState({});
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -171,6 +176,32 @@ export function Home() {
     };
   }, [user]);
 
+  // Subscribe to participant counts for each party
+  useEffect(() => {
+    if (!user || myParties.length === 0) {
+      setParticipantCounts({});
+      return;
+    }
+
+    const unsubscribes = [];
+    const counts = {};
+
+    myParties.forEach(party => {
+      const participantsQuery = query(collection(db, 'parties', party.id, 'participants'));
+      const unsubscribe = onSnapshot(participantsQuery, (snapshot) => {
+        counts[party.id] = snapshot.size;
+        setParticipantCounts({ ...counts });
+      }, (error) => {
+        console.error(`Error fetching participants for party ${party.id}:`, error);
+      });
+      unsubscribes.push(unsubscribe);
+    });
+
+    return () => {
+      unsubscribes.forEach(unsubscribe => unsubscribe());
+    };
+  }, [user, myParties]);
+
   const handleDeleteParty = async (partyId, e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -191,6 +222,11 @@ export function Home() {
   const handleCreateParty = async () => {
     if (!user) {
       alert('Please sign in first');
+      return;
+    }
+
+    if (!partyDate) {
+      alert('Please select a party date');
       return;
     }
 
@@ -223,6 +259,11 @@ export function Home() {
         title: partyTitle,
         date: partyDate,
       });
+
+      // Reset form and close modal
+      setPartyTitle('');
+      setPartyDate('');
+      setShowCreatePartyModal(false);
 
       navigate(`/party/${partyRef.id}`);
     } catch (error) {
@@ -675,14 +716,13 @@ export function Home() {
           </div>
         </div>
       </div>
-      <Footer />
       </>
     );
   }
 
   return (
     <>
-    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black relative overflow-hidden">
+    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black relative overflow-hidden flex flex-col">
       {/* Subtle Snowflakes Animation */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
         {[...Array(15)].map((_, i) => {
@@ -707,129 +747,22 @@ export function Home() {
         })}
       </div>
       
-      {/* Hero Section */}
-      <div className="relative bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 text-white overflow-hidden">
-        <div className="absolute inset-0 opacity-10">
-          {[...Array(8)].map((_, i) => {
-            const size = Math.random() * 20 + 15;
-            return (
-              <div
-                key={i}
-                className="absolute text-white animate-float"
-                style={{
-                  left: `${Math.random() * 100}%`,
-                  top: `${Math.random() * 100}%`,
-                  fontSize: `${size}px`,
-                  animationDelay: `${Math.random() * 5}s`,
-                  animationDuration: `${10 + Math.random() * 8}s`,
-                }}
-              >
-                ❄
-              </div>
-            );
-          })}
-        </div>
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-          <div className="text-center mb-12">
-            <div className="text-8xl md:text-9xl mb-6">🎁</div>
-            <h1 className="text-3xl md:text-4xl font-semibold mb-4 text-white">
-              Welcome Back
-            </h1>
-            <p className="text-lg md:text-xl text-white/90 max-w-2xl mx-auto mb-6">
-              A Better White Elephant Gift Exchange. Create a new party or manage your existing ones.
-            </p>
-            <div className="flex flex-wrap items-center justify-center gap-4 mb-6 text-sm text-white/80">
-              <div className="flex items-center gap-2">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span>Free to use</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-                <span>Secure</span>
-              </div>
-              <a 
-                href="https://github.com/Leftyshields/better-white-elephant" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 text-white/80 hover:text-white transition-colors"
-              >
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                  <path fillRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clipRule="evenodd" />
-                </svg>
-                <span>Open source</span>
-              </a>
-            </div>
-          </div>
-
-          {/* Create Party Card */}
-          <div className="max-w-2xl mx-auto bg-white/10 backdrop-blur-md rounded-xl shadow-lg p-8 border border-white/20 relative z-10">
-            <div className="text-center mb-6">
-              <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-500 rounded-lg flex items-center justify-center mx-auto mb-4 shadow-md">
-                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
-              </div>
-              <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">Create a New Party</h2>
-              <p className="text-gray-300">Set up your gift exchange in seconds</p>
-            </div>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-200 mb-2">
-                  Party Title <span className="text-gray-400 font-normal">(optional)</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g., Family Christmas Exchange 2025"
-                  value={partyTitle}
-                  onChange={(e) => setPartyTitle(e.target.value)}
-                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-white placeholder:text-gray-400"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-200 mb-2">
-                  Party Date <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="datetime-local"
-                  value={partyDate}
-                  onChange={(e) => setPartyDate(e.target.value)}
-                  required
-                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-white"
-                />
-              </div>
-              <Button 
-                onClick={handleCreateParty} 
-                className="w-full py-3 text-base font-semibold shadow-md hover:shadow-lg transition-all mt-6"
-                disabled={!partyDate}
-              >
-                Create Party
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* My Parties Section */}
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 z-10">
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 z-10 pt-24">
         <div className="mb-8">
           <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">My Parties</h2>
-          <p className="text-gray-300">Manage your gift exchanges and join ongoing games</p>
+          <p className="text-slate-400">Manage your gift exchanges and join ongoing games</p>
         </div>
 
         {loadingParties && (
           <div className="text-center py-12">
-            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-            <p className="mt-4 text-gray-600">Loading your parties...</p>
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500"></div>
+            <p className="mt-4 text-slate-400">Loading your parties...</p>
           </div>
         )}
 
         {partiesError && (
-          <div className="bg-yellow-50 border-l-4 border-yellow-400 rounded-lg p-4 mb-6">
+          <div className="bg-yellow-500/10 border-l-4 border-yellow-500/50 rounded-lg p-4 mb-6">
             <div className="flex">
               <div className="flex-shrink-0">
                 <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
@@ -837,12 +770,12 @@ export function Home() {
                 </svg>
               </div>
               <div className="ml-3">
-                <p className="text-sm text-yellow-800">
+                <p className="text-sm text-yellow-300">
                   <strong>Note:</strong> {partiesError}
                   {partiesError.includes('index') && (
-                    <span className="block mt-2">
+                    <span className="block mt-2 text-slate-300">
                       The Firestore index is being created. This may take a few minutes. 
-                      You can deploy it manually with: <code className="bg-yellow-100 px-2 py-1 rounded text-xs">firebase deploy --only firestore:indexes</code>
+                      You can deploy it manually with: <code className="bg-slate-800/50 px-2 py-1 rounded text-xs">firebase deploy --only firestore:indexes</code>
                     </span>
                   )}
                 </p>
@@ -852,112 +785,184 @@ export function Home() {
         )}
 
         {myParties.length === 0 && !loadingParties && !partiesError && (
-          <div className="text-center py-16 bg-white/10 backdrop-blur-sm rounded-lg border-2 border-dashed border-white/20">
-            <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-            </svg>
-            <h3 className="text-lg font-semibold text-white mb-2">No parties yet</h3>
-            <p className="text-gray-600">Create your first White Elephant gift exchange above</p>
+          <div 
+            onClick={() => setShowCreatePartyModal(true)}
+            className="text-center py-16 bg-white/5 backdrop-blur-sm rounded-xl border-2 border-dashed border-white/10 hover:border-white/20 cursor-pointer transition-all max-w-2xl mx-auto"
+          >
+            <GiftIcon className="w-12 h-12 text-white/20 mb-4 mx-auto" />
+            <h3 className="text-white font-medium mb-2">Create Your First Party</h3>
+            <p className="text-slate-400">Click here to host a White Elephant gift exchange</p>
           </div>
         )}
 
         {myParties.length > 0 && (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {myParties.map((party) => {
               const canDelete = (party.status === 'ENDED' || party.status === 'CANCELLED') && party.isAdmin;
+              const participantCount = participantCounts[party.id] || 0;
               
               return (
                 <div
                   key={party.id}
-                  className="group block bg-white/10 backdrop-blur-sm rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden border-2 border-white/20 hover:border-red-400 relative"
+                  className="group bg-white/5 border border-white/10 backdrop-blur-md rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative"
                 >
-                  {party.status === 'LOBBY' && (
-                    <div className="absolute top-2 right-2 text-2xl animate-bounce z-10">🎄</div>
-                  )}
-                  <Link
-                    to={`/party/${party.id}`}
-                    className="block"
-                  >
-                    <div className="p-6">
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex-1">
-                          {party.title ? (
-                            <h3 className="text-xl font-bold text-white mb-2 group-hover:text-red-400 transition-colors">
-                              {party.title}
-                            </h3>
-                          ) : (
-                            <h3 className="text-xl font-bold text-gray-300 mb-2">Untitled Party</h3>
-                          )}
-                          <div className="flex items-center gap-2 text-sm text-gray-300 mb-3">
-                            <span className="text-lg">📅</span>
-                            <span>
-                              {party.date?.toDate 
-                                ? party.date.toDate().toLocaleDateString('en-US', { 
-                                    month: 'short', 
-                                    day: 'numeric', 
-                                    year: 'numeric' 
-                                  })
-                                : 'No date set'}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <span
-                            className={`px-3 py-1 text-xs font-bold rounded-full ${
-                              party.status === 'LOBBY'
-                                ? 'bg-yellow-500/20 text-yellow-300 border-2 border-yellow-500/50'
-                                : party.status === 'ACTIVE'
-                                ? 'bg-green-500/20 text-green-300 border-2 border-green-500/50'
-                                : 'bg-gray-500/20 text-gray-300 border-2 border-gray-500/50'
-                            }`}
-                          >
-                            {party.status}
+                  <div className="p-6">
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex-1">
+                        {party.title ? (
+                          <h3 className="text-xl font-bold text-white mb-2">
+                            {party.title}
+                          </h3>
+                        ) : (
+                          <h3 className="text-xl font-bold text-white mb-2">Untitled Party</h3>
+                        )}
+                        <div className="flex items-center gap-2 text-sm text-indigo-200 mb-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          <span>
+                            {party.date?.toDate 
+                              ? party.date.toDate().toLocaleDateString('en-US', { 
+                                  month: 'short', 
+                                  day: 'numeric', 
+                                  year: 'numeric' 
+                                })
+                              : 'No date set'}
                           </span>
-                          {canDelete && (
-                            <button
-                              onClick={(e) => handleDeleteParty(party.id, e)}
-                              className="p-2 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-lg transition-all hover:scale-110"
-                              title="Delete party"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                              </svg>
-                            </button>
-                          )}
+                        </div>
+                        <div className="flex items-center gap-2 text-sm text-indigo-200">
+                          <span className="text-base">👥</span>
+                          <span>{participantCount} Joined</span>
                         </div>
                       </div>
-                      
-                      <div className="flex items-center justify-between pt-4 border-t border-white/10">
-                        <div className="text-sm text-gray-300">
-                          {party.isAdmin ? (
-                            <span className="flex items-center gap-1">
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-                              </svg>
-                              You're the host
-                            </span>
-                          ) : (
-                            <span className="flex items-center gap-1">
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                              </svg>
-                              Participant
-                            </span>
-                          )}
-                        </div>
-                        <svg className="w-5 h-5 text-gray-400 group-hover:text-gray-600 group-hover:translate-x-1 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
+                      <div className="flex items-start gap-2 flex-shrink-0">
+                        <span
+                          className={`px-2 py-1 text-xs uppercase tracking-wide rounded-full ${
+                            party.status === 'LOBBY'
+                              ? 'bg-amber-500/10 text-amber-300 border border-amber-500/20'
+                              : party.status === 'ACTIVE'
+                              ? 'bg-green-500/10 text-green-400 border border-green-500/20'
+                              : 'bg-slate-700/40 text-slate-400 border border-slate-600/50'
+                          }`}
+                        >
+                          {party.status}
+                        </span>
+                        {canDelete && (
+                          <Menu as="div" className="relative">
+                            <Menu.Button
+                              onClick={(e) => e.stopPropagation()}
+                              className="p-1.5 text-slate-600 hover:text-white rounded-lg transition-all"
+                              title="Party options"
+                            >
+                              <EllipsisVerticalIcon className="w-5 h-5" />
+                            </Menu.Button>
+                            <Menu.Items className="absolute right-0 mt-2 w-48 bg-slate-900/95 backdrop-blur-md border border-white/20 rounded-lg shadow-lg z-50">
+                              <div className="py-1">
+                                <Menu.Item>
+                                  {({ active }) => (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (confirm('Are you sure you want to delete this party? This action cannot be undone.')) {
+                                          handleDeleteParty(party.id, e);
+                                        }
+                                      }}
+                                      className={`${
+                                        active ? 'bg-red-500/20' : ''
+                                      } block w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-red-500/20 transition-colors`}
+                                    >
+                                      Delete Party
+                                    </button>
+                                  )}
+                                </Menu.Item>
+                              </div>
+                            </Menu.Items>
+                          </Menu>
+                        )}
                       </div>
                     </div>
-                  </Link>
+                    
+                    <div className="pt-4 border-t border-white/10">
+                      <Link
+                        to={`/party/${party.id}`}
+                        className="block w-full px-4 py-2 text-sm font-medium bg-transparent border border-white/20 text-white hover:bg-purple-500/20 hover:border-purple-400/50 rounded-lg transition-all duration-200 text-center"
+                      >
+                        Enter Lobby
+                      </Link>
+                    </div>
+                  </div>
                 </div>
               );
             })}
           </div>
         )}
+
+        {/* Create Party Modal */}
+        <Modal
+          isOpen={showCreatePartyModal}
+          onClose={() => {
+            setShowCreatePartyModal(false);
+            setPartyTitle('');
+            setPartyDate('');
+          }}
+          title="Host New Party"
+          className="max-w-lg"
+        >
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Party Title <span className="text-slate-500 font-normal">(optional)</span>
+              </label>
+              <input
+                type="text"
+                placeholder="e.g., Family Christmas Exchange 2025"
+                value={partyTitle}
+                onChange={(e) => setPartyTitle(e.target.value)}
+                className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 text-white placeholder:text-slate-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Party Date <span className="text-red-400">*</span>
+              </label>
+              <input
+                type="datetime-local"
+                value={partyDate}
+                onChange={(e) => setPartyDate(e.target.value)}
+                required
+                className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              />
+            </div>
+            <div className="flex gap-3 justify-end pt-4">
+              <button
+                onClick={() => {
+                  setShowCreatePartyModal(false);
+                  setPartyTitle('');
+                  setPartyDate('');
+                }}
+                className="px-4 py-2 text-sm font-medium text-slate-300 border border-slate-700 rounded-lg hover:bg-slate-800/50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateParty}
+                disabled={!partyDate}
+                className="px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-indigo-500 to-purple-600 rounded-lg hover:from-indigo-600 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Create Party
+              </button>
+            </div>
+          </div>
+        </Modal>
       </div>
-      <Footer />
+      
+      {/* Micro Footer */}
+      <div className="text-slate-600 text-xs py-8 border-t border-white/5 mt-auto">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between">
+          <span>© 2024 StealOrReveal</span>
+          <span>Privacy • Support</span>
+        </div>
+      </div>
       </div>
     </>
   );

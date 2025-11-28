@@ -2,6 +2,9 @@
  * Game Board Component
  */
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeftIcon } from '@heroicons/react/24/outline';
+import confetti from 'canvas-confetti';
 import { useGameSocket } from '../hooks/useGameSocket.js';
 import { useParty } from '../hooks/useParty.js';
 import { useAuth } from '../hooks/useAuth.js';
@@ -16,6 +19,7 @@ import { trackGameAction } from '../utils/analytics.js';
 
 export function GameBoard({ partyId }) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const { gameState, pickGift, stealGift, endTurn, connected } = useGameSocket(partyId);
   const { gifts, participants, party } = useParty(partyId);
   const [userNames, setUserNames] = useState({});
@@ -25,6 +29,24 @@ export function GameBoard({ partyId }) {
   const [showAddressViewModal, setShowAddressViewModal] = useState(false);
   const [selectedWinnerAddress, setSelectedWinnerAddress] = useState(null);
   const [winnerAddresses, setWinnerAddresses] = useState({});
+
+  // Confetti animation on game end
+  useEffect(() => {
+    if (party?.status === 'ENDED' || gameState?.phase === 'ENDED') {
+      confetti({
+        spread: 70,
+        origin: { y: 0.6 }
+      });
+    }
+  }, [party?.status, gameState?.phase]);
+
+  // Function to trigger confetti
+  const triggerConfetti = () => {
+    confetti({
+      spread: 70,
+      origin: { y: 0.6 }
+    });
+  };
 
   // Fetch user names
   useEffect(() => {
@@ -78,10 +100,10 @@ export function GameBoard({ partyId }) {
       }
     });
     
-    // Get the gift this user won (only one - first one found)
-    const myWonGift = winnerGiftMap.get(user?.uid);
-    const giftsIWon = myWonGift ? [myWonGift] : [];
-    const giftsToSend = allEndedGifts.filter(g => g.submitterId === user?.uid);
+    // Identify the user's prize and obligation
+    const myPrize = winnerGiftMap.get(user?.uid); // Gift where winnerId === user?.uid
+    const myObligation = allEndedGifts.find(g => g.submitterId === user?.uid); // Gift where submitterId === user?.uid
+    const isSelfWin = myPrize?.id === myObligation?.id; // Check if user won their own gift
     
     // Use the same ended screen content below
     const getWinnerName = (ownerId) => {
@@ -89,100 +111,97 @@ export function GameBoard({ partyId }) {
       if (ownerId === user?.uid) return 'You';
       return userNames[ownerId] || userEmails[ownerId] || `User ${ownerId.slice(0, 8)}`;
     };
-    
+
     return (
       <>
-        <div className="max-w-6xl mx-auto p-6">
+        <div className="max-w-6xl mx-auto p-6 pt-24">
           {/* Celebration Header */}
           <div className="text-center mb-12">
-            <div className="text-7xl mb-4">🎉</div>
+            <div 
+              className="text-7xl mb-4 cursor-pointer hover:scale-110 transition-transform"
+              onClick={triggerConfetti}
+            >
+              🎉
+            </div>
             <h1 className="text-5xl font-bold mb-3 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
               Game Over!
             </h1>
-            <p className="text-xl text-gray-600">Time to see what you won and send your gifts!</p>
+            <p className="text-xl text-slate-300">Time to see what you won and send your gifts!</p>
           </div>
 
           {/* What You Won Section */}
-          {giftsIWon.length > 0 && (
+          {myPrize && (
             <div className="mb-12">
               <div className="flex items-center gap-3 mb-6">
-                <div className="bg-green-100 p-3 rounded-full">
-                  <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                <div className="bg-yellow-500/20 text-yellow-300 ring-1 ring-yellow-500/50 p-3 rounded-full">
+                  <svg className="w-8 h-8 text-yellow-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
                   </svg>
                 </div>
-                <h2 className="text-3xl font-bold text-gray-900">What You Won 🏆</h2>
+                <h2 className="text-2xl font-bold text-white mb-6">What You Won</h2>
               </div>
               <div className="space-y-6">
-                {giftsIWon.map((gift) => (
-                  <div
-                    key={gift.id}
-                    className="bg-gradient-to-br from-green-50 to-blue-50 rounded-xl shadow-lg p-6 border-2 border-green-200 hover:shadow-xl transition-shadow"
-                  >
-                    <div className="flex gap-6">
-                      {gift.image && (
-                        <img
-                          src={gift.image}
-                          alt={gift.title || 'Gift'}
-                          className="w-32 h-32 object-cover rounded-lg shadow-md"
-                          onError={(e) => {
-                            e.target.style.display = 'none';
-                          }}
-                        />
+                <div
+                  key={myPrize.id}
+                  className="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-[0_0_30px_-10px_rgba(234,179,8,0.3)] hover:border-white/20 transition-all"
+                >
+                  <div className="flex gap-6">
+                    {myPrize.image && (
+                      <img
+                        src={myPrize.image}
+                        alt={myPrize.title || 'Gift'}
+                        className="w-32 h-32 object-cover rounded-lg shadow-md"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                        }}
+                      />
+                    )}
+                    <div className="flex-1">
+                      <h3 className="text-white text-3xl font-bold mb-2">{myPrize.title || 'Gift'}</h3>
+                      {myPrize.url && (
+                        <a
+                          href={myPrize.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-indigo-300 hover:text-white underline underline-offset-4 text-sm mb-4 inline-block"
+                        >
+                          View Gift Link ↗
+                        </a>
                       )}
-                      <div className="flex-1">
-                        <h3 className="text-xl font-bold text-gray-900 mb-2">{gift.title || 'Gift'}</h3>
-                        {gift.url && (
-                          <a
-                            href={gift.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:text-blue-800 underline text-sm mb-4 inline-block"
-                          >
-                            View Gift Link ↗
-                          </a>
-                        )}
-                      </div>
                     </div>
                   </div>
-                ))}
+                </div>
               </div>
             </div>
           )}
 
           {/* What You Need to Send Section */}
-          {giftsToSend.length > 0 && (
+          {myObligation && (
             <div className="mb-12">
               <div className="flex items-center gap-3 mb-6">
-                <div className="bg-orange-100 p-3 rounded-full">
-                  <svg className="w-8 h-8 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="bg-blue-500/20 text-blue-300 ring-1 ring-blue-500/50 p-3 rounded-full">
+                  <svg className="w-8 h-8 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
                   </svg>
                 </div>
-                <h2 className="text-3xl font-bold text-gray-900">What You Need to Send 📦</h2>
+                <h2 className="text-2xl font-bold text-white mb-6">What You Need to Send</h2>
               </div>
               <div className="space-y-6">
-                {giftsToSend.map((gift) => {
-                  const winnerId = gift.winnerId;
-                  const winnerName = getWinnerName(winnerId);
-                  
-                  return (
-                    <GiftToSendCard
-                      key={gift.id}
-                      gift={gift}
-                      winnerId={winnerId}
-                      winnerName={winnerName}
-                      userNames={userNames}
-                      userEmails={userEmails}
-                    />
-                  );
-                })}
+                <GiftToSendCard
+                  key={myObligation.id}
+                  gift={myObligation}
+                  winnerId={myObligation.winnerId}
+                  winnerName={getWinnerName(myObligation.winnerId)}
+                  userNames={userNames}
+                  userEmails={userEmails}
+                  isSelfWin={isSelfWin}
+                />
               </div>
             </div>
           )}
 
           {/* No gifts message */}
-          {giftsIWon.length === 0 && giftsToSend.length === 0 && (
+          {!myPrize && !myObligation && (
             <div className="text-center py-12">
               <p className="text-gray-500 text-lg">No gifts assigned to you this game.</p>
             </div>
@@ -195,6 +214,15 @@ export function GameBoard({ partyId }) {
             userNames={userNames}
             userEmails={userEmails}
           />
+
+          {/* Navigation Button */}
+          <button
+            onClick={() => navigate('/')}
+            className="text-slate-400 hover:text-white flex items-center gap-2 mx-auto mt-12 mb-8 transition-colors"
+          >
+            <ArrowLeftIcon className="w-5 h-5" />
+            Back to Dashboard
+          </button>
         </div>
         
         {selectedGift && (
@@ -339,113 +367,102 @@ export function GameBoard({ partyId }) {
       }
     });
     
-    // Separate gifts into what you won and what you need to send
-    // Only show ONE gift per winner
-    const myWonGift = winnerToGiftMap.get(user?.uid);
-    const giftsIWon = myWonGift ? [myWonGift] : [];
-
-    const giftsToSend = allEndedGifts.filter((gift) => {
-      return gift.submitterId === user?.uid;
-    });
+    // Identify the user's prize and obligation
+    const myPrize = winnerToGiftMap.get(user?.uid); // Gift where winnerId === user?.uid
+    const myObligation = allEndedGifts.find((gift) => gift.submitterId === user?.uid); // Gift where submitterId === user?.uid
+    const isSelfWin = myPrize?.id === myObligation?.id; // Check if user won their own gift
 
     return (
-      <div className="max-w-6xl mx-auto p-6">
+      <div className="max-w-6xl mx-auto p-6 pt-24">
         {/* Celebration Header */}
         <div className="text-center mb-12">
-          <div className="text-7xl mb-4">🎉</div>
+          <div 
+            className="text-7xl mb-4 cursor-pointer hover:scale-110 transition-transform"
+            onClick={triggerConfetti}
+          >
+            🎉
+          </div>
           <h1 className="text-5xl font-bold mb-3 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
             Game Over!
           </h1>
-          <p className="text-xl text-gray-600">Time to see what you won and send your gifts!</p>
+          <p className="text-xl text-slate-300">Time to see what you won and send your gifts!</p>
         </div>
 
         {/* What You Won Section */}
-        {giftsIWon.length > 0 && (
+        {myPrize && (
           <div className="mb-12">
             <div className="flex items-center gap-3 mb-6">
-              <div className="bg-green-100 p-3 rounded-full">
-                <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              <div className="bg-yellow-500/20 text-yellow-300 ring-1 ring-yellow-500/50 p-3 rounded-full">
+                <svg className="w-8 h-8 text-yellow-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
                 </svg>
               </div>
-              <h2 className="text-3xl font-bold text-gray-900">What You Won 🏆</h2>
+              <h2 className="text-2xl font-bold text-white mb-6">What You Won</h2>
             </div>
             <div className="space-y-6">
-              {giftsIWon.map((gift) => {
-                const giftData = unwrappedMap.get(gift.id);
-                return (
-                  <div
-                    key={gift.id}
-                    className="bg-gradient-to-br from-green-50 to-blue-50 rounded-xl shadow-lg p-6 border-2 border-green-200 hover:shadow-xl transition-shadow"
-                  >
-                    <div className="flex gap-6">
-                      {gift.image && (
-                        <img
-                          src={gift.image}
-                          alt={gift.title || 'Gift'}
-                          className="w-32 h-32 object-cover rounded-lg shadow-md"
-                          onError={(e) => {
-                            e.target.style.display = 'none';
-                          }}
-                        />
-                      )}
-                      <div className="flex-1">
-                        <h3 className="text-xl font-bold text-gray-900 mb-2">{gift.title || 'Gift'}</h3>
-                        {gift.url && (
-                          <a
-                            href={gift.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:text-blue-800 underline text-sm mb-4 inline-block"
-                          >
-                            View Gift Link ↗
-                          </a>
-                        )}
-                      </div>
-                    </div>
+              <div
+                key={myPrize.id}
+                className="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-[0_0_30px_-10px_rgba(234,179,8,0.3)] hover:border-white/20 transition-all"
+              >
+                <div className="flex gap-6">
+                  {myPrize.image && (
+                    <img
+                      src={myPrize.image}
+                      alt={myPrize.title || 'Gift'}
+                      className="w-32 h-32 object-cover rounded-lg shadow-md"
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                      }}
+                    />
+                  )}
+                  <div className="flex-1">
+                    <h3 className="text-white text-3xl font-bold mb-2">{myPrize.title || 'Gift'}</h3>
+                    {myPrize.url && (
+                      <a
+                        href={myPrize.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-indigo-300 hover:text-white underline underline-offset-4 text-sm mb-4 inline-block"
+                      >
+                        View Gift Link ↗
+                      </a>
+                    )}
                   </div>
-                );
-              })}
+                </div>
+              </div>
             </div>
           </div>
         )}
 
         {/* What You Need to Send Section */}
-        {giftsToSend.length > 0 && (
+        {myObligation && (
           <div className="mb-12">
             <div className="flex items-center gap-3 mb-6">
-              <div className="bg-orange-100 p-3 rounded-full">
-                <svg className="w-8 h-8 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="bg-blue-500/20 text-blue-300 ring-1 ring-blue-500/50 p-3 rounded-full">
+                <svg className="w-8 h-8 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
                 </svg>
               </div>
-              <h2 className="text-3xl font-bold text-gray-900">What You Need to Send 📦</h2>
+              <h2 className="text-2xl font-bold text-white mb-6">What You Need to Send</h2>
             </div>
             <div className="space-y-6">
-              {giftsToSend.map((gift) => {
-                // Use winnerId from Firestore if available, otherwise from gameState
-                const winnerId = gift.winnerId || unwrappedMap.get(gift.id)?.ownerId;
-                const winnerName = getWinnerName(winnerId);
-                
-                return (
-                  <GiftToSendCard
-                    key={gift.id}
-                    gift={gift}
-                    winnerId={winnerId}
-                    winnerName={winnerName}
-                    userNames={userNames}
-                    userEmails={userEmails}
-                  />
-                );
-              })}
+              <GiftToSendCard
+                key={myObligation.id}
+                gift={myObligation}
+                winnerId={myObligation.winnerId || unwrappedMap.get(myObligation.id)?.ownerId}
+                winnerName={getWinnerName(myObligation.winnerId || unwrappedMap.get(myObligation.id)?.ownerId)}
+                userNames={userNames}
+                userEmails={userEmails}
+                isSelfWin={isSelfWin}
+              />
             </div>
           </div>
         )}
 
         {/* No gifts message */}
-        {giftsIWon.length === 0 && giftsToSend.length === 0 && (
+        {!myPrize && !myObligation && (
           <div className="text-center py-12">
-            <p className="text-gray-500 text-lg">No gifts assigned to you this game.</p>
+            <p className="text-slate-400 text-lg">No gifts assigned to you this game.</p>
           </div>
         )}
 
@@ -456,6 +473,15 @@ export function GameBoard({ partyId }) {
           userNames={userNames}
           userEmails={userEmails}
         />
+
+        {/* Navigation Button */}
+        <button
+          onClick={() => navigate('/')}
+          className="text-slate-400 hover:text-white flex items-center gap-2 mx-auto mt-12 mb-8 transition-colors"
+        >
+          <ArrowLeftIcon className="w-5 h-5" />
+          Back to Dashboard
+        </button>
         
         {/* Shipping Address Modal (for winners) */}
         {selectedGift && (
@@ -494,13 +520,13 @@ export function GameBoard({ partyId }) {
   return (
     <div className="max-w-6xl mx-auto p-6">
       <div className="mb-6 text-center">
-        <h1 className="text-3xl font-bold mb-4">White Elephant Game</h1>
+        <h1 className="text-3xl font-bold mb-4 text-white">White Elephant Game</h1>
         
         {/* Rounds Remaining */}
         {phase === 'ACTIVE' && (
           <div className="mb-4">
-            <div className="inline-block bg-blue-50 border-2 border-blue-200 rounded-full px-5 py-2">
-              <span className="text-sm font-semibold text-blue-700">
+            <div className="inline-block bg-slate-800/50 border border-white/10 rounded-full px-5 py-2">
+              <span className="text-sm font-semibold text-slate-300">
                 {roundsInfo.roundsRemaining} turn{roundsInfo.roundsRemaining !== 1 ? 's' : ''} remaining
                 {gameState.isBoomerangPhase && ' (Boomerang)'}
               </span>
@@ -509,39 +535,38 @@ export function GameBoard({ partyId }) {
         )}
 
         {/* Prominent current player display */}
-        <div className={`p-6 rounded-lg mb-4 ${
-          currentPlayerId === user?.uid 
-            ? 'bg-blue-100 border-4 border-blue-500' 
-            : 'bg-gray-100 border-4 border-gray-300'
-        }`}>
-          <p className="text-sm text-gray-600 mb-1">Current Turn</p>
-          <p className={`text-4xl font-bold ${
-            currentPlayerId === user?.uid 
-              ? 'text-blue-700' 
-              : 'text-gray-700'
+        <div className="mb-4">
+          <p className={`text-5xl font-extrabold mb-2 ${
+            currentPlayerId === user?.uid
+              ? 'text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400 drop-shadow-[0_0_15px_rgba(168,85,247,0.5)] animate-pulse'
+              : 'text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400 drop-shadow-[0_0_15px_rgba(168,85,247,0.5)]'
           }`}>
             {getCurrentPlayerName()}
           </p>
+          <p className="text-slate-300 text-lg mt-2 font-medium">Current Turn</p>
         </div>
         
         {/* Show boomerang rule if set */}
         {party?.config?.returnToStart && (
-          <div className="mb-4 bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4">
-            <p className="text-yellow-800 font-semibold text-sm">
+          <div className="mb-4 flex justify-center">
+            <div className="bg-amber-500/10 text-amber-300 border border-amber-500/20 rounded-full px-4 py-1 text-sm">
               🔄 Boomerang Rule Active: After the last player, turns go back in reverse order!
-            </p>
+            </div>
           </div>
         )}
         
         {gameState.isBoomerangPhase && (
-          <p className="text-yellow-600 font-semibold text-lg mb-4">🔄 Boomerang Round!</p>
+          <div className="mb-4 flex justify-center">
+            <div className="bg-amber-500/10 text-amber-300 border border-amber-500/20 rounded-full px-4 py-1 text-sm">
+              🔄 Boomerang Round!
+            </div>
+          </div>
         )}
         
         {/* Player Queue/Order */}
         {gameState?.turnOrder && gameState.turnOrder.length > 0 && (
-          <div className="mb-6 bg-white rounded-lg border-2 border-gray-200 p-4">
-            <h3 className="text-lg font-semibold text-gray-900 mb-3">Player Queue</h3>
-            <div className="flex flex-wrap gap-2">
+          <div className="mb-6">
+            <div className="flex overflow-x-auto justify-center gap-2 pb-2">
               {gameState.turnOrder.map((playerId, index) => {
                 const isCurrent = playerId === currentPlayerId;
                 const playerName = playerId === user?.uid 
@@ -554,12 +579,12 @@ export function GameBoard({ partyId }) {
                 return (
                   <div
                     key={playerId}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium ${
+                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
                       isCurrent
-                        ? 'bg-blue-500 text-white border-2 border-blue-700'
+                        ? 'bg-indigo-600 text-white border border-indigo-400 shadow-[0_0_20px_rgba(99,102,241,0.4)] scale-110'
                         : isPast
-                        ? 'bg-gray-200 text-gray-600 border border-gray-300'
-                        : 'bg-gray-100 text-gray-800 border border-gray-300'
+                        ? 'bg-slate-800/30 border border-white/5 text-slate-500'
+                        : 'bg-slate-800/50 border border-white/10 text-slate-400'
                     }`}
                   >
                     <span className="font-bold mr-1">{index + 1}.</span>
@@ -590,7 +615,7 @@ export function GameBoard({ partyId }) {
               >
                 {allGiftsFrozen ? 'End Game Now' : 'End Game Manually'}
               </Button>
-              <p className="text-xs text-gray-500 mt-2">
+              <p className="text-xs text-slate-400 mt-2">
                 {allGiftsFrozen 
                   ? 'All gifts are frozen. Click to finalize winners and end the game.'
                   : 'As admin, you can manually end the game at any time'}
@@ -613,8 +638,8 @@ export function GameBoard({ partyId }) {
       {/* Wrapped Gifts */}
       {wrappedGiftList.length > 0 && (
         <div className="mb-8">
-          <h2 className="text-xl font-semibold mb-4">Wrapped Gifts</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <h2 className="text-xl font-semibold mb-4 text-white">Wrapped Gifts</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {wrappedGiftList.map((gift) => (
               <GiftCard
                 key={gift.id}
@@ -634,8 +659,8 @@ export function GameBoard({ partyId }) {
       {/* Unwrapped Gifts */}
       {unwrappedGiftList.length > 0 && (
         <div>
-          <h2 className="text-xl font-semibold mb-4">Unwrapped Gifts</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <h2 className="text-xl font-semibold mb-4 text-white">Unwrapped Gifts</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {unwrappedGiftList.map((gift) => {
               const giftData = unwrappedMap.get(gift.id);
               const ownerId = giftData?.ownerId;

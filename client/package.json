@@ -8,10 +8,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@headlessui/react": "^2.2.9",
+    "@heroicons/react": "^2.2.0",
+    "canvas-confetti": "^1.9.4",
+    "firebase": "^10.7.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.21.1",
-    "firebase": "^10.7.1",
     "socket.io-client": "^4.6.1"
   },
   "devDependencies": {
@@ -24,4 +27,3 @@
     "vite": "^5.0.8"
   }
 }
-
