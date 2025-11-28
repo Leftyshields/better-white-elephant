@@ -3,7 +3,7 @@
  * 
  * Manages game state with optimistic updates for instant UI feedback.
  */
-import { useReducer, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useReducer, useEffect, useRef, useCallback, useMemo, useState } from 'react';
 import { useAuth } from './useAuth.js';
 import { useParty } from './useParty.js';
 import { gameReducer, initialState, ActionTypes, gameActions } from '../reducers/gameReducer.js';
@@ -17,6 +17,7 @@ export function useGameEngine(partyId) {
   const { user } = useAuth();
   const { gifts, participants, party } = useParty(partyId);
   const [state, dispatch] = useReducer(gameReducer, initialState);
+  const [socket, setSocket] = useState(null);
   const socketRef = useRef(null);
   const pendingOptimisticUpdateRef = useRef(null);
   const giftsRef = useRef(gifts);
@@ -40,6 +41,7 @@ export function useGameEngine(partyId) {
       });
 
       socketRef.current = socket;
+      setSocket(socket);
 
       // Socket event listeners
       socket.on('connect', () => {
@@ -93,6 +95,7 @@ export function useGameEngine(partyId) {
       return () => {
         socket.disconnect();
         socketRef.current = null;
+        setSocket(null);
       };
     });
 
@@ -100,6 +103,7 @@ export function useGameEngine(partyId) {
       if (socketRef.current) {
         socketRef.current.disconnect();
         socketRef.current = null;
+        setSocket(null);
       }
     };
   }, [partyId, user]);
@@ -222,6 +226,17 @@ export function useGameEngine(partyId) {
     return true;
   }, [isMyTurn, state.status, state.gifts, user?.uid]);
 
+  // Emit reaction method
+  const emitReaction = useCallback((emoji) => {
+    if (socketRef.current && socketRef.current.connected) {
+      socketRef.current.emit('send_reaction', {
+        type: 'emoji',
+        value: emoji,
+        partyId,
+      });
+    }
+  }, [partyId]);
+
   return {
     state,
     actions: {
@@ -234,6 +249,8 @@ export function useGameEngine(partyId) {
       canPick,
       canSteal,
     },
+    socket,
+    emitReaction,
   };
 }
 

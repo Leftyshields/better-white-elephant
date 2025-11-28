@@ -39,7 +39,7 @@ export const GiftCard = memo(function GiftCard({
 
   return (
     <div
-      className={`bg-white/5 backdrop-blur-md border border-white/10 rounded-xl overflow-hidden hover:border-white/30 transition-all p-4 ${
+      className={`bg-white/5 backdrop-blur-md border border-white/10 rounded-xl overflow-hidden hover:border-white/30 transition-all p-4 w-full sm:w-[280px] md:w-[320px] ${
         isFrozen ? 'border-red-400/50 opacity-75' : ''
       } ${isOwned ? 'ring-2 ring-indigo-500/50' : ''}`}
     >

@@ -9,6 +9,7 @@ import { Party } from './pages/Party.jsx';
 import { Profile } from './pages/Profile.jsx';
 import { trackPageView } from './utils/analytics.js';
 import { PartyModalProvider } from './contexts/PartyModalContext.jsx';
+import { SoundProvider } from './contexts/SoundContext.jsx';
 
 // Component to track page views
 function PageViewTracker() {
@@ -24,19 +25,21 @@ function PageViewTracker() {
 
 function App() {
   return (
-    <PartyModalProvider>
-      <BrowserRouter>
-        <PageViewTracker />
-        <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black">
-          <Header />
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/party/:partyId" element={<Party />} />
-            <Route path="/profile" element={<Profile />} />
-          </Routes>
-        </div>
-      </BrowserRouter>
-    </PartyModalProvider>
+    <SoundProvider>
+      <PartyModalProvider>
+        <BrowserRouter>
+          <PageViewTracker />
+          <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black">
+            <Header />
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/party/:partyId" element={<Party />} />
+              <Route path="/profile" element={<Profile />} />
+            </Routes>
+          </div>
+        </BrowserRouter>
+      </PartyModalProvider>
+    </SoundProvider>
   );
 }
 

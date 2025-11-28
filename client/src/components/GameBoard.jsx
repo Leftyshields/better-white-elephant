@@ -1,29 +1,34 @@
 /**
  * Game Board Component
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import confetti from 'canvas-confetti';
 import { useGameSocket } from '../hooks/useGameSocket.js';
 import { useParty } from '../hooks/useParty.js';
 import { useAuth } from '../hooks/useAuth.js';
+import { useGameSounds } from '../hooks/useGameSounds.js';
 import { GiftCard } from './GiftCard.jsx';
 import { Button } from './ui/Button.jsx';
 import { AddressModal } from './AddressModal.jsx';
 import { ShippingAddressViewModal } from './ShippingAddressViewModal.jsx';
 import { GiftToSendCard } from './GiftToSendCard.jsx';
 import { GameAuditTrail } from './GameAuditTrail.jsx';
+import { ReactionBar } from './ReactionBar.jsx';
+import { ReactionOverlay } from './ReactionOverlay.jsx';
 import { apiRequest } from '../utils/api.js';
 import { trackGameAction } from '../utils/analytics.js';
 
 export function GameBoard({ partyId }) {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { gameState, pickGift, stealGift, endTurn, connected } = useGameSocket(partyId);
+  const { gameState, pickGift, stealGift, endTurn, connected, socket, emitReaction } = useGameSocket(partyId);
   const { gifts, participants, party } = useParty(partyId);
+  const { playTurnNotification, playSteal, playUnwrap } = useGameSounds();
   const [userNames, setUserNames] = useState({});
   const [userEmails, setUserEmails] = useState({});
+  const prevIsMyTurnRef = useRef(false);
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [selectedGift, setSelectedGift] = useState(null);
   const [showAddressViewModal, setShowAddressViewModal] = useState(false);
@@ -86,6 +91,44 @@ export function GameBoard({ partyId }) {
     fetchUserNames();
   }, [gameState, participants]);
 
+  // Play turn notification sound when it becomes user's turn
+  useEffect(() => {
+    if (!gameState || !connected) return;
+    
+    const isMyTurn = gameState.currentPlayerId === user?.uid;
+    const wasMyTurn = prevIsMyTurnRef.current;
+    
+    // Only play sound when transitioning from not my turn to my turn
+    if (isMyTurn && !wasMyTurn && gameState?.phase === 'ACTIVE') {
+      playTurnNotification();
+    }
+    
+    prevIsMyTurnRef.current = isMyTurn;
+  }, [gameState?.currentPlayerId, user?.uid, gameState?.phase, connected, playTurnNotification]);
+
+  // Listen for game actions to play appropriate sounds
+  useEffect(() => {
+    if (!socket || !connected) return;
+
+    socket.on('game-updated', (updatedState) => {
+      // Check activities for recent actions
+      if (updatedState?.history && Array.isArray(updatedState.history)) {
+        const lastActivity = updatedState.history[updatedState.history.length - 1];
+        if (lastActivity) {
+          if (lastActivity.type === 'STEAL') {
+            playSteal();
+          } else if (lastActivity.type === 'PICK') {
+            playUnwrap();
+          }
+        }
+      }
+    });
+
+    return () => {
+      socket.off('game-updated');
+    };
+  }, [socket, connected, playSteal, playUnwrap]);
+
   // Check if game is ended from party status - if so, show ended screen using Firestore data
   if (party?.status === 'ENDED') {
     // Use gifts with winnerId from Firestore (persisted when game ended)
@@ -114,6 +157,9 @@ export function GameBoard({ partyId }) {
 
     return (
       <>
+        {/* Reaction Overlay - Full screen layer for flying emojis */}
+        {socket && <ReactionOverlay socket={socket} />}
+        
         <div className="max-w-6xl mx-auto p-6 pt-24">
           {/* Celebration Header */}
           <div className="text-center mb-12">
@@ -224,6 +270,9 @@ export function GameBoard({ partyId }) {
             Back to Dashboard
           </button>
         </div>
+
+        {/* Reaction Bar - Fixed at bottom for sending reactions */}
+        {socket && connected && <ReactionBar onReaction={emitReaction} />}
         
         {selectedGift && (
           <AddressModal
@@ -518,55 +567,45 @@ export function GameBoard({ partyId }) {
   };
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
-      <div className="mb-6 text-center">
-        <h1 className="text-3xl font-bold mb-4 text-white">White Elephant Game</h1>
-        
-        {/* Rounds Remaining */}
-        {phase === 'ACTIVE' && (
-          <div className="mb-4">
-            <div className="inline-block bg-slate-800/50 border border-white/10 rounded-full px-5 py-2">
-              <span className="text-sm font-semibold text-slate-300">
+    <>
+      {/* Reaction Overlay - Full screen layer for flying emojis */}
+      {socket && <ReactionOverlay socket={socket} />}
+      
+      <div className="max-w-6xl mx-auto p-6 pt-24">
+        {/* Unified HUD Container */}
+        <div className="w-full max-w-5xl mx-auto mb-8 p-4 rounded-2xl bg-slate-900/60 backdrop-blur-xl border border-white/10 flex flex-col md:flex-row items-center justify-between gap-6">
+          {/* Left Section: Game Status */}
+          <div className="flex flex-col gap-2 items-start">
+            {/* Rounds Remaining */}
+            {phase === 'ACTIVE' && (
+              <div className="text-slate-400 text-sm font-mono">
                 {roundsInfo.roundsRemaining} turn{roundsInfo.roundsRemaining !== 1 ? 's' : ''} remaining
-                {gameState.isBoomerangPhase && ' (Boomerang)'}
-              </span>
-            </div>
+              </div>
+            )}
+            {/* Boomerang Badge */}
+            {(party?.config?.returnToStart || gameState.isBoomerangPhase) && (
+              <div className="bg-indigo-500/20 text-indigo-300 text-[10px] uppercase tracking-wider px-2 py-1 rounded-full border border-indigo-500/30">
+                {gameState.isBoomerangPhase ? '🔄 Boomerang Round!' : '🔄 Boomerang Rule Active'}
+              </div>
+            )}
           </div>
-        )}
 
-        {/* Prominent current player display */}
-        <div className="mb-4">
-          <p className={`text-5xl font-extrabold mb-2 ${
-            currentPlayerId === user?.uid
-              ? 'text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400 drop-shadow-[0_0_15px_rgba(168,85,247,0.5)] animate-pulse'
-              : 'text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400 drop-shadow-[0_0_15px_rgba(168,85,247,0.5)]'
-          }`}>
-            {getCurrentPlayerName()}
-          </p>
-          <p className="text-slate-300 text-lg mt-2 font-medium">Current Turn</p>
-        </div>
-        
-        {/* Show boomerang rule if set */}
-        {party?.config?.returnToStart && (
-          <div className="mb-4 flex justify-center">
-            <div className="bg-amber-500/10 text-amber-300 border border-amber-500/20 rounded-full px-4 py-1 text-sm">
-              🔄 Boomerang Rule Active: After the last player, turns go back in reverse order!
-            </div>
+          {/* Center Section: Turn Indicator */}
+          <div className="flex-1 text-center">
+            {currentPlayerId === user?.uid ? (
+              <p className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-white to-purple-300 drop-shadow-[0_0_10px_rgba(255,255,255,0.5)] animate-pulse">
+                Your Turn!
+              </p>
+            ) : (
+              <p className="text-xl text-slate-300 animate-pulse">
+                Waiting for <span className="text-white font-semibold">{getCurrentPlayerName()}</span>...
+              </p>
+            )}
           </div>
-        )}
-        
-        {gameState.isBoomerangPhase && (
-          <div className="mb-4 flex justify-center">
-            <div className="bg-amber-500/10 text-amber-300 border border-amber-500/20 rounded-full px-4 py-1 text-sm">
-              🔄 Boomerang Round!
-            </div>
-          </div>
-        )}
-        
-        {/* Player Queue/Order */}
-        {gameState?.turnOrder && gameState.turnOrder.length > 0 && (
-          <div className="mb-6">
-            <div className="flex overflow-x-auto justify-center gap-2 pb-2">
+
+          {/* Right Section: Player Queue */}
+          {gameState?.turnOrder && gameState.turnOrder.length > 0 && (
+            <div className="flex overflow-x-auto gap-2 pb-2 max-w-full md:max-w-none [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
               {gameState.turnOrder.map((playerId, index) => {
                 const isCurrent = playerId === currentPlayerId;
                 const playerName = playerId === user?.uid 
@@ -579,9 +618,9 @@ export function GameBoard({ partyId }) {
                 return (
                   <div
                     key={playerId}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-all flex-shrink-0 whitespace-nowrap ${
                       isCurrent
-                        ? 'bg-indigo-600 text-white border border-indigo-400 shadow-[0_0_20px_rgba(99,102,241,0.4)] scale-110'
+                        ? 'bg-indigo-600 text-white border border-indigo-400 shadow-[0_0_20px_rgba(99,102,241,0.4)] scale-125'
                         : isPast
                         ? 'bg-slate-800/30 border border-white/5 text-slate-500'
                         : 'bg-slate-800/50 border border-white/10 text-slate-400'
@@ -594,38 +633,12 @@ export function GameBoard({ partyId }) {
                 );
               })}
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
-        {/* End Game Button - Admin only */}
-        {phase === 'ACTIVE' && isAdmin && (
-          <div className="mt-4">
-            {allGiftsFrozen && (
-              <div className="bg-orange-50 border-2 border-orange-300 rounded-lg p-4 mb-4">
-                <p className="text-sm font-semibold text-orange-800 mb-2">
-                  🎉 All gifts are frozen! The game is ready to end.
-                </p>
-              </div>
-            )}
-            <div>
-              <Button
-                onClick={handleEndGame}
-                variant={allGiftsFrozen ? "primary" : "secondary"}
-                className="px-8 py-3 text-lg"
-              >
-                {allGiftsFrozen ? 'End Game Now' : 'End Game Manually'}
-              </Button>
-              <p className="text-xs text-slate-400 mt-2">
-                {allGiftsFrozen 
-                  ? 'All gifts are frozen. Click to finalize winners and end the game.'
-                  : 'As admin, you can manually end the game at any time'}
-              </p>
-            </div>
-          </div>
-        )}
         {/* Show message to non-admins when all gifts are frozen */}
         {phase === 'ACTIVE' && !isAdmin && allGiftsFrozen && (
-          <div className="mt-4">
+          <div className="mb-6">
             <div className="bg-orange-50 border-2 border-orange-300 rounded-lg p-4">
               <p className="text-sm font-semibold text-orange-800 mb-2">
                 🎉 All gifts are frozen! Waiting for admin to end the game.
@@ -639,7 +652,7 @@ export function GameBoard({ partyId }) {
       {wrappedGiftList.length > 0 && (
         <div className="mb-8">
           <h2 className="text-xl font-semibold mb-4 text-white">Wrapped Gifts</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div className="flex flex-wrap justify-center gap-6 w-full max-w-7xl mx-auto">
             {wrappedGiftList.map((gift) => (
               <GiftCard
                 key={gift.id}
@@ -659,8 +672,8 @@ export function GameBoard({ partyId }) {
       {/* Unwrapped Gifts */}
       {unwrappedGiftList.length > 0 && (
         <div>
-          <h2 className="text-xl font-semibold mb-4 text-white">Unwrapped Gifts</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div className="border-t border-white/5 mt-8 mb-6"></div>
+          <div className="flex flex-wrap justify-center gap-6 w-full max-w-7xl mx-auto">
             {unwrappedGiftList.map((gift) => {
               const giftData = unwrappedMap.get(gift.id);
               const ownerId = giftData?.ownerId;
@@ -693,13 +706,16 @@ export function GameBoard({ partyId }) {
 
       {/* End Turn Button */}
       {currentAction && (
-        <div className="mt-6 text-center">
-          <Button onClick={endTurn} variant="primary" className="px-8">
+        <div className="mt-6 text-center w-full max-w-xs mx-auto">
+          <Button onClick={endTurn} variant="primary" className="px-8 shadow-lg shadow-blue-500/30">
             End Turn
           </Button>
         </div>
       )}
-    </div>
+
+      {/* Reaction Bar - Fixed at bottom for sending reactions */}
+      {socket && connected && <ReactionBar onReaction={emitReaction} />}
+    </>
   );
 }
 

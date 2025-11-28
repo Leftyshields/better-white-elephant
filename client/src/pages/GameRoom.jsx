@@ -3,21 +3,82 @@
  * 
  * Uses the new reducer-based state management with optimistic updates
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useGameEngine } from '../hooks/useGameEngine.js';
 import { useAuth } from '../hooks/useAuth.js';
 import { useParty } from '../hooks/useParty.js';
+import { useGameSounds } from '../hooks/useGameSounds.js';
 import { GiftGrid } from '../components/GiftGrid.jsx';
 import { Button } from '../components/ui/Button.jsx';
 import { GameAuditTrail } from '../components/GameAuditTrail.jsx';
+import { ReactionBar } from '../components/ReactionBar.jsx';
+import { ReactionOverlay } from '../components/ReactionOverlay.jsx';
 import { apiRequest } from '../utils/api.js';
 
 export function GameRoom({ partyId }) {
   const { user } = useAuth();
   const { party } = useParty(partyId);
-  const { state, actions, derived } = useGameEngine(partyId);
+  const { state, actions, derived, socket, emitReaction } = useGameEngine(partyId);
+  const { playTurnNotification, playSteal, playUnwrap } = useGameSounds();
   const [userNames, setUserNames] = useState({});
   const [userEmails, setUserEmails] = useState({});
+  const prevIsMyTurnRef = useRef(false);
+
+  // Debug: Log socket and connection status
+  useEffect(() => {
+    console.log('🔍 GameRoom Debug:', {
+      socket: !!socket,
+      isSocketConnected: state.ui.isSocketConnected,
+      status: state.status,
+    });
+  }, [socket, state.ui.isSocketConnected, state.status]);
+
+  // Play turn notification sound when it becomes user's turn
+  useEffect(() => {
+    const isMyTurn = derived.isMyTurn;
+    const wasMyTurn = prevIsMyTurnRef.current;
+    
+    // Only play sound when transitioning from not my turn to my turn
+    if (isMyTurn && !wasMyTurn && state.status === 'PLAYING') {
+      playTurnNotification();
+    }
+    
+    prevIsMyTurnRef.current = isMyTurn;
+  }, [derived.isMyTurn, state.status, playTurnNotification]);
+
+  // Listen for game actions to play appropriate sounds
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleGameAction = (actionData) => {
+      // Check if this is a steal or unwrap action
+      // This would need to be adapted based on your actual socket event structure
+      if (actionData?.type === 'steal') {
+        playSteal();
+      } else if (actionData?.type === 'pick' || actionData?.type === 'unwrap') {
+        playUnwrap();
+      }
+    };
+
+    // Listen for game-updated events which may contain action info
+    socket.on('game-updated', (gameState) => {
+      // Check activities for recent actions
+      if (gameState?.activities && Array.isArray(gameState.activities)) {
+        const lastActivity = gameState.activities[gameState.activities.length - 1];
+        if (lastActivity) {
+          if (lastActivity.type === 'STEAL') {
+            playSteal();
+          } else if (lastActivity.type === 'PICK') {
+            playUnwrap();
+          }
+        }
+      }
+    });
+
+    return () => {
+      socket.off('game-updated');
+    };
+  }, [socket, playSteal, playUnwrap]);
 
   // Fetch user names for display
   useEffect(() => {
@@ -120,17 +181,21 @@ export function GameRoom({ partyId }) {
   // Loading state
   if (state.status === 'LOBBY' || !state.ui.isSocketConnected) {
     return (
-      <div className="max-w-6xl mx-auto p-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {[...Array(8)].map((_, i) => (
-            <div key={i} className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-4 animate-pulse">
-              <div className="h-48 bg-slate-700/50 rounded-lg mb-3"></div>
-              <div className="h-4 bg-slate-700/50 rounded mb-2"></div>
-              <div className="h-3 bg-slate-700/50 rounded w-2/3"></div>
-            </div>
-          ))}
+      <>
+        {/* Force render ReactionBar even in loading state for debugging */}
+        <ReactionBar onReaction={emitReaction} />
+        <div className="max-w-6xl mx-auto p-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-4 animate-pulse">
+                <div className="h-48 bg-slate-700/50 rounded-lg mb-3"></div>
+                <div className="h-4 bg-slate-700/50 rounded mb-2"></div>
+                <div className="h-3 bg-slate-700/50 rounded w-2/3"></div>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
@@ -139,30 +204,51 @@ export function GameRoom({ partyId }) {
     // This would need the ended game UI - for now, show a simple message
     // The full ended game UI can be ported from GameBoard if needed
     return (
-      <div className="max-w-6xl mx-auto p-6 text-center">
-        <div className="text-7xl mb-4">🎉</div>
-        <h1 className="text-5xl font-bold mb-3 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-          Game Over!
-        </h1>
-        <p className="text-xl text-slate-300">Check the audit trail below to see the full game history.</p>
-        <GameAuditTrail
-          history={state.activities}
-          gifts={Object.values(state.gifts)}
-          userNames={userNames}
-          userEmails={userEmails}
-        />
-      </div>
+      <>
+        {/* Reaction Overlay - Full screen layer for flying emojis */}
+        {socket && <ReactionOverlay socket={socket} />}
+        
+        <div className="max-w-6xl mx-auto p-6 text-center">
+          <div className="text-7xl mb-4">🎉</div>
+          <h1 className="text-5xl font-bold mb-3 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+            Game Over!
+          </h1>
+          <p className="text-xl text-slate-300">Check the audit trail below to see the full game history.</p>
+          <GameAuditTrail
+            history={state.activities}
+            gifts={Object.values(state.gifts)}
+            userNames={userNames}
+            userEmails={userEmails}
+          />
+        </div>
+
+        {/* Reaction Bar - Fixed at bottom for sending reactions */}
+        {/* FORCE RENDER FOR DEBUGGING - Remove conditional check */}
+        <ReactionBar onReaction={emitReaction} />
+      </>
     );
   }
 
+  // Debug state logging
+  console.log("DEBUG UI:", { 
+    status: state.status, 
+    connected: state.ui.isSocketConnected,
+    socket: !!socket,
+    partyId 
+  });
+
   return (
-    <div className="max-w-6xl mx-auto p-6">
-      {/* Connection Health Toast */}
-      {!state.ui.isSocketConnected && (
-        <div className="fixed bottom-4 right-4 bg-amber-500/10 text-amber-300 border border-amber-500/20 rounded-lg px-4 py-2 text-sm z-50">
-          Reconnecting...
-        </div>
-      )}
+    <>
+      {/* Reaction Overlay - Full screen layer for flying emojis */}
+      {socket && <ReactionOverlay socket={socket} />}
+      
+      <div className="max-w-6xl mx-auto p-6">
+        {/* Connection Health Toast */}
+        {!state.ui.isSocketConnected && (
+          <div className="fixed bottom-4 right-4 bg-amber-500/10 text-amber-300 border border-amber-500/20 rounded-lg px-4 py-2 text-sm z-50">
+            Reconnecting...
+          </div>
+        )}
 
       {/* Error Toast */}
       {state.ui.lastError && (
@@ -318,7 +404,20 @@ export function GameRoom({ partyId }) {
           userEmails={userEmails}
         />
       )}
+
+      {/* Reaction Bar - Fixed at bottom for sending reactions */}
+      {/* FORCE RENDER FOR DEBUGGING - Remove conditional check */}
+      <ReactionBar onReaction={emitReaction} />
+      
+      {/* Debug: Test if fixed positioning works */}
+      <div 
+        className="fixed bottom-4 right-4 bg-red-500 text-white p-4 z-[200] rounded-lg"
+        style={{ zIndex: 200 }}
+      >
+        DEBUG: If you see this, fixed positioning works
+      </div>
     </div>
+    </>
   );
 }
 

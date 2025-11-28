@@ -13,6 +13,7 @@ import { collection, addDoc, doc, setDoc, query, where, onSnapshot, orderBy, col
 import { db } from '../utils/firebase.js';
 import { trackCreateParty, trackSignUp, trackLogin, trackButtonClick } from '../utils/analytics.js';
 import { usePartyModal } from '../contexts/PartyModalContext.jsx';
+import { Footer } from '../components/Footer.jsx';
 
 export function Home() {
   const { user, signInWithGoogle, signInWithEmailAndPassword, signUpWithEmailAndPassword } = useAuth();
@@ -715,6 +716,9 @@ export function Home() {
             </div>
           </div>
         </div>
+        
+        {/* Marketing Footer */}
+        <Footer />
       </div>
       </>
     );

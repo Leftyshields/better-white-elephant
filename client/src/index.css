@@ -170,6 +170,21 @@ body {
   animation: float-reaction-4 3.8s ease-in-out infinite;
 }
 
+@keyframes float-up {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-80vh) scale(1.5);
+    opacity: 0;
+  }
+}
+
+.animate-float-up {
+  animation: float-up ease-out forwards;
+}
+
 /* Style calendar icon in datetime-local inputs to be white */
 input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   filter: invert(1);

@@ -155,8 +155,17 @@ io.on('connection', (socket) => {
       return;
     }
     
-    socket.join(`party:${partyId}`);
-    console.log(`User ${socket.userId} joined party:${partyId}`);
+    const roomName = `party:${partyId}`;
+    socket.join(roomName);
+    
+    // Verify room join
+    const room = io.sockets.adapter.rooms.get(roomName);
+    const roomSize = room ? room.size : 0;
+    
+    console.log(`✅ User ${socket.userId} (socket: ${socket.id}) joined party:${partyId} in room ${roomName} (${roomSize} total clients)`);
+    
+    // Confirm room join to client
+    socket.emit('party-joined', { partyId, roomName, roomSize });
 
     // Send current game state if game is active
     const redisKey = `game:${partyId}`;
@@ -349,6 +358,53 @@ io.on('connection', (socket) => {
         io.to(`party:${partyId}`).emit('game-ended', finalState);
       }
     } catch (error) {
+      socket.emit('error', { message: error.message });
+    }
+  });
+
+  // Handle reaction events
+  socket.on('send_reaction', async ({ partyId, type, value }) => {
+    try {
+      // Validate input
+      if (!isValidPartyId(partyId)) {
+        socket.emit('error', { message: 'Invalid party ID' });
+        return;
+      }
+      
+      // Verify user is a participant
+      const isParticipant = await verifyPartyMembership(partyId, socket.userId);
+      if (!isParticipant) {
+        socket.emit('error', { message: 'You are not a participant in this party' });
+        return;
+      }
+
+      // Ensure socket is in the room (in case it wasn't joined properly)
+      const roomName = `party:${partyId}`;
+      if (!socket.rooms.has(roomName)) {
+        console.log(`⚠️ Socket ${socket.id} not in room ${roomName}, joining now...`);
+        socket.join(roomName);
+      }
+      
+      // Broadcast reaction to all OTHER clients in the party room
+      // (Sender already sees it via optimistic UI)
+      const reactionData = {
+        emoji: value,
+        userId: socket.userId,
+        type: type || 'emoji',
+      };
+      
+      const room = io.sockets.adapter.rooms.get(roomName);
+      const roomSize = room ? room.size : 0;
+      const socketIds = room ? Array.from(room) : [];
+      
+      console.log(`📢 Broadcasting reaction: ${value} by ${socket.userId} (socket: ${socket.id}) in party ${partyId} to room ${roomName} (${roomSize} clients: ${socketIds.join(', ')})`);
+      
+      // Broadcast to all OTHER clients in the room (excludes sender)
+      socket.broadcast.to(roomName).emit('reaction_received', reactionData);
+      
+      console.log(`✅ Reaction broadcast complete: ${value} by ${socket.userId} in party ${partyId} (broadcast to ${roomSize - 1} other clients)`);
+    } catch (error) {
+      console.error('Error handling reaction:', error);
       socket.emit('error', { message: error.message });
     }
   });

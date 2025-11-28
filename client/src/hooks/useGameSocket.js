@@ -11,6 +11,7 @@ const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
 export function useGameSocket(partyId) {
   const [gameState, setGameState] = useState(null);
   const [connected, setConnected] = useState(false);
+  const [socket, setSocket] = useState(null);
   const socketRef = useRef(null);
 
   useEffect(() => {
@@ -25,11 +26,17 @@ export function useGameSocket(partyId) {
       });
 
       socketRef.current = socket;
+      setSocket(socket);
 
       socket.on('connect', () => {
-        console.log('✅ Socket connected');
+        console.log('✅ Socket connected', { socketId: socket.id, partyId });
         setConnected(true);
         socket.emit('join-party', partyId);
+        console.log('📤 Emitted join-party for', partyId);
+      });
+
+      socket.on('party-joined', ({ partyId: joinedPartyId, roomName }) => {
+        console.log('✅ Successfully joined party room:', { joinedPartyId, roomName, socketId: socket.id });
       });
 
       socket.on('disconnect', () => {
@@ -61,6 +68,8 @@ export function useGameSocket(partyId) {
     return () => {
       if (socketRef.current) {
         socketRef.current.disconnect();
+        socketRef.current = null;
+        setSocket(null);
       }
     };
   }, [partyId]);
@@ -71,10 +80,43 @@ export function useGameSocket(partyId) {
     }
   };
 
+  const emitReaction = (emoji) => {
+    const socket = socketRef.current;
+    if (!socket) {
+      console.warn('⚠️ Cannot emit reaction - no socket');
+      return;
+    }
+    
+    if (!connected) {
+      console.warn('⚠️ Cannot emit reaction - socket not connected');
+      return;
+    }
+    
+    if (!socket.connected) {
+      console.warn('⚠️ Cannot emit reaction - socket.connected is false');
+      return;
+    }
+    
+    console.log('📤 Emitting reaction to server:', { 
+      emoji, 
+      partyId, 
+      socketId: socket.id,
+      connected: socket.connected
+    });
+    
+    socket.emit('send_reaction', {
+      type: 'emoji',
+      value: emoji,
+      partyId,
+    });
+  };
+
   return {
     gameState,
     connected,
+    socket,
     emitAction,
+    emitReaction,
     pickGift: (giftId) => {
       trackGameAction('reveal', partyId);
       emitAction('pick-gift', { giftId });
