@@ -3,6 +3,14 @@
  */
 export class GameEngine {
   constructor(gameState, config) {
+    // CRITICAL: Validate partyId exists in gameState
+    if (!gameState.partyId) {
+      throw new Error('GameEngine: gameState.partyId is required');
+    }
+    if (typeof gameState.partyId !== 'string' || gameState.partyId.length === 0) {
+      throw new Error(`GameEngine: Invalid partyId in gameState: ${gameState.partyId}`);
+    }
+    
     this.partyId = gameState.partyId;
     this.currentTurnIndex = gameState.currentTurnIndex || 0;
     // CRITICAL: currentVictim takes priority over turnQueue index
@@ -930,6 +938,11 @@ export class GameEngine {
    * Get current game state
    */
   getState() {
+    // CRITICAL: Validate partyId is set
+    if (!this.partyId) {
+      throw new Error('GameEngine.getState(): partyId is not set');
+    }
+    
     // Ensure active player is calculated correctly before returning state
     const activePlayer = this.calculateActivePlayer();
     
@@ -941,7 +954,7 @@ export class GameEngine {
     this.isBoomerangPhase = computedBoomerangPhase;
     
     return {
-      partyId: this.partyId,
+      partyId: this.partyId, // CRITICAL: Always include partyId in state
       currentTurnIndex: this.currentTurnIndex || 0,
       currentPlayerId: activePlayer, // Always use calculated active player
       currentVictim: this.currentVictim, // CRITICAL: Include currentVictim in state

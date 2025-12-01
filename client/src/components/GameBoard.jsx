@@ -19,6 +19,7 @@ import { GamePlayByPlay } from './GamePlayByPlay.jsx';
 import { ReactionBar } from './ReactionBar.jsx';
 import { ReactionOverlay } from './ReactionOverlay.jsx';
 import { SimulationControls } from './dev/SimulationControls.jsx';
+import { Footer } from './Footer.jsx';
 import { apiRequest } from '../utils/api.js';
 import { trackGameAction } from '../utils/analytics.js';
 import { doc, updateDoc } from 'firebase/firestore';
@@ -1380,6 +1381,9 @@ export function GameBoard({ partyId, onEndTurn }) {
 
       {/* Developer Simulation Controls - Only visible when ?sim=true */}
       <SimulationControls socket={socket} partyId={partyId} gameState={gameState} />
+
+      {/* Footer with bug report link */}
+      <Footer />
     </>
   );
 }

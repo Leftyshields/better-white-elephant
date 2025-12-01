@@ -295,14 +295,25 @@ io.on('connection', (socket) => {
         playerId: socket.userId 
       });
 
+      // CRITICAL: Validate gameState.partyId matches partyId parameter
+      if (gameState.partyId && gameState.partyId !== partyId) {
+        console.error(`❌ CRITICAL: partyId mismatch in pick-gift! Parameter: ${partyId}, gameState.partyId: ${gameState.partyId}`);
+        socket.emit('error', { message: 'Game state party ID mismatch' });
+        return;
+      }
+      
       const { GameEngine } = await import('./engine.js');
       const config = gameState.config || { maxSteals: 3, returnToStart: false };
+      // Ensure partyId is set in gameState before creating engine
+      gameState.partyId = partyId;
       const engine = new GameEngine(gameState, config);
 
       engine.pickGift(giftId, socket.userId);
       const newState = engine.getState();
       // Preserve config in state
       newState.config = gameState.config;
+      // CRITICAL: Ensure partyId is preserved
+      newState.partyId = partyId;
 
       // Save to both Redis and Firestore
       await saveGameState(partyId, newState);
@@ -351,14 +362,25 @@ io.on('connection', (socket) => {
         playerId: socket.userId 
       });
 
+      // CRITICAL: Validate gameState.partyId matches partyId parameter
+      if (gameState.partyId && gameState.partyId !== partyId) {
+        console.error(`❌ CRITICAL: partyId mismatch in steal-gift! Parameter: ${partyId}, gameState.partyId: ${gameState.partyId}`);
+        socket.emit('error', { message: 'Game state party ID mismatch' });
+        return;
+      }
+      
       const { GameEngine } = await import('./engine.js');
       const config = gameState.config || { maxSteals: 3, returnToStart: false };
+      // Ensure partyId is set in gameState before creating engine
+      gameState.partyId = partyId;
       const engine = new GameEngine(gameState, config);
 
       engine.stealGift(giftId, socket.userId);
       const newState = engine.getState();
       // Preserve config in state
       newState.config = gameState.config;
+      // CRITICAL: Ensure partyId is preserved
+      newState.partyId = partyId;
 
       // Save to both Redis and Firestore
       await saveGameState(partyId, newState);
@@ -399,13 +421,24 @@ io.on('connection', (socket) => {
         return;
       }
 
+      // CRITICAL: Validate gameState.partyId matches partyId parameter
+      if (gameState.partyId && gameState.partyId !== partyId) {
+        console.error(`❌ CRITICAL: partyId mismatch in end-turn! Parameter: ${partyId}, gameState.partyId: ${gameState.partyId}`);
+        socket.emit('error', { message: 'Game state party ID mismatch' });
+        return;
+      }
+      
       const { GameEngine } = await import('./engine.js');
       const config = gameState.config || { maxSteals: 3, returnToStart: false };
+      // Ensure partyId is set in gameState before creating engine
+      gameState.partyId = partyId;
       const engine = new GameEngine(gameState, config);
 
       const newState = engine.endTurn();
       // Preserve config in state
       newState.config = gameState.config;
+      // CRITICAL: Ensure partyId is preserved
+      newState.partyId = partyId;
 
       // Save to both Redis and Firestore
       await saveGameState(partyId, newState);

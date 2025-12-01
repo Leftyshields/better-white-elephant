@@ -177,6 +177,24 @@ function cleanForRedis(obj) {
  * @param {number} ttl - Redis TTL in seconds (default: 86400 = 24 hours)
  */
 export async function saveGameState(partyId, gameState, ttl = 86400) {
+  // CRITICAL: Validate partyId matches gameState.partyId to prevent cross-game contamination
+  if (!partyId || typeof partyId !== 'string') {
+    throw new Error(`Invalid partyId parameter: ${partyId}`);
+  }
+  
+  if (!gameState || typeof gameState !== 'object') {
+    throw new Error(`Invalid gameState parameter: ${gameState}`);
+  }
+  
+  // Ensure gameState.partyId matches the parameter partyId
+  if (gameState.partyId && gameState.partyId !== partyId) {
+    console.error(`❌ CRITICAL: partyId mismatch! Parameter: ${partyId}, gameState.partyId: ${gameState.partyId}`);
+    throw new Error(`Party ID mismatch: parameter ${partyId} does not match gameState.partyId ${gameState.partyId}`);
+  }
+  
+  // Force partyId into gameState to ensure consistency
+  gameState.partyId = partyId;
+  
   const redisKey = `game:${partyId}`;
   
   // Clean the game state for Firestore compatibility
@@ -235,12 +253,29 @@ export async function saveGameState(partyId, gameState, ttl = 86400) {
  * @returns {object|null} - The game state object, or null if not found
  */
 export async function loadGameState(partyId) {
+  // CRITICAL: Validate partyId parameter
+  if (!partyId || typeof partyId !== 'string') {
+    console.error(`❌ Invalid partyId parameter in loadGameState: ${partyId}`);
+    return null;
+  }
+  
   const redisKey = `game:${partyId}`;
   
   // Try Redis first (fast)
   const redisState = await redisClient.get(redisKey);
   if (redisState) {
-    return JSON.parse(redisState);
+    const parsed = JSON.parse(redisState);
+    // CRITICAL: Validate that loaded state matches requested partyId
+    if (parsed.partyId && parsed.partyId !== partyId) {
+      console.error(`❌ CRITICAL: Loaded game state has wrong partyId! Requested: ${partyId}, Found: ${parsed.partyId}`);
+      console.error(`   This indicates cross-game contamination. Deleting corrupted state.`);
+      // Delete the corrupted state
+      await redisClient.del(redisKey);
+      return null;
+    }
+    // Ensure partyId is set
+    parsed.partyId = partyId;
+    return parsed;
   }
   
   // Redis is empty - try to restore from Firestore
@@ -255,9 +290,19 @@ export async function loadGameState(partyId) {
         console.log(`🔄 Restoring game state from Firestore for party ${partyId}`);
         console.log(`   Party status: ${partyData.status}, Has gameState: ${!!partyData.gameState}`);
         
+        // CRITICAL: Validate that gameState.partyId matches requested partyId
+        if (gameState.partyId && gameState.partyId !== partyId) {
+          console.error(`❌ CRITICAL: Firestore game state has wrong partyId! Requested: ${partyId}, Found: ${gameState.partyId}`);
+          console.error(`   This indicates cross-game contamination. Not restoring corrupted state.`);
+          return null;
+        }
+        
         // Convert Firestore Timestamps back to Date objects for compatibility
         // (Firestore Timestamps need to be converted for the game engine)
         const convertedState = convertFirestoreTimestamps(gameState);
+        
+        // CRITICAL: Ensure partyId is set correctly
+        convertedState.partyId = partyId;
         
         // Restore to Redis for future fast access (convert back to JSON-safe format)
         const redisState = cleanForRedis(convertedState);
