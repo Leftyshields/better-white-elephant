@@ -278,11 +278,27 @@ export function botMakeDecision(gameState) {
  */
 export async function endBotTurn(partyId, io) {
   try {
+    // CRITICAL: Validate partyId
+    if (!partyId || typeof partyId !== 'string') {
+      console.error(`❌ Invalid partyId in endBotTurn: ${partyId}`);
+      return;
+    }
+    
     // Load game state (from Redis or Firestore)
     const gameState = await loadGameState(partyId);
     if (!gameState) {
       return;
     }
+    
+    // CRITICAL: Validate partyId matches
+    if (gameState.partyId && gameState.partyId !== partyId) {
+      console.error(`❌ CRITICAL: partyId mismatch in endBotTurn! Parameter: ${partyId}, gameState.partyId: ${gameState.partyId}`);
+      return;
+    }
+    
+    // Ensure partyId is set
+    gameState.partyId = partyId;
+    
     if (gameState.phase !== 'ACTIVE') {
       return;
     }
@@ -293,6 +309,8 @@ export async function endBotTurn(partyId, io) {
 
     const newState = engine.endTurn();
     newState.config = gameState.config;
+    // CRITICAL: Ensure partyId is preserved
+    newState.partyId = partyId;
 
     // Save to both Redis and Firestore
     await saveGameState(partyId, newState);
@@ -389,6 +407,20 @@ export async function endBotTurn(partyId, io) {
  */
 export async function checkAndMakeBotMove(partyId, gameState, io) {
   try {
+    // CRITICAL: Validate partyId matches gameState.partyId
+    if (!partyId || typeof partyId !== 'string') {
+      console.error(`❌ Invalid partyId in checkAndMakeBotMove: ${partyId}`);
+      return;
+    }
+    
+    if (gameState.partyId && gameState.partyId !== partyId) {
+      console.error(`❌ CRITICAL: partyId mismatch in checkAndMakeBotMove! Parameter: ${partyId}, gameState.partyId: ${gameState.partyId}`);
+      return;
+    }
+    
+    // Ensure partyId is set in gameState
+    gameState.partyId = partyId;
+    
     // Check if autoplay is enabled
     const autoplayKey = `autoplay:${partyId}`;
     const autoplayEnabled = await redisClient.get(autoplayKey);
@@ -624,11 +656,24 @@ export async function checkAndMakeBotMove(partyId, gameState, io) {
  */
 export async function forceBotMove(partyId, io) {
   try {
+    // CRITICAL: Validate partyId
+    if (!partyId || typeof partyId !== 'string') {
+      throw new Error(`Invalid partyId: ${partyId}`);
+    }
+    
     // Load current game state
     const gameState = await loadGameState(partyId);
     if (!gameState) {
       throw new Error('Game state not found');
     }
+    
+    // CRITICAL: Validate partyId matches
+    if (gameState.partyId && gameState.partyId !== partyId) {
+      throw new Error(`Party ID mismatch: parameter ${partyId} does not match gameState.partyId ${gameState.partyId}`);
+    }
+    
+    // Ensure partyId is set
+    gameState.partyId = partyId;
 
     // Check if game is active
     if (gameState.phase !== 'ACTIVE') {
@@ -724,6 +769,8 @@ export async function forceBotMove(partyId, io) {
 
     const newState = engine.getState();
     newState.config = gameState.config;
+    // CRITICAL: Ensure partyId is preserved
+    newState.partyId = partyId;
 
     // Save to both Redis and Firestore
     await saveGameState(partyId, newState);
@@ -758,11 +805,24 @@ export async function forceBotMove(partyId, io) {
  */
 export async function forceBotSteal(partyId, io) {
   try {
+    // CRITICAL: Validate partyId
+    if (!partyId || typeof partyId !== 'string') {
+      throw new Error(`Invalid partyId: ${partyId}`);
+    }
+    
     // Load current game state
     const gameState = await loadGameState(partyId);
     if (!gameState) {
       throw new Error('Game state not found');
     }
+    
+    // CRITICAL: Validate partyId matches
+    if (gameState.partyId && gameState.partyId !== partyId) {
+      throw new Error(`Party ID mismatch: parameter ${partyId} does not match gameState.partyId ${gameState.partyId}`);
+    }
+    
+    // Ensure partyId is set
+    gameState.partyId = partyId;
 
     // Check if game is active
     if (gameState.phase !== 'ACTIVE') {
@@ -810,6 +870,8 @@ export async function forceBotSteal(partyId, io) {
 
     const newState = engine.getState();
     newState.config = gameState.config;
+    // CRITICAL: Ensure partyId is preserved
+    newState.partyId = partyId;
 
     // Save to both Redis and Firestore
     await saveGameState(partyId, newState);
@@ -833,11 +895,24 @@ export async function forceBotSteal(partyId, io) {
  */
 export async function forceBotSkip(partyId, io) {
   try {
+    // CRITICAL: Validate partyId
+    if (!partyId || typeof partyId !== 'string') {
+      throw new Error(`Invalid partyId: ${partyId}`);
+    }
+    
     // Load current game state
     const gameState = await loadGameState(partyId);
     if (!gameState) {
       throw new Error('Game state not found');
     }
+    
+    // CRITICAL: Validate partyId matches
+    if (gameState.partyId && gameState.partyId !== partyId) {
+      throw new Error(`Party ID mismatch: parameter ${partyId} does not match gameState.partyId ${gameState.partyId}`);
+    }
+    
+    // Ensure partyId is set
+    gameState.partyId = partyId;
 
     // Check if game is active
     if (gameState.phase !== 'ACTIVE') {
@@ -866,6 +941,8 @@ export async function forceBotSkip(partyId, io) {
 
     const newState = engine.getState();
     newState.config = gameState.config;
+    // CRITICAL: Ensure partyId is preserved
+    newState.partyId = partyId;
 
     // Save to both Redis and Firestore
     await saveGameState(partyId, newState);
@@ -891,11 +968,24 @@ export async function forceBotSkip(partyId, io) {
  */
 export async function forceBotPick(partyId, io) {
   try {
+    // CRITICAL: Validate partyId
+    if (!partyId || typeof partyId !== 'string') {
+      throw new Error(`Invalid partyId: ${partyId}`);
+    }
+    
     // Load current game state
     const gameState = await loadGameState(partyId);
     if (!gameState) {
       throw new Error('Game state not found');
     }
+    
+    // CRITICAL: Validate partyId matches
+    if (gameState.partyId && gameState.partyId !== partyId) {
+      throw new Error(`Party ID mismatch: parameter ${partyId} does not match gameState.partyId ${gameState.partyId}`);
+    }
+    
+    // Ensure partyId is set
+    gameState.partyId = partyId;
 
     // Check if game is active
     if (gameState.phase !== 'ACTIVE') {
@@ -932,6 +1022,8 @@ export async function forceBotPick(partyId, io) {
 
     const newState = engine.getState();
     newState.config = gameState.config;
+    // CRITICAL: Ensure partyId is preserved
+    newState.partyId = partyId;
 
     // Save to both Redis and Firestore
     await saveGameState(partyId, newState);
