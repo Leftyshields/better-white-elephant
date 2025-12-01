@@ -22,6 +22,9 @@ const allowedOrigins = [
   process.env.CLIENT_URL || 'http://localhost:5173',
   'http://localhost:5173',
   'http://sandbox-mac-mini.local:5173',
+  'https://stealorreveal.com',
+  'https://www.stealorreveal.com',
+  'https://better-white-elephant.web.app',
 ].filter(Boolean);
 
 // Helper function to validate partyId format
