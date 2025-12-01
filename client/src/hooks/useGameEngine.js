@@ -94,12 +94,14 @@ export function useGameEngine(partyId) {
         
         // Track completion with participant count
         const participantCount = participants.length;
+        const totalReactions = gameState?.reactionCount || 0;
         trackGameComplete(
           partyId,
           duration,
           totalActions,
           stealCount,
-          boomerangMode
+          boomerangMode,
+          totalReactions
         );
         
         // Also track participant count as a separate event for analytics

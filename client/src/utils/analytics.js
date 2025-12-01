@@ -176,14 +176,16 @@ export const trackButtonClick = (buttonName, location) => {
  * @param {number} totalActions - Total number of actions in the game
  * @param {number} stealCount - Total number of steals
  * @param {boolean} boomerangMode - Whether boomerang mode was enabled
+ * @param {number} totalReactions - Total number of emoji reactions (hype level)
  */
-export const trackGameComplete = (partyId, duration, totalActions, stealCount, boomerangMode) => {
+export const trackGameComplete = (partyId, duration, totalActions, stealCount, boomerangMode, totalReactions = 0) => {
   trackEvent('game_complete', {
     party_id: partyId,
     duration_seconds: duration,
     total_actions: totalActions,
     steal_count: stealCount,
     boomerang_mode: boomerangMode,
+    total_reactions: totalReactions,
   });
 };
 

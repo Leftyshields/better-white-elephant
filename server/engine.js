@@ -25,6 +25,8 @@ export class GameEngine {
     this.isBoomerangPhase = gameState.isBoomerangPhase || false;
     // Initialize history array to track all picks and steals
     this.history = gameState.history || [];
+    // Initialize reaction count to track emoji reactions (hype level)
+    this.reactionCount = gameState.reactionCount || 0;
     
     // Calculate active player based on victim-first priority
     this.currentPlayerId = this.calculateActivePlayer();
@@ -953,6 +955,7 @@ export class GameEngine {
       isBoomerangPhase: computedBoomerangPhase, // Use computed value, not stored value
       config: this.config || { maxSteals: 3, returnToStart: false }, // Include config in state
       history: [...this.history], // Include history in state
+      reactionCount: this.reactionCount || 0, // Track emoji reactions (hype level)
     };
   }
 

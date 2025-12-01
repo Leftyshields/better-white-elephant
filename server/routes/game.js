@@ -140,6 +140,7 @@ router.post('/start', async (req, res) => {
       isBoomerangPhase: false, // Can be removed or kept for backwards compatibility
       config, // Store config in game state
       history: [], // Initialize empty history array
+      reactionCount: 0, // Initialize reaction count to track emoji reactions (hype level)
     };
 
     // Save to both Redis and Firestore

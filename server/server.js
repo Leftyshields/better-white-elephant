@@ -489,6 +489,22 @@ io.on('connection', (socket) => {
         socket.join(roomName);
       }
       
+      // Load game state and increment reaction count
+      const { loadGameState, saveGameState } = await import('./utils/game-state-persistence.js');
+      const gameState = await loadGameState(partyId);
+      
+      if (gameState && gameState.phase === 'ACTIVE') {
+        // Increment reaction count in game state
+        const { GameEngine } = await import('./engine.js');
+        const config = gameState.config || { maxSteals: 3, returnToStart: false };
+        const engine = new GameEngine(gameState, config);
+        engine.reactionCount = (engine.reactionCount || 0) + 1;
+        const updatedState = engine.getState();
+        
+        // Save updated state (with incremented reaction count)
+        await saveGameState(partyId, updatedState);
+      }
+      
       // Broadcast reaction to all OTHER clients in the party room
       // (Sender already sees it via optimistic UI)
       const reactionData = {
