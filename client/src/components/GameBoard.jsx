@@ -1309,7 +1309,7 @@ export function GameBoard({ partyId, onEndTurn }) {
           {wrappedGiftList.length > 0 && (
             <div className="mb-8">
               <h2 className="text-xl font-semibold mb-4 text-white text-center">Wrapped Gifts</h2>
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3 w-full max-w-7xl mx-auto">
+              <div className="flex flex-wrap justify-center gap-3 w-full">
                 {wrappedGiftList.map((gift, index) => (
                   <GiftCard
                     key={gift.id}
