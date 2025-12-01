@@ -96,6 +96,14 @@ export function Header() {
 
           {/* Right Side Actions */}
           <div className="flex items-center gap-3">
+            {/* Rules Link */}
+            <Link
+              to="/rules"
+              className="hidden sm:block px-4 py-2 text-slate-300 hover:text-white font-medium transition-colors"
+            >
+              How to Play
+            </Link>
+            
             {/* Host Party Button - only show on home page when logged in */}
             {user && location.pathname === '/' && (
               <button

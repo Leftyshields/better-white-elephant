@@ -180,3 +180,39 @@ export function playClink(isMuted = false) {
   ]);
 }
 
+/**
+ * Play victory sound - Celebratory fanfare (for game end/achievements)
+ * Uses a major chord progression (C-E-G-C) for a triumphant feel
+ */
+export function playVictory(isMuted = false) {
+  if (isMuted) return;
+  
+  const ctx = getAudioContext();
+  if (!ctx) return;
+
+  const now = ctx.currentTime;
+  
+  // C major chord progression: C4 (261.63Hz) -> E4 (329.63Hz) -> G4 (392Hz) -> C5 (523.25Hz)
+  // Played in sequence with slight overlap for a fanfare effect
+  const notes = [
+    { freq: 261.63, delay: 0, duration: 0.25 },    // C4
+    { freq: 329.63, delay: 0.1, duration: 0.25 },  // E4
+    { freq: 392.00, delay: 0.2, duration: 0.25 },   // G4
+    { freq: 523.25, delay: 0.3, duration: 0.4 },  // C5 (higher, longer)
+  ];
+  
+  notes.forEach(({ freq, delay, duration }) => {
+    setTimeout(() => {
+      playTone(freq, duration, 0.35, 'sine', [
+        { time: 0, value: 0 },
+        { time: 0.01, value: 1 },
+        { time: duration * 0.7, value: 0.6 },
+        { time: duration, value: 0 },
+      ]);
+    }, delay * 1000);
+  });
+}
+
+
+
+

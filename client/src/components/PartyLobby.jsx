@@ -10,7 +10,9 @@ import { Modal } from './ui/Modal.jsx';
 import { scrapeGiftUrl, apiRequest } from '../utils/api.js';
 import { PartyManagement } from './PartyManagement.jsx';
 import { GiftCard } from './GiftCard.jsx';
-import { trackSubmitGift, trackStartGame } from '../utils/analytics.js';
+import { trackSubmitGift, trackStartGame, trackInviteSent, trackParticipantJoin, trackError, trackGameAbandoned } from '../utils/analytics.js';
+import { SimulationControls } from './dev/SimulationControls.jsx';
+import { useGameSocket } from '../hooks/useGameSocket.js';
 import {
   collection,
   doc,
@@ -28,6 +30,7 @@ import { db } from '../utils/firebase.js';
 export function PartyLobby({ partyId, onStartGame }) {
   const { user } = useAuth();
   const { party, participants, pendingInvites, gifts, loading } = useParty(partyId);
+  const { socket } = useGameSocket(partyId); // Get socket for simulation controls
   const [giftUrl, setGiftUrl] = useState('');
   const [scraping, setScraping] = useState(false);
   const [showManualEntry, setShowManualEntry] = useState(false);
@@ -41,6 +44,7 @@ export function PartyLobby({ partyId, onStartGame }) {
   const [linkCopied, setLinkCopied] = useState(false);
   const [userNames, setUserNames] = useState({});
   const [userEmails, setUserEmails] = useState({});
+  const [userIsBot, setUserIsBot] = useState({});
   const [newPersonName, setNewPersonName] = useState('');
   const [newPersonEmail, setNewPersonEmail] = useState('');
   const [addingPerson, setAddingPerson] = useState(false);
@@ -81,6 +85,9 @@ export function PartyLobby({ partyId, onStartGame }) {
         }
         if (response.emails) {
           setUserEmails(response.emails);
+        }
+        if (response.bots) {
+          setUserIsBot(response.bots);
         }
       } catch (error) {
         console.error('Error fetching user info:', error);
@@ -415,14 +422,18 @@ export function PartyLobby({ partyId, onStartGame }) {
 
       const data = await response.json();
       if (data.success) {
-        // Track game start
-        trackStartGame(partyId, goingParticipants.length);
+        // Track game start with participant count
+        const participantCount = goingParticipants.length;
+        trackStartGame(partyId, participantCount);
         onStartGame();
       } else {
-        alert('Failed to start game: ' + (data.error || 'Unknown error'));
+        const errorMsg = data.error || 'Unknown error';
+        trackError('start_game_failed', errorMsg, 'PartyLobby');
+        alert('Failed to start game: ' + errorMsg);
       }
     } catch (error) {
       console.error('Error starting game:', error);
+      trackError('start_game_exception', error.message, 'PartyLobby');
       alert('Failed to start game: ' + error.message);
     }
   };
@@ -474,6 +485,12 @@ export function PartyLobby({ partyId, onStartGame }) {
         } else if (data.details?.message) {
           errorMsg += ': ' + data.details.message;
         }
+        
+        // Special handling for Resend testing mode
+        if (data.message?.includes('testing mode') || data.message?.includes('verified email')) {
+          errorMsg = `Email service is in testing mode. Only verified emails (like ${user?.email}) can receive invites. The recipient can still join using the share link.`;
+        }
+        
         alert('Failed to send invite: ' + errorMsg);
       }
     } catch (error) {
@@ -507,7 +524,7 @@ export function PartyLobby({ partyId, onStartGame }) {
         { merge: true }
       );
 
-      // Try to send email, but don't worry if it fails
+      // Try to send email and provide feedback
       try {
         const functionUrl =
           import.meta.env.VITE_FUNCTIONS_URL ||
@@ -515,7 +532,7 @@ export function PartyLobby({ partyId, onStartGame }) {
 
         const hostName = user?.displayName || user?.email?.split('@')[0] || 'Someone';
 
-        await fetch(functionUrl, {
+        const emailResponse = await fetch(functionUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -526,8 +543,43 @@ export function PartyLobby({ partyId, onStartGame }) {
             hostName,
           }),
         });
+
+        if (emailResponse.ok) {
+          // Update invite status to show email was sent
+          await updateDoc(
+            doc(db, 'parties', partyId, 'pendingInvites', inviteId),
+            {
+              status: 'SENT',
+              sentAt: new Date(),
+              updatedAt: new Date(),
+            }
+          );
+          console.log(`✅ Invite email sent to ${emailLower}`);
+        } else {
+          // Mark that email failed but person was added
+          await updateDoc(
+            doc(db, 'parties', partyId, 'pendingInvites', inviteId),
+            {
+              emailFailed: true,
+              updatedAt: new Date(),
+            }
+          );
+          console.warn(`⚠️ Email sending failed for ${emailLower}, but person was added`);
+        }
       } catch (emailError) {
-        console.log('Email sending failed, but person added:', emailError);
+        // Mark email as failed but person was still added
+        try {
+          await updateDoc(
+            doc(db, 'parties', partyId, 'pendingInvites', inviteId),
+            {
+              emailFailed: true,
+              updatedAt: new Date(),
+            }
+          );
+        } catch (updateError) {
+          console.error('Failed to update invite status:', updateError);
+        }
+        console.warn('Email sending failed, but person added:', emailError);
       }
 
       setNewPersonName('');
@@ -665,14 +717,28 @@ export function PartyLobby({ partyId, onStartGame }) {
     }
   }, [setupSteps, openStep]);
 
+  // Debug logging
+  console.log('PartyLobby render:', {
+    partyId,
+    hasParty: !!party,
+    partyStatus: party?.status,
+    loading,
+    hasUser: !!user,
+    participantsCount: participants?.length,
+    giftsCount: gifts?.length
+  });
+
   if (loading) {
-    return <div className="p-8 text-center">Loading...</div>;
+    console.log('PartyLobby: Still loading');
+    return <div className="p-8 text-center text-white">Loading party lobby...</div>;
   }
 
   if (!party) {
-    return <div className="p-8 text-center">Party not found</div>;
+    console.log('PartyLobby: No party found');
+    return <div className="p-8 text-center text-white">Party not found</div>;
   }
 
+  console.log('PartyLobby: Rendering content');
   return (
     <div className="max-w-5xl mx-auto p-6 pt-24 space-y-6">
       {/* Header */}
@@ -891,6 +957,7 @@ export function PartyLobby({ partyId, onStartGame }) {
                         {participants.map((participant) => {
                           const isYou = participant.id === user?.uid;
                           const isAdminParticipant = participant.id === party?.adminId;
+                          const isBot = userIsBot[participant.id] || participant.id.startsWith('bot_');
                           const displayName = isYou 
                             ? 'You (Host)' 
                             : (userNames[participant.id] && userNames[participant.id] !== participant.id 
@@ -901,14 +968,21 @@ export function PartyLobby({ partyId, onStartGame }) {
                           return (
                             <div
                               key={participant.id}
-                              className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg"
+                              className={`flex items-center justify-between p-3 rounded-lg ${
+                                isBot ? 'bg-purple-900/30 border border-purple-500/30' : 'bg-slate-800/50'
+                              }`}
                             >
                               <div className="flex items-center gap-3">
                                 <div>
-                                  <span className="text-white font-medium">
+                                  <span className="text-white font-medium flex items-center gap-2">
                                     {displayName || email || `User ${participant.id.slice(0, 8)}`}
+                                    {isBot && (
+                                      <span className="text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded border border-purple-500/30">
+                                        🤖 Bot
                                   </span>
-                                  {email && displayName && !isYou && (
+                                    )}
+                                  </span>
+                                  {email && displayName && !isYou && !isBot && (
                                     <span className="text-xs text-slate-400 ml-1">({email})</span>
                                   )}
                                 </div>
@@ -951,8 +1025,75 @@ export function PartyLobby({ partyId, onStartGame }) {
                                 {invite.emailFailed && (
                                   <span className="text-xs text-orange-600 ml-2">Email failed</span>
                                 )}
+                                {invite.status === 'SENT' && !invite.emailFailed && (
+                                  <span className="text-xs text-green-500 ml-2">✓ Email sent</span>
+                                )}
                               </div>
                               <div className="flex items-center gap-2">
+                                {(invite.emailFailed || !invite.sentAt) && (
+                                  <Button
+                                    variant="secondary"
+                                    onClick={async () => {
+                                      try {
+                                        const functionUrl =
+                                          import.meta.env.VITE_FUNCTIONS_URL ||
+                                          'https://us-central1-better-white-elephant.cloudfunctions.net/sendPartyInvite';
+                                        const hostName = user?.displayName || user?.email?.split('@')[0] || 'Someone';
+                                        const response = await fetch(functionUrl, {
+                                          method: 'POST',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({
+                                            email: invite.email,
+                                            partyId,
+                                            hostName,
+                                          }),
+                                        });
+                                        
+                                        const data = await response.json();
+                                        
+                                        if (response.ok) {
+                                          await updateDoc(
+                                            doc(db, 'parties', partyId, 'pendingInvites', invite.id),
+                                            { status: 'SENT', sentAt: new Date(), emailFailed: false, updatedAt: new Date() }
+                                          );
+                                          alert('Invite sent successfully!');
+                                        } else {
+                                          // Show detailed error message
+                                          let errorMsg = data.message || data.error || 'Failed to send invite';
+                                          
+                                          // Check if it's a Resend testing mode limitation
+                                          if (data.message?.includes('testing mode') || data.message?.includes('verified email')) {
+                                            errorMsg = `Email service is in testing mode. Only verified emails can receive invites. ${invite.email} can still join using the share link.`;
+                                          }
+                                          
+                                          alert(errorMsg);
+                                          
+                                          // Mark as failed if it's a real error (not just testing mode)
+                                          if (response.status !== 403) {
+                                            await updateDoc(
+                                              doc(db, 'parties', partyId, 'pendingInvites', invite.id),
+                                              { emailFailed: true, updatedAt: new Date() }
+                                            );
+                                          }
+                                        }
+                                      } catch (error) {
+                                        console.error('Error resending invite:', error);
+                                        alert(`Failed to send invite: ${error.message}. They can still use the share link.`);
+                                        try {
+                                          await updateDoc(
+                                            doc(db, 'parties', partyId, 'pendingInvites', invite.id),
+                                            { emailFailed: true, updatedAt: new Date() }
+                                          );
+                                        } catch (updateError) {
+                                          console.error('Failed to update invite status:', updateError);
+                                        }
+                                      }
+                                    }}
+                                    className="text-xs px-2 py-1"
+                                  >
+                                    Resend Email
+                                  </Button>
+                                )}
                                 <Button
                                   variant="danger"
                                   onClick={() => handleRemovePendingInvite(invite.id)}
@@ -1324,6 +1465,7 @@ export function PartyLobby({ partyId, onStartGame }) {
                               {participants
                                 .filter((p) => p.status === 'GOING' && p.id !== party?.adminId)
                                 .map((participant) => {
+                                  const isBot = userIsBot[participant.id] || participant.id.startsWith('bot_');
                                   const displayName = userNames[participant.id] && userNames[participant.id] !== participant.id 
                   ? userNames[participant.id] 
                                     : (userEmails[participant.id] || `User ${participant.id.slice(0, 8)}`);
@@ -1331,9 +1473,18 @@ export function PartyLobby({ partyId, onStartGame }) {
             return (
                                     <div
                 key={participant.id}
-                                      className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg"
+                                      className={`flex items-center justify-between p-3 rounded-lg ${
+                                        isBot ? 'bg-purple-900/30 border border-purple-500/30' : 'bg-slate-800/50'
+                                      }`}
                                     >
-                                      <span className="text-white font-medium">{displayName}</span>
+                                      <span className="text-white font-medium flex items-center gap-2">
+                                        {displayName}
+                                        {isBot && (
+                                          <span className="text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded border border-purple-500/30">
+                                            🤖 Bot
+                                          </span>
+                                        )}
+                                      </span>
                                       <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                         participant.ready === true
                           ? 'bg-green-500/20 text-green-400 border border-green-500/30'
@@ -1689,6 +1840,9 @@ export function PartyLobby({ partyId, onStartGame }) {
           <Button onClick={handleSendInvite}>Send Invite</Button>
         </div>
       </Modal>
+
+      {/* Developer Simulation Controls - Only visible when ?sim=true */}
+      <SimulationControls socket={socket} partyId={partyId} />
     </div>
   );
 }

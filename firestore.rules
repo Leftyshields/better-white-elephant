@@ -60,8 +60,10 @@ service cloud.firestore {
       match /participants/{participantId} {
         // Participants can read all participants in their party
         // Also allow authenticated users to read if party is in LOBBY (so they can see list while joining)
+        // Also allow users to read their own participant document (for collectionGroup queries)
         allow read: if isAuthenticated() && 
-                     (isParticipant(partyId) || 
+                     (participantId == request.auth.uid ||
+                      isParticipant(partyId) || 
                       get(/databases/$(database)/documents/parties/$(partyId)).data.status == 'LOBBY');
         
         // Users can create their own participant record (when joining)
@@ -104,6 +106,14 @@ service cloud.firestore {
       // Only admin can delete gifts
       allow delete: if isAuthenticated() && 
                        isPartyAdmin(resource.data.partyId);
+    }
+    
+    // Collection group query for participants - allows users to find parties where they are participants
+    // This is needed for the Home page to show parties where user is a participant
+    match /{path=**}/participants/{participantId} {
+      // Allow users to read participant documents where the document ID matches their user ID
+      // This enables collectionGroup queries to find parties where the user is a participant
+      allow read: if isAuthenticated() && participantId == request.auth.uid;
     }
   }
 }

@@ -37,37 +37,54 @@ router.post('/batch', async (req, res) => {
 
     const userInfo = {};
     const userEmails = {};
+    const userBots = {};
     
     // Fetch user info from Firebase Auth and Firestore
     for (const userId of userIds) {
       try {
-        // Get from Firebase Auth (Admin SDK)
-        const authUser = await admin.auth().getUser(userId);
-        const authDisplayName = authUser.displayName || authUser.email || null;
-        const authEmail = authUser.email || null;
+        // Check if it's a bot (bots only exist in Firestore, not Auth)
+        const isBot = userId.startsWith('bot_');
         
-        // Get from Firestore users collection
+        // Get from Firestore users collection first (for bots and regular users)
         const userDoc = await admin.firestore().collection('users').doc(userId).get();
         let firestoreDisplayName = null;
         let firestoreEmail = null;
+        let isBotUser = false;
         
         if (userDoc.exists) {
           const userData = userDoc.data();
           firestoreDisplayName = userData.displayName || userData.name || userData.email || null;
           firestoreEmail = userData.email || null;
+          isBotUser = userData.isBot === true || isBot;
+        }
+        
+        // For non-bots, try Firebase Auth as fallback
+        let authDisplayName = null;
+        let authEmail = null;
+        if (!isBotUser) {
+          try {
+            const authUser = await admin.auth().getUser(userId);
+            authDisplayName = authUser.displayName || authUser.email || null;
+            authEmail = authUser.email || null;
+          } catch (authError) {
+            // User might not exist in Auth (e.g., deleted account), that's OK
+            console.log(`User ${userId} not found in Auth, using Firestore data only`);
+          }
         }
         
         // Prefer Firestore, fallback to Auth
         userInfo[userId] = firestoreDisplayName || authDisplayName || userId;
         userEmails[userId] = firestoreEmail || authEmail || null;
+        userBots[userId] = isBotUser;
       } catch (error) {
         console.error(`Error fetching user ${userId}:`, error);
         userInfo[userId] = userId;
         userEmails[userId] = null;
+        userBots[userId] = false;
       }
     }
 
-    res.json({ users: userInfo, emails: userEmails });
+    res.json({ users: userInfo, emails: userEmails, bots: userBots });
   } catch (error) {
     console.error('Error in batch user fetch:', error);
     res.status(500).json({ error: 'Failed to fetch user info', message: error.message });

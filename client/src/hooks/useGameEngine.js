@@ -9,7 +9,7 @@ import { useParty } from './useParty.js';
 import { gameReducer, initialState, ActionTypes, gameActions } from '../reducers/gameReducer.js';
 import { io } from 'socket.io-client';
 import { auth } from '../utils/firebase.js';
-import { trackGameAction } from '../utils/analytics.js';
+import { trackGameAction, trackGameComplete, trackError, trackEvent } from '../utils/analytics.js';
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
 
@@ -76,11 +76,45 @@ export function useGameEngine(partyId) {
         pendingOptimisticUpdateRef.current = null;
         // Use refs to get latest values
         dispatch(gameActions.gameEnded(finalState.state, giftsRef.current, participantsRef.current));
+        
+        // Track game completion with metrics
+        const gameState = finalState.state;
+        const history = gameState?.history || [];
+        const participants = participantsRef.current || [];
+        
+        // Calculate metrics
+        const totalActions = history.length;
+        const stealCount = history.filter(h => h.type === 'STEAL').length;
+        const boomerangMode = gameState?.config?.returnToStart || false;
+        
+        // Calculate duration (if we have start time)
+        const endTime = new Date();
+        const startTime = party?.startedAt?.toDate?.() || party?.createdAt?.toDate?.() || new Date();
+        const duration = Math.floor((endTime.getTime() - startTime.getTime()) / 1000); // Duration in seconds
+        
+        // Track completion with participant count
+        const participantCount = participants.length;
+        trackGameComplete(
+          partyId,
+          duration,
+          totalActions,
+          stealCount,
+          boomerangMode
+        );
+        
+        // Also track participant count as a separate event for analytics
+        trackEvent('game_complete_participants', {
+          party_id: partyId,
+          participant_count: participantCount,
+        });
       });
 
       socket.on('error', ({ message }) => {
         console.error('Socket error:', message);
         dispatch(gameActions.errorReceived(message));
+        
+        // Track error
+        trackError('socket_error', message, 'useGameEngine');
         
         // Rollback optimistic update on error
         if (pendingOptimisticUpdateRef.current) {
@@ -204,10 +238,10 @@ export function useGameEngine(partyId) {
 
   // Derived state calculations
   const isMyTurn = useMemo(() => {
-    if (state.currentTurnIndex < 0 || !user) return false;
-    const currentParticipant = state.participants[state.currentTurnIndex];
-    return currentParticipant?.id === user.uid;
-  }, [state.currentTurnIndex, state.participants, user?.uid]);
+    // Use activePlayerId from state machine (accounts for pendingVictimId)
+    if (!state.activePlayerId || !user) return false;
+    return state.activePlayerId === user.uid;
+  }, [state.activePlayerId, user?.uid]);
 
   const canPick = useMemo(() => {
     if (!isMyTurn || state.status !== 'PLAYING') return false;

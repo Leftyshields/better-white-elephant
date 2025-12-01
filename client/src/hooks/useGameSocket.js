@@ -35,6 +35,10 @@ export function useGameSocket(partyId) {
         console.log('📤 Emitted join-party for', partyId);
       });
 
+      socket.on('connect_error', (error) => {
+        console.error('❌ Socket connection error:', error);
+      });
+
       socket.on('party-joined', ({ partyId: joinedPartyId, roomName }) => {
         console.log('✅ Successfully joined party room:', { joinedPartyId, roomName, socketId: socket.id });
       });
@@ -45,6 +49,7 @@ export function useGameSocket(partyId) {
       });
 
       socket.on('game-state', (state) => {
+        console.log('✅ Received game-state from server:', state);
         setGameState(state);
       });
 
@@ -60,8 +65,12 @@ export function useGameSocket(partyId) {
         setGameState(finalState.state);
       });
 
-      socket.on('error', ({ message }) => {
-        console.error('Socket error:', message);
+      socket.on('error', ({ message, code }) => {
+        console.error('Socket error:', message, code);
+        // If game state is missing, set a flag so GameBoard can handle it
+        if (code === 'GAME_STATE_MISSING') {
+          setGameState(null); // Ensure gameState is null to trigger error UI
+        }
       });
     });
 

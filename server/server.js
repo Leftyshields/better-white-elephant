@@ -10,6 +10,8 @@ import gameRoutes from './routes/game.js';
 import userRoutes from './routes/users.js';
 import redisClient from './utils/redis.js';
 import { auth, db } from './config/firebase-admin.js';
+import admin from 'firebase-admin';
+import { checkAndMakeBotMove } from './utils/bot-utils.js';
 
 dotenv.config();
 
@@ -116,6 +118,16 @@ app.use((req, res, next) => {
   next();
 });
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    port: PORT,
+    socketConnections: io.sockets.sockets.size
+  });
+});
+
 // Routes
 app.use('/api/game', gameRoutes);
 app.use('/api/users', userRoutes);
@@ -138,7 +150,28 @@ io.use(async (socket, next) => {
 });
 
 io.on('connection', (socket) => {
-  console.log(`✅ User connected: ${socket.userId}`);
+  console.log(`✅ User connected: ${socket.userId} (socket: ${socket.id})`);
+
+  // Log all incoming events for debugging
+  socket.onAny((eventName, ...args) => {
+    const data = args.length > 0 ? (typeof args[0] === 'object' ? JSON.stringify(args[0]) : args[0]) : 'no data';
+    // Highlight admin events
+    if (eventName.startsWith('admin_')) {
+      console.log(`🔴🔴🔴 ADMIN EVENT: ${eventName} 🔴🔴🔴`, data);
+    } else {
+      console.log(`📥 Socket ${socket.id} received event: ${eventName}`, data);
+    }
+  });
+  
+  // Handle connection errors
+  socket.on('error', (error) => {
+    console.error(`❌ Socket ${socket.id} error:`, error);
+  });
+  
+  // Handle disconnection
+  socket.on('disconnect', (reason) => {
+    console.log(`❌ Socket ${socket.id} disconnected: ${reason}`);
+  });
 
   // Join party room
   socket.on('join-party', async (partyId) => {
@@ -169,10 +202,31 @@ io.on('connection', (socket) => {
 
     // Send current game state if game is active
     const redisKey = `game:${partyId}`;
-    const gameStateStr = await redisClient.get(redisKey);
-    if (gameStateStr) {
-      const gameState = JSON.parse(gameStateStr);
+    // Try to load game state (from Redis or Firestore)
+    const { loadGameState } = await import('./utils/game-state-persistence.js');
+    const gameState = await loadGameState(partyId);
+    
+    if (gameState) {
+      console.log(`📤 Sending game-state to socket ${socket.id} for party ${partyId}`);
       socket.emit('game-state', gameState);
+    } else {
+      console.log(`⚠️ No game state found for party ${partyId}`);
+      // Check if party is marked as ACTIVE - if so, there's a data inconsistency
+      try {
+        const partyDoc = await db.collection('parties').doc(partyId).get();
+        if (partyDoc.exists) {
+          const partyData = partyDoc.data();
+          if (partyData.status === 'ACTIVE') {
+            console.log(`⚠️ Party ${partyId} is marked ACTIVE but game state missing - data inconsistency detected`);
+            socket.emit('error', { 
+              message: 'Game state not found. The game may have expired or been lost.',
+              code: 'GAME_STATE_MISSING'
+            });
+          }
+        }
+      } catch (error) {
+        console.error(`Error checking party status for ${partyId}:`, error);
+      }
     }
   });
 
@@ -192,14 +246,21 @@ io.on('connection', (socket) => {
         return;
       }
       
-      const redisKey = `game:${partyId}`;
-      const gameStateStr = await redisClient.get(redisKey);
-      if (!gameStateStr) {
+      // Load game state (from Redis or Firestore)
+      const { loadGameState, saveGameState } = await import('./utils/game-state-persistence.js');
+      const gameState = await loadGameState(partyId);
+      if (!gameState) {
         socket.emit('error', { message: 'Game not found' });
         return;
       }
 
-      const gameState = JSON.parse(gameStateStr);
+      // Emit action_started event BEFORE processing (for synchronized reveal animation)
+      io.to(`party:${partyId}`).emit('action_started', { 
+        type: 'pick', 
+        giftId, 
+        playerId: socket.userId 
+      });
+
       const { GameEngine } = await import('./engine.js');
       const config = gameState.config || { maxSteals: 3, returnToStart: false };
       const engine = new GameEngine(gameState, config);
@@ -209,11 +270,17 @@ io.on('connection', (socket) => {
       // Preserve config in state
       newState.config = gameState.config;
 
-      // Save to Redis
-      await redisClient.setEx(redisKey, 86400, JSON.stringify(newState));
+      // Save to both Redis and Firestore
+      await saveGameState(partyId, newState);
 
       // Broadcast update
       io.to(`party:${partyId}`).emit('game-updated', newState);
+      
+      // Check if next player is a bot and trigger auto-play
+      // Wait for reveal animation to complete (3s) + small buffer before checking
+      setTimeout(() => {
+        checkAndMakeBotMove(partyId, newState, io).catch(console.error);
+      }, 3500); // 3s reveal animation + 500ms buffer
     } catch (error) {
       socket.emit('error', { message: error.message });
     }
@@ -234,14 +301,22 @@ io.on('connection', (socket) => {
         return;
       }
       
-      const redisKey = `game:${partyId}`;
-      const gameStateStr = await redisClient.get(redisKey);
-      if (!gameStateStr) {
+      // Load game state (from Redis or Firestore)
+      const { loadGameState, saveGameState } = await import('./utils/game-state-persistence.js');
+      const gameState = await loadGameState(partyId);
+      if (!gameState) {
         socket.emit('error', { message: 'Game not found' });
         return;
       }
 
-      const gameState = JSON.parse(gameStateStr);
+      // Emit action_started event BEFORE processing (for auto-scroll, not reveal animation)
+      // Note: STEAL events don't trigger reveal animation (gift is already known)
+      io.to(`party:${partyId}`).emit('action_started', { 
+        type: 'steal', 
+        giftId, 
+        playerId: socket.userId 
+      });
+
       const { GameEngine } = await import('./engine.js');
       const config = gameState.config || { maxSteals: 3, returnToStart: false };
       const engine = new GameEngine(gameState, config);
@@ -251,11 +326,17 @@ io.on('connection', (socket) => {
       // Preserve config in state
       newState.config = gameState.config;
 
-      // Save to Redis
-      await redisClient.setEx(redisKey, 86400, JSON.stringify(newState));
+      // Save to both Redis and Firestore
+      await saveGameState(partyId, newState);
 
       // Broadcast update
       io.to(`party:${partyId}`).emit('game-updated', newState);
+      
+      // Check if next player (victim) is a bot and trigger auto-play
+      // For STEAL events, no reveal animation, so use shorter delay
+      setTimeout(() => {
+        checkAndMakeBotMove(partyId, newState, io).catch(console.error);
+      }, 1000); // Shorter delay for steal (no reveal animation needed)
     } catch (error) {
       socket.emit('error', { message: error.message });
     }
@@ -276,14 +357,14 @@ io.on('connection', (socket) => {
         return;
       }
       
-      const redisKey = `game:${partyId}`;
-      const gameStateStr = await redisClient.get(redisKey);
-      if (!gameStateStr) {
+      // Load game state (from Redis or Firestore)
+      const { loadGameState, saveGameState } = await import('./utils/game-state-persistence.js');
+      const gameState = await loadGameState(partyId);
+      if (!gameState) {
         socket.emit('error', { message: 'Game not found' });
         return;
       }
 
-      const gameState = JSON.parse(gameStateStr);
       const { GameEngine } = await import('./engine.js');
       const config = gameState.config || { maxSteals: 3, returnToStart: false };
       const engine = new GameEngine(gameState, config);
@@ -292,11 +373,19 @@ io.on('connection', (socket) => {
       // Preserve config in state
       newState.config = gameState.config;
 
-      // Save to Redis
-      await redisClient.setEx(redisKey, 86400, JSON.stringify(newState));
+      // Save to both Redis and Firestore
+      await saveGameState(partyId, newState);
 
       // Broadcast update
       io.to(`party:${partyId}`).emit('game-updated', newState);
+
+      // Check if next player is a bot and trigger auto-play (if game didn't end)
+      if (newState.phase === 'ACTIVE') {
+        // Wait for reveal animation to complete (3s) + small buffer before checking
+        setTimeout(() => {
+          checkAndMakeBotMove(partyId, newState, io).catch(console.error);
+        }, 3500); // 3s reveal animation + 500ms buffer
+      }
 
       // If game ended, persist winners to Firestore
       if (newState.phase === 'ENDED') {
@@ -349,11 +438,26 @@ io.on('connection', (socket) => {
         }
         
         // Update party status to ENDED and store game history
+        const endedAt = admin.firestore.Timestamp.now();
         await db.collection('parties').doc(partyId).update({
           status: 'ENDED',
+          endedAt: endedAt, // Set retention timestamp for data cleanup
           gameHistory: finalState.state.history || [], // Store history in party document
           updatedAt: new Date(),
         });
+
+        // Update all gifts for this party with partyEndedAt timestamp for retention
+        const giftsForRetentionSnapshot = await db.collection('gifts').where('partyId', '==', partyId).get();
+        const giftRetentionBatch = db.batch();
+        giftsForRetentionSnapshot.docs.forEach((giftDoc) => {
+          giftRetentionBatch.update(giftDoc.ref, {
+            partyEndedAt: endedAt,
+            updatedAt: new Date(),
+          });
+        });
+        if (giftsForRetentionSnapshot.docs.length > 0) {
+          await giftRetentionBatch.commit();
+        }
         
         io.to(`party:${partyId}`).emit('game-ended', finalState);
       }
@@ -409,6 +513,428 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Admin: Batch add fake players for simulation
+  socket.on('admin_batch_add_bots', async (data) => {
+    console.log(`🤖🤖🤖 ADMIN_BATCH_ADD_BOTS EVENT RECEIVED 🤖🤖🤖`);
+    console.log(`📥 Received admin_batch_add_bots event:`, { 
+      data,
+      userId: socket.userId,
+      socketId: socket.id,
+      connected: socket.connected 
+    });
+    
+    // Validate data structure
+    if (!data || typeof data !== 'object') {
+      console.error('❌ Invalid data structure:', data);
+      socket.emit('error', { message: 'Invalid request data' });
+      return;
+    }
+    
+    const { partyId, count } = data;
+    
+    try {
+      // Validate input
+      if (!isValidPartyId(partyId) || !Number.isInteger(count) || count < 1 || count > 50) {
+        console.log(`❌ Invalid input: partyId=${partyId}, count=${count}`);
+        socket.emit('error', { message: 'Invalid party ID or bot count (1-50)' });
+        return;
+      }
+
+      // Verify user is party admin
+      console.log(`🔍 Checking party admin for party ${partyId}, user ${socket.userId}`);
+      const partyDoc = await db.collection('parties').doc(partyId).get();
+      if (!partyDoc.exists) {
+        console.log(`❌ Party ${partyId} not found`);
+        socket.emit('error', { message: 'Party not found' });
+        return;
+      }
+
+      const party = partyDoc.data();
+      console.log(`📋 Party data:`, { adminId: party.adminId, status: party.status, userId: socket.userId });
+      if (party.adminId !== socket.userId) {
+        console.log(`❌ User ${socket.userId} is not admin (adminId: ${party.adminId})`);
+        socket.emit('error', { message: 'Only party admin can add bots' });
+        return;
+      }
+
+      // Allow adding bots in LOBBY or ACTIVE status (for testing)
+      // In ACTIVE status, bots will be added but won't join the current game
+      if (party.status !== 'LOBBY' && party.status !== 'ACTIVE') {
+        console.log(`❌ Party is not in LOBBY or ACTIVE status (status: ${party.status})`);
+        socket.emit('error', { message: `Can only add bots when party is in LOBBY or ACTIVE status. Current status: ${party.status}` });
+        return;
+      }
+
+      // Warn if adding bots to an active game (they won't join current game)
+      if (party.status === 'ACTIVE') {
+        console.log(`⚠️ Adding bots to active game - they will be participants but won't join current game`);
+      }
+
+      console.log(`🤖 Admin ${socket.userId} adding ${count} bots to party ${partyId}`);
+
+      // Fake names for bots
+      const fakeNames = [
+        'Alice', 'Bob', 'Charlie', 'Diana', 'Eve', 'Frank', 'Grace', 'Henry',
+        'Ivy', 'Jack', 'Kate', 'Leo', 'Mia', 'Noah', 'Olivia', 'Paul',
+        'Quinn', 'Ruby', 'Sam', 'Tina', 'Uma', 'Victor', 'Wendy', 'Xander',
+        'Yara', 'Zoe', 'Alex', 'Blake', 'Casey', 'Drew', 'Ellis', 'Finley'
+      ];
+
+      // Fake gift ideas
+      const fakeGifts = [
+        { title: 'Vintage Record Player', price: '$45', emoji: '🎵' },
+        { title: 'Gourmet Coffee Set', price: '$30', emoji: '☕' },
+        { title: 'Artisan Candle Collection', price: '$25', emoji: '🕯️' },
+        { title: 'Leather Journal', price: '$35', emoji: '📔' },
+        { title: 'Board Game Collection', price: '$40', emoji: '🎲' },
+        { title: 'Scarf & Gloves Set', price: '$28', emoji: '🧣' },
+        { title: 'Bluetooth Speaker', price: '$50', emoji: '🔊' },
+        { title: 'Tea Sampler Box', price: '$22', emoji: '🍵' },
+        { title: 'Yoga Mat Bundle', price: '$35', emoji: '🧘' },
+        { title: 'Puzzle Set', price: '$20', emoji: '🧩' },
+        { title: 'Chocolate Gift Basket', price: '$30', emoji: '🍫' },
+        { title: 'Indoor Plant Kit', price: '$25', emoji: '🌱' }
+      ];
+
+      const batch = db.batch();
+      const addedBots = [];
+      const baseTimestamp = Date.now();
+
+      for (let i = 0; i < count; i++) {
+        // Use unique ID with timestamp + index + random to ensure uniqueness
+        const botId = `bot_${partyId}_${baseTimestamp}_${i}_${Math.random().toString(36).substring(2, 9)}`;
+        const botName = fakeNames[i % fakeNames.length] + ` ${Math.floor(Math.random() * 1000)}`;
+        const botEmail = `bot${i}@simulation.local`;
+        
+        // Create fake user document
+        const userRef = db.collection('users').doc(botId);
+        batch.set(userRef, {
+          displayName: botName,
+          email: botEmail,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          isBot: true,
+        });
+
+        // Create participant document
+        const participantRef = db.collection('parties').doc(partyId).collection('participants').doc(botId);
+        batch.set(participantRef, {
+          status: 'GOING',
+          turnNumber: null,
+          ready: true, // Bots are auto-ready
+          joinedAt: new Date(),
+          updatedAt: new Date(),
+        });
+
+        // Create fake gift for this bot
+        const giftData = fakeGifts[i % fakeGifts.length];
+        const giftRef = db.collection('gifts').doc();
+        batch.set(giftRef, {
+          partyId,
+          submitterId: botId,
+          title: giftData.title,
+          price: giftData.price,
+          image: null,
+          url: null,
+          isFrozen: false,
+          winnerId: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+
+        addedBots.push({ id: botId, name: botName, gift: giftData.title });
+      }
+
+      // Commit all writes
+      console.log(`💾 Committing batch with ${addedBots.length} bots to Firestore...`);
+      console.log(`📝 Bot IDs being created:`, addedBots.map(b => b.id));
+      await batch.commit();
+      console.log(`✅ Batch committed successfully`);
+
+      // Verify the write by reading back
+      const participantsSnapshot = await db
+        .collection('parties')
+        .doc(partyId)
+        .collection('participants')
+        .get();
+      console.log(`📊 Total participants in party ${partyId} after commit: ${participantsSnapshot.size}`);
+      console.log(`📋 Participant IDs:`, participantsSnapshot.docs.map(d => d.id));
+      
+      // Check if all bots were written
+      const botIds = addedBots.map(b => b.id);
+      const writtenBotIds = participantsSnapshot.docs
+        .map(d => d.id)
+        .filter(id => id.startsWith('bot_'));
+      console.log(`🤖 Bots written: ${writtenBotIds.length}/${botIds.length}`);
+      if (writtenBotIds.length !== botIds.length) {
+        console.warn(`⚠️ Mismatch! Expected ${botIds.length} bots, found ${writtenBotIds.length}`);
+      }
+
+      console.log(`✅ Successfully added ${count} bots to party ${partyId}:`, addedBots);
+      socket.emit('bots-added', { count, bots: addedBots });
+      
+      // Notify all clients in the party room
+      // Note: Firestore real-time listeners will automatically update the participants list
+      io.to(`party:${partyId}`).emit('participants-updated');
+      console.log(`📢 Notified all clients in party:${partyId} - ${count} bots added to Firestore`);
+    } catch (error) {
+      console.error('❌ Error adding bots:', error);
+      console.error('Error stack:', error.stack);
+      socket.emit('error', { message: 'Failed to add bots: ' + error.message });
+    }
+  });
+
+  // Admin: Toggle autoplay for bots
+  socket.on('admin_toggle_autoplay', async ({ partyId, active }) => {
+    console.log(`📥 Received admin_toggle_autoplay event:`, { partyId, active, userId: socket.userId });
+    try {
+      // Validate input
+      if (!isValidPartyId(partyId) || typeof active !== 'boolean') {
+        socket.emit('error', { message: 'Invalid party ID or autoplay state' });
+        return;
+      }
+
+      // Verify user is party admin
+      const partyDoc = await db.collection('parties').doc(partyId).get();
+      if (!partyDoc.exists) {
+        socket.emit('error', { message: 'Party not found' });
+        return;
+      }
+
+      const party = partyDoc.data();
+      if (party.adminId !== socket.userId) {
+        socket.emit('error', { message: 'Only party admin can toggle autoplay' });
+        return;
+      }
+
+      // Store autoplay state in Redis
+      const autoplayKey = `autoplay:${partyId}`;
+      if (active) {
+        await redisClient.setEx(autoplayKey, 86400, 'true'); // 24 hour expiry
+        console.log(`✅ Autoplay enabled for party ${partyId}`);
+        
+        // Trigger bot move check if game is active
+        const { loadGameState } = await import('./utils/game-state-persistence.js');
+        const gameState = await loadGameState(partyId);
+        if (gameState && gameState.phase === 'ACTIVE') {
+          // Schedule bot move check - wait for reveal animation to complete
+          setTimeout(() => checkAndMakeBotMove(partyId, gameState, io), 3500); // 3s reveal animation + 500ms buffer
+        }
+      } else {
+        await redisClient.del(autoplayKey);
+        console.log(`❌ Autoplay disabled for party ${partyId}`);
+      }
+
+      socket.emit('autoplay-toggled', { active });
+      io.to(`party:${partyId}`).emit('autoplay-updated', { active });
+    } catch (error) {
+      console.error('❌ Error toggling autoplay:', error);
+      socket.emit('error', { message: 'Failed to toggle autoplay: ' + error.message });
+    }
+  });
+
+  // Admin: Force bot move (manual bot control)
+  socket.on('admin_force_bot_move', async ({ partyId }) => {
+    console.log(`📥 Received admin_force_bot_move event:`, { partyId, userId: socket.userId });
+    try {
+      // Validate input
+      if (!isValidPartyId(partyId)) {
+        socket.emit('error', { message: 'Invalid party ID' });
+        return;
+      }
+
+      // Verify user is party admin
+      const partyDoc = await db.collection('parties').doc(partyId).get();
+      if (!partyDoc.exists) {
+        socket.emit('error', { message: 'Party not found' });
+        return;
+      }
+
+      const party = partyDoc.data();
+      if (party.adminId !== socket.userId) {
+        socket.emit('error', { message: 'Only party admin can force bot moves' });
+        return;
+      }
+
+      // Force bot move
+      const { forceBotMove } = await import('./utils/bot-utils.js');
+      const result = await forceBotMove(partyId, io);
+      
+      socket.emit('bot-move-forced', { success: true, result });
+      console.log(`✅ Bot move forced for party ${partyId}:`, result);
+    } catch (error) {
+      console.error('❌ Error forcing bot move:', error);
+      socket.emit('error', { message: 'Failed to force bot move: ' + error.message });
+    }
+  });
+
+  socket.on('admin_force_bot_steal', async ({ partyId }) => {
+    console.log(`📥 Received admin_force_bot_steal event:`, { partyId, userId: socket.userId });
+    try {
+      // Validate input
+      if (!isValidPartyId(partyId)) {
+        socket.emit('error', { message: 'Invalid party ID' });
+        return;
+      }
+
+      // Verify user is party admin
+      const partyDoc = await db.collection('parties').doc(partyId).get();
+      if (!partyDoc.exists) {
+        socket.emit('error', { message: 'Party not found' });
+        return;
+      }
+
+      const party = partyDoc.data();
+      if (party.adminId !== socket.userId) {
+        socket.emit('error', { message: 'Only party admin can force bot moves' });
+        return;
+      }
+
+      // Force bot steal
+      const { forceBotSteal } = await import('./utils/bot-utils.js');
+      const result = await forceBotSteal(partyId, io);
+      
+      socket.emit('bot-steal-forced', { success: true, result });
+      console.log(`✅ Bot steal forced for party ${partyId}:`, result);
+    } catch (error) {
+      console.error('❌ Error forcing bot steal:', error);
+      socket.emit('error', { message: 'Failed to force bot steal: ' + error.message });
+    }
+  });
+
+  socket.on('admin_force_bot_skip', async ({ partyId }) => {
+    console.log(`📥 Received admin_force_bot_skip event:`, { partyId, userId: socket.userId });
+    try {
+      // Validate input
+      if (!isValidPartyId(partyId)) {
+        socket.emit('error', { message: 'Invalid party ID' });
+        return;
+      }
+
+      // Verify user is party admin
+      const partyDoc = await db.collection('parties').doc(partyId).get();
+      if (!partyDoc.exists) {
+        socket.emit('error', { message: 'Party not found' });
+        return;
+      }
+
+      const party = partyDoc.data();
+      if (party.adminId !== socket.userId) {
+        socket.emit('error', { message: 'Only party admin can force bot moves' });
+        return;
+      }
+
+      // Force bot skip
+      const { forceBotSkip } = await import('./utils/bot-utils.js');
+      const result = await forceBotSkip(partyId, io);
+      
+      socket.emit('bot-move-forced', { success: true, result });
+      console.log(`✅ Bot skip forced for party ${partyId}:`, result);
+    } catch (error) {
+      console.error('❌ Error forcing bot skip:', error);
+      socket.emit('error', { message: error.message });
+    }
+  });
+
+  socket.on('admin_force_bot_pick', async ({ partyId }) => {
+    console.log(`📥 Received admin_force_bot_pick event:`, { partyId, userId: socket.userId });
+    try {
+      // Validate input
+      if (!isValidPartyId(partyId)) {
+        socket.emit('error', { message: 'Invalid party ID' });
+        return;
+      }
+
+      // Verify user is party admin
+      const partyDoc = await db.collection('parties').doc(partyId).get();
+      if (!partyDoc.exists) {
+        socket.emit('error', { message: 'Party not found' });
+        return;
+      }
+
+      const party = partyDoc.data();
+      if (party.adminId !== socket.userId) {
+        socket.emit('error', { message: 'Only party admin can force bot moves' });
+        return;
+      }
+
+      // Force bot pick
+      const { forceBotPick } = await import('./utils/bot-utils.js');
+      const result = await forceBotPick(partyId, io);
+      
+      socket.emit('bot-pick-forced', { success: true, result });
+      console.log(`✅ Bot pick forced for party ${partyId}:`, result);
+    } catch (error) {
+      console.error('❌ Error forcing bot pick:', error);
+      socket.emit('error', { message: 'Failed to force bot pick: ' + error.message });
+    }
+  });
+
+  // Admin: Reset game
+  socket.on('admin_reset_game', async ({ partyId }) => {
+    console.log(`📥 Received admin_reset_game event:`, { partyId, userId: socket.userId });
+    try {
+      // Validate input
+      if (!isValidPartyId(partyId)) {
+        socket.emit('error', { message: 'Invalid party ID' });
+        return;
+      }
+
+      // Verify user is party admin
+      const partyDoc = await db.collection('parties').doc(partyId).get();
+      if (!partyDoc.exists) {
+        socket.emit('error', { message: 'Party not found' });
+        return;
+      }
+
+      const party = partyDoc.data();
+      if (party.adminId !== socket.userId) {
+        socket.emit('error', { message: 'Only party admin can reset game' });
+        return;
+      }
+
+      // Clear game state from Redis
+      const redisKey = `game:${partyId}`;
+      await redisClient.del(redisKey);
+
+      // Clear autoplay state
+      const autoplayKey = `autoplay:${partyId}`;
+      await redisClient.del(autoplayKey);
+      
+      // Clear game state from both Redis and Firestore
+      const { deleteGameState } = await import('./utils/game-state-persistence.js');
+      await deleteGameState(partyId);
+      
+      // Clear bot timers and state
+      const { clearBotState } = await import('./utils/bot-utils.js');
+      clearBotState(partyId);
+
+      // Reset party status to LOBBY
+      await db.collection('parties').doc(partyId).update({
+        status: 'LOBBY',
+        updatedAt: new Date(),
+      });
+
+      // Clear winnerId from all gifts
+      const giftsSnapshot = await db.collection('gifts').where('partyId', '==', partyId).get();
+      const batch = db.batch();
+      giftsSnapshot.docs.forEach((giftDoc) => {
+        batch.update(giftDoc.ref, {
+          winnerId: null,
+          updatedAt: new Date(),
+        });
+      });
+      await batch.commit();
+
+      console.log(`✅ Game reset for party ${partyId}`);
+      socket.emit('game-reset', { partyId });
+      io.to(`party:${partyId}`).emit('game-reset', { partyId });
+    } catch (error) {
+      console.error('❌ Error resetting game:', error);
+      socket.emit('error', { message: 'Failed to reset game: ' + error.message });
+    }
+  });
+
   socket.on('disconnect', () => {
     console.log(`❌ User disconnected: ${socket.userId}`);
   });
@@ -418,6 +944,8 @@ io.on('connection', (socket) => {
 httpServer.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📡 Socket.io ready`);
+  console.log(`🔍 Debug logging enabled - watching for socket events`);
+  console.log(`🌐 CORS allowed origins:`, allowedOrigins);
 });
 
 

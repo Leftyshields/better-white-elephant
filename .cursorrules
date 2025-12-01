@@ -1,0 +1,10 @@
+# GAME LOGIC ENFORCEMENT
+When modifying `gameReducer.js`, `useGameEngine.js`, or any game logic:
+1. You MUST consult `GAME_RULES.md` (or wherever you saved it) as the absolute Source of Truth.
+2. If a proposed code change contradicts a rule in that file (especially Steal Chains, Swap Logic, or End Game conditions), you must prioritize the Rule file over the current code.
+3. Validate all edge cases against the "Validation Rules" section of that document.
+
+# CRITICAL LOGIC INVARIANTS
+- Steal Count NEVER resets on a swap.
+- The Game NEVER ends if wrapped gifts remain.
+- Player 1 gets a special final turn in Standard Mode.

@@ -17,12 +17,18 @@ export function useParty(partyId) {
   const [pendingInvites, setPendingInvites] = useState([]);
   const [gifts, setGifts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     if (!partyId) {
       setLoading(false);
+      setError(null);
       return;
     }
+
+    // Reset error and loading states when partyId changes
+    setLoading(true);
+    setError(null);
 
     // Subscribe to party document
     const partyUnsubscribe = onSnapshot(
@@ -34,6 +40,18 @@ export function useParty(partyId) {
           setParty(null);
         }
         setLoading(false);
+        setError(null);
+      },
+      (error) => {
+        console.error('❌ Error fetching party:', error);
+        console.error('Error details:', {
+          code: error.code,
+          message: error.message,
+          stack: error.stack
+        });
+        setParty(null);
+        setLoading(false);
+        setError(error);
       }
     );
 
@@ -47,10 +65,16 @@ export function useParty(partyId) {
           id: doc.id,
           ...doc.data(),
         }));
+        console.log(`📊 Participants updated: ${participantsList.length} total`, participantsList.map(p => ({ id: p.id, status: p.status, ready: p.ready })));
         setParticipants(participantsList);
       },
       (error) => {
-        console.error('Error fetching participants:', error);
+        console.error('❌ Error fetching participants:', error);
+        console.error('Error details:', {
+          code: error.code,
+          message: error.message,
+          stack: error.stack
+        });
         // Set empty array on error so UI doesn't break
         setParticipants([]);
       }
@@ -71,10 +95,11 @@ export function useParty(partyId) {
         setGifts(giftsList);
       },
       (error) => {
-        console.error('Error fetching gifts:', error);
+        console.error('❌ Error fetching gifts:', error);
         console.error('Error details:', {
           code: error.code,
-          message: error.message
+          message: error.message,
+          stack: error.stack
         });
         // Set empty array on error so UI doesn't break
         setGifts([]);
@@ -101,7 +126,7 @@ export function useParty(partyId) {
     };
   }, [partyId]);
 
-  return { party, participants, pendingInvites, gifts, loading };
+  return { party, participants, pendingInvites, gifts, loading, error };
 }
 
 

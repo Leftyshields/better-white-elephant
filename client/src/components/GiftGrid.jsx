@@ -15,6 +15,7 @@ export const GiftGrid = memo(function GiftGrid({
   userId,
   userNames = {},
   userEmails = {},
+  revealingGiftId = null,
 }) {
   const giftList = Object.values(gifts || {});
   
@@ -39,6 +40,7 @@ export const GiftGrid = memo(function GiftGrid({
                 onPick={actions.pickGift}
                 canPick={isMyTurn && gift.isWrapped}
                 canSteal={false}
+                revealingGiftId={revealingGiftId}
               />
             ))}
           </div>
@@ -69,6 +71,7 @@ export const GiftGrid = memo(function GiftGrid({
                 onSteal={actions.stealGift}
                 canPick={false}
                 canSteal={canSteal(gift.id)}
+                revealingGiftId={revealingGiftId}
               />
             );
             })}
@@ -86,7 +89,8 @@ export const GiftGrid = memo(function GiftGrid({
     prevProps.currentPlayerId === nextProps.currentPlayerId &&
     prevProps.userId === nextProps.userId &&
     prevProps.userNames === nextProps.userNames &&
-    prevProps.userEmails === nextProps.userEmails
+    prevProps.userEmails === nextProps.userEmails &&
+    prevProps.revealingGiftId === nextProps.revealingGiftId
   );
 });
 

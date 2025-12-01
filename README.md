@@ -40,7 +40,7 @@ better-white-elephant/
    - Copy `.env.example` to `.env` in root and server directories
    - Add your Firebase credentials
    - Add Redis connection string
-   - Add Resend API key
+   - For Functions: Set up Resend API key (see [DEPLOY_FUNCTIONS.md](./DEPLOY_FUNCTIONS.md))
 
 3. **Firebase setup:**
    - Initialize Firebase project: `firebase init`

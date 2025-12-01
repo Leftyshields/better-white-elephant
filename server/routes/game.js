@@ -2,11 +2,13 @@
  * Game API Routes
  */
 import express from 'express';
-import { db } from '../config/firebase-admin.js';
+import { db, auth } from '../config/firebase-admin.js';
+import admin from 'firebase-admin';
 import { partyConverter, participantConverter, giftConverter } from '../utils/firestore-converters.js';
 import { GameEngine } from '../engine.js';
 import redisClient from '../utils/redis.js';
 import { scrapeGiftMetadata } from '../utils/scraper.js';
+import { saveGameState, loadGameState, deleteGameState } from '../utils/game-state-persistence.js';
 
 const router = express.Router();
 
@@ -81,6 +83,30 @@ router.post('/start', async (req, res) => {
       .map((p) => p.id)
       .sort(() => Math.random() - 0.5); // Random shuffle
 
+    /**
+     * Generate turn queue based on game mode
+     * @param {Array} turnOrder - The initial shuffled turn order (array of player IDs)
+     * @param {boolean} returnToStart - Whether boomerang rule is active
+     * @returns {Array} Complete turn queue array
+     */
+    function generateTurnQueue(turnOrder, returnToStart) {
+      if (returnToStart) {
+        // Boomerang (Snake Draft): [P1, P2, ... P9, P10, P10, P9, ... P2, P1]
+        // Forward pass: all players
+        const forward = [...turnOrder];
+        // Reverse pass: all players in reverse (last player appears twice at transition)
+        const reverse = [...turnOrder].reverse();
+        // Last player appears twice at the transition
+        return [...forward, ...reverse];
+      } else {
+        // Standard (Bookend): [P1, P2, ... P10, P1]
+        // Forward pass: all players
+        const forward = [...turnOrder];
+        // Only first player gets a second turn
+        return [...forward, turnOrder[0]];
+      }
+    }
+
     // Initialize game state
     const wrappedGifts = gifts.map((g) => g.id);
     const unwrappedGifts = new Map();
@@ -96,23 +122,28 @@ router.post('/start', async (req, res) => {
       returnToStart: gameConfig.returnToStart ?? false,
     };
 
+    // Generate turn queue based on boomerang rule
+    const turnQueue = generateTurnQueue(turnOrder, config.returnToStart);
+
     const gameState = {
       partyId,
-      currentPlayerId: turnOrder[0],
-      turnOrder,
-      stealStack: [],
+      currentTurnIndex: 0, // Index into turnQueue
+      currentPlayerId: turnQueue[0], // Active player from queue
+      currentVictim: null, // CRITICAL: Victim-first priority state machine
+      turnOrder, // Original shuffled order (for reference)
+      turnQueue, // Complete queue array
+      stealStack: [], // Keep for backwards compatibility
       wrappedGifts,
       unwrappedGifts: Array.from(unwrappedGifts.entries()),
       turnAction: Array.from(turnAction.entries()),
       phase: 'ACTIVE',
-      isBoomerangPhase: false,
+      isBoomerangPhase: false, // Can be removed or kept for backwards compatibility
       config, // Store config in game state
       history: [], // Initialize empty history array
     };
 
-    // Save to Redis
-    const redisKey = `game:${partyId}`;
-    await redisClient.setEx(redisKey, 86400, JSON.stringify(gameState)); // 24 hour expiry
+    // Save to both Redis and Firestore
+    await saveGameState(partyId, gameState);
 
     // Update party status
     await db.collection('parties').doc(partyId).update({
@@ -122,6 +153,23 @@ router.post('/start', async (req, res) => {
 
     // Emit socket event (handled in server.js)
     req.io?.to(`party:${partyId}`).emit('game-started', gameState);
+
+    // Check if first player is a bot and trigger auto-play
+    // Use longer delay (2 seconds) to ensure all clients have received game-started event
+    setTimeout(async () => {
+      try {
+        const { checkAndMakeBotMove } = await import('../utils/bot-utils.js');
+        if (checkAndMakeBotMove && req.io) {
+          // Re-fetch game state to ensure we have the latest
+          const currentState = await loadGameState(partyId);
+          if (currentState && currentState.phase === 'ACTIVE') {
+            await checkAndMakeBotMove(partyId, currentState, req.io);
+          }
+        }
+      } catch (error) {
+        console.error('Error triggering bot move on game start:', error);
+      }
+    }, 2000);
 
     res.json({ success: true, gameState });
   } catch (error) {
@@ -159,15 +207,12 @@ router.post('/end', async (req, res) => {
       return res.status(400).json({ error: 'Game is not active' });
     }
 
-    // Get current game state from Redis
-    const redisKey = `game:${partyId}`;
-    const gameStateStr = await redisClient.get(redisKey);
+    // Get current game state (from Redis or Firestore)
+    const gameState = await loadGameState(partyId);
     
-    if (!gameStateStr) {
+    if (!gameState) {
       return res.status(404).json({ error: 'Game state not found' });
     }
-
-    const gameState = JSON.parse(gameStateStr);
     
     // Verify user is admin (admin only can end game)
     if (party.adminId !== userId) {
@@ -225,15 +270,30 @@ router.post('/end', async (req, res) => {
     }
 
     // Update party status to ENDED and store game history
+    const endedAt = admin.firestore.Timestamp.now();
     await db.collection('parties').doc(partyId).update({
       status: 'ENDED',
+      endedAt: endedAt, // Set retention timestamp for data cleanup
       gameHistory: finalState.state.history || [], // Store history in party document
       updatedAt: new Date(),
     });
 
-    // Update Redis with ended state
+    // Update all gifts for this party with partyEndedAt timestamp for retention
+    const giftsForRetentionSnapshot = await db.collection('gifts').where('partyId', '==', partyId).get();
+    const giftRetentionBatch = db.batch();
+    giftsForRetentionSnapshot.docs.forEach((giftDoc) => {
+      giftRetentionBatch.update(giftDoc.ref, {
+        partyEndedAt: endedAt,
+        updatedAt: new Date(),
+      });
+    });
+    if (giftsForRetentionSnapshot.docs.length > 0) {
+      await giftRetentionBatch.commit();
+    }
+
+    // Save ended state to both Redis and Firestore
     finalState.state.config = gameState.config;
-    await redisClient.setEx(redisKey, 86400, JSON.stringify(finalState.state));
+    await saveGameState(partyId, finalState.state);
 
     // Emit socket event to notify all clients
     if (req.io) {

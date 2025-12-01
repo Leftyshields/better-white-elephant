@@ -185,6 +185,21 @@ body {
   animation: float-up ease-out forwards;
 }
 
+@keyframes fadeInUp {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.3s ease-out;
+}
+
 /* Style calendar icon in datetime-local inputs to be white */
 input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   filter: invert(1);
@@ -194,6 +209,21 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
 input[type="datetime-local"]::-moz-calendar-picker-indicator {
   filter: invert(1);
   cursor: pointer;
+}
+
+@keyframes fadeInSlideDown {
+  0% {
+    opacity: 0;
+    transform: translateY(-16px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-slide-down {
+  animation: fadeInSlideDown 0.5s ease-out;
 }
 
 

@@ -13,10 +13,10 @@ export function Footer() {
           <div className="md:col-span-1">
             <h3 className="text-white font-bold text-lg mb-2">StealOrReveal</h3>
             <p className="text-slate-400 text-sm mb-4">
-              The modern way to host unforgettable White Elephant gift exchanges.
+              The modern way to host unforgettable White Elephant gift exchanges. <span className="text-purple-300 font-semibold">100% free.</span>
             </p>
             <p className="text-slate-600 text-xs mt-4">
-              © 2024 StealOrReveal
+              © {new Date().getFullYear()} StealOrReveal
             </p>
           </div>
 
@@ -26,26 +26,10 @@ export function Footer() {
             <ul className="space-y-2">
               <li>
                 <Link
-                  to="/features"
+                  to="/rules"
                   className="text-slate-400 hover:text-white transition-colors"
                 >
-                  Features
-                </Link>
-              </li>
-              <li>
-                <Link
-                  to="/pricing"
-                  className="text-slate-400 hover:text-white transition-colors"
-                >
-                  Pricing (Free)
-                </Link>
-              </li>
-              <li>
-                <Link
-                  to="/guide"
-                  className="text-slate-400 hover:text-white transition-colors"
-                >
-                  Guide
+                  Rules
                 </Link>
               </li>
             </ul>
@@ -55,14 +39,6 @@ export function Footer() {
           <div>
             <h4 className="text-white font-bold mb-4">Resources</h4>
             <ul className="space-y-2">
-              <li>
-                <Link
-                  to="/help"
-                  className="text-slate-400 hover:text-white transition-colors"
-                >
-                  Help Center
-                </Link>
-              </li>
               <li>
                 <Link
                   to="/terms"

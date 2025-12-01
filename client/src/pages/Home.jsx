@@ -9,9 +9,9 @@ import { Modal } from '../components/ui/Modal.jsx';
 import { Menu } from '@headlessui/react';
 import { GiftIcon, EllipsisVerticalIcon } from '@heroicons/react/24/outline';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { collection, addDoc, doc, setDoc, query, where, onSnapshot, orderBy, collectionGroup, getDocs, deleteDoc, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, doc, setDoc, query, where, onSnapshot, orderBy, collectionGroup, getDocs, deleteDoc, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from '../utils/firebase.js';
-import { trackCreateParty, trackSignUp, trackLogin, trackButtonClick } from '../utils/analytics.js';
+import { trackCreateParty, trackSignUp, trackLogin, trackButtonClick, trackGameAbandoned, trackError } from '../utils/analytics.js';
 import { usePartyModal } from '../contexts/PartyModalContext.jsx';
 import { Footer } from '../components/Footer.jsx';
 
@@ -111,66 +111,13 @@ export function Home() {
       }
     );
 
-    // Subscribe to participants subcollections to find parties where user is participant
-    const participantsQuery = collectionGroup(db, 'participants');
-    const unsubscribeParticipants = onSnapshot(
-      participantsQuery,
-      (snapshot) => {
-        // Filter to only participants with this user's ID as the document ID
-        const userParticipantDocs = snapshot.docs.filter(doc => doc.id === user.uid);
-        const partyIds = new Set();
-        
-        userParticipantDocs.forEach(doc => {
-          // Get party ID from the document path: parties/{partyId}/participants/{userId}
-          const partyId = doc.ref.parent.parent.id;
-          partyIds.add(partyId);
-        });
-
-        // Add/update listeners for each party where user is a participant
-        partyIds.forEach(partyId => {
-          if (!partyUnsubscribes.has(partyId)) {
-            const partyRef = doc(db, 'parties', partyId);
-            const unsubscribe = onSnapshot(partyRef, (partySnap) => {
-              if (partySnap.exists()) {
-                partyMap.set(partySnap.id, {
-                  id: partySnap.id,
-                  ...partySnap.data(),
-                  isAdmin: partySnap.data().adminId === user.uid,
-                });
-                updateParties();
-              } else {
-                // Party was deleted, remove it
-                partyMap.delete(partySnap.id);
-                partyUnsubscribes.delete(partySnap.id);
-                updateParties();
-              }
-            }, (error) => {
-              console.error(`Error listening to party ${partyId}:`, error);
-            });
-            partyUnsubscribes.set(partyId, unsubscribe);
-          }
-        });
-
-        // Remove listeners for parties user is no longer participating in
-        partyUnsubscribes.forEach((unsubscribe, partyId) => {
-          if (!partyIds.has(partyId) && partyMap.get(partyId)?.isAdmin !== true) {
-            unsubscribe();
-            partyUnsubscribes.delete(partyId);
-            partyMap.delete(partyId);
-            updateParties();
-          }
-        });
-
-        updateParties();
-      },
-      (error) => {
-        console.error('Error fetching participant parties:', error);
-      }
-    );
+    // NOTE: CollectionGroup queries for participants are disabled due to Firestore security rule complexity
+    // Users will see parties they're admin of. Participant parties will appear once they visit them.
+    // This is a temporary solution - a better approach would be to store party IDs in user documents
+    // or use a server-side Cloud Function to query participants.
 
     return () => {
       unsubscribeAdmin();
-      unsubscribeParticipants();
       // Clean up all party listeners
       partyUnsubscribes.forEach(unsubscribe => unsubscribe());
       partyUnsubscribes.clear();
@@ -212,10 +159,23 @@ export function Home() {
     }
 
     try {
+      // Get party data before deletion to track abandonment
+      const partyDoc = await getDoc(doc(db, 'parties', partyId));
+      const partyData = partyDoc.data();
+      
       await deleteDoc(doc(db, 'parties', partyId));
+      
+      // Track game abandonment if party was in progress
+      if (partyData?.status === 'ACTIVE' || partyData?.status === 'LOBBY') {
+        const participantCount = partyData?.participantCount || 0;
+        const phase = partyData?.status === 'ACTIVE' ? 'in_progress' : 'lobby';
+        trackGameAbandoned(partyId, phase, participantCount);
+      }
+      
       // Party will be removed from the list automatically via the real-time listener
     } catch (error) {
       console.error('Error deleting party:', error);
+      trackError('delete_party_failed', error.message, 'Home');
       alert('Failed to delete party: ' + error.message);
     }
   };
@@ -617,7 +577,7 @@ export function Home() {
                   ✨
                 </div>
                 <h3 className="text-xl font-bold text-white mb-3 tracking-tight">Zero-Hassle Setup</h3>
-                <p className="text-sm text-gray-100">Guests simply paste a link from Amazon or Etsy. We auto-magically create a beautiful gift card. No manual entry.</p>
+                <p className="text-sm text-gray-100">Guests simply paste a link from Amazon or Etsy. We'll try to auto-create a beautiful gift card, with manual entry as a fallback if scraping fails.</p>
               </div>
               <div className="text-center p-8 bg-white/5 backdrop-blur-sm rounded-2xl border border-white/10 shadow-lg hover:shadow-xl transition-all">
                 <div 
@@ -753,9 +713,19 @@ export function Home() {
       
       {/* My Parties Section */}
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 z-10 pt-24">
-        <div className="mb-8">
-          <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">My Parties</h2>
-          <p className="text-slate-400">Manage your gift exchanges and join ongoing games</p>
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">My Parties</h2>
+            <p className="text-slate-400">Manage your gift exchanges and join ongoing games</p>
+          </div>
+          {user && (
+            <button
+              onClick={() => setShowCreatePartyModal(true)}
+              className="px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold rounded-lg hover:from-indigo-600 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl"
+            >
+              Host New Party
+            </button>
+          )}
         </div>
 
         {loadingParties && (

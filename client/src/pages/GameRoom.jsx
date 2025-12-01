@@ -11,6 +11,9 @@ import { useGameSounds } from '../hooks/useGameSounds.js';
 import { GiftGrid } from '../components/GiftGrid.jsx';
 import { Button } from '../components/ui/Button.jsx';
 import { GameAuditTrail } from '../components/GameAuditTrail.jsx';
+import { GameTicker } from '../components/GameTicker.jsx';
+import { GamePlayByPlay } from '../components/GamePlayByPlay.jsx';
+import { SimulationControls } from '../components/dev/SimulationControls.jsx';
 import { ReactionBar } from '../components/ReactionBar.jsx';
 import { ReactionOverlay } from '../components/ReactionOverlay.jsx';
 import { apiRequest } from '../utils/api.js';
@@ -22,6 +25,7 @@ export function GameRoom({ partyId }) {
   const { playTurnNotification, playSteal, playUnwrap } = useGameSounds();
   const [userNames, setUserNames] = useState({});
   const [userEmails, setUserEmails] = useState({});
+  const [revealingGiftId, setRevealingGiftId] = useState(null);
   const prevIsMyTurnRef = useRef(false);
 
   // Debug: Log socket and connection status
@@ -45,6 +49,55 @@ export function GameRoom({ partyId }) {
     
     prevIsMyTurnRef.current = isMyTurn;
   }, [derived.isMyTurn, state.status, playTurnNotification]);
+
+  // Listen for action_started events to trigger reveal animations and auto-scroll
+  // CRITICAL: Only trigger "Drumroll" animation for PICK (Unwrap) events, not STEAL
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleActionStarted = ({ type, giftId, playerId }) => {
+      // Only trigger reveal animation for PICK (unwrap) events
+      // STEAL events should happen immediately without the shake/drumroll animation
+      if (type === 'pick') {
+        // Set revealing gift ID to trigger animation
+        setRevealingGiftId(giftId);
+        
+        // Auto-scroll to gift immediately
+        setTimeout(() => {
+          const giftElement = document.getElementById(`gift-${giftId}`);
+          if (giftElement) {
+            giftElement.scrollIntoView({ 
+              behavior: 'smooth', 
+              block: 'center' 
+            });
+          }
+        }, 100); // Small delay to ensure DOM is ready
+        
+        // Clear revealing state after 3s (when reveal completes)
+        setTimeout(() => {
+          setRevealingGiftId(null);
+        }, 3000);
+      } else if (type === 'steal') {
+        // For STEAL events, just auto-scroll (no animation)
+        // The gift is already known, so no need for reveal animation
+        setTimeout(() => {
+          const giftElement = document.getElementById(`gift-${giftId}`);
+          if (giftElement) {
+            giftElement.scrollIntoView({ 
+              behavior: 'smooth', 
+              block: 'center' 
+            });
+          }
+        }, 100);
+      }
+    };
+
+    socket.on('action_started', handleActionStarted);
+
+    return () => {
+      socket.off('action_started', handleActionStarted);
+    };
+  }, [socket]);
 
   // Listen for game actions to play appropriate sounds
   useEffect(() => {
@@ -118,23 +171,30 @@ export function GameRoom({ partyId }) {
       return { roundsRemaining: 0, totalRounds: 0, currentRound: 0 };
     }
     
-    const { turnOrder, currentPlayerId, stealStack, isBoomerangPhase, config } = state.gameState;
-    const currentIndex = turnOrder.indexOf(currentPlayerId);
-    const totalPlayers = turnOrder.length;
+    const { turnQueue, currentTurnIndex, stealStack, isBoomerangPhase, config } = state.gameState;
+    
+    if (!turnQueue || turnQueue.length === 0) {
+      return { roundsRemaining: 0, totalRounds: 0, currentRound: 0 };
+    }
+    
+    const totalTurns = turnQueue.length;
+    // Clamp currentTurnIndex to valid range (0 to turnQueue.length)
+    // This handles cases where index goes out of bounds due to steals not advancing the index
+    const currentIndex = Math.min(currentTurnIndex || 0, totalTurns);
+    // Turns remaining should only count the turn queue, not steal chains
+    // According to GAME_RULES.md Rule 2: STEAL does NOT increment currentTurnIndex
+    const roundsRemaining = Math.max(0, totalTurns - currentIndex);
     
     if (isBoomerangPhase) {
-      const remainingInBoomerang = currentIndex + 1;
       return {
-        roundsRemaining: remainingInBoomerang + (stealStack?.length || 0),
-        totalRounds: totalPlayers * 2,
+        roundsRemaining,
+        totalRounds: totalTurns,
         currentRound: 2,
         phase: 'boomerang'
       };
     } else {
-      const remainingInNormal = (totalPlayers - currentIndex);
-      const totalTurns = config?.returnToStart ? totalPlayers * 2 : totalPlayers;
       return {
-        roundsRemaining: remainingInNormal + (stealStack?.length || 0),
+        roundsRemaining,
         totalRounds: totalTurns,
         currentRound: 1,
         phase: 'normal'
@@ -144,7 +204,8 @@ export function GameRoom({ partyId }) {
 
   const roundsInfo = calculateRoundsRemaining();
   const isAdmin = party?.adminId === user?.uid;
-  const currentPlayerId = state.participants[state.currentTurnIndex]?.id;
+  // Use activePlayerId from state machine (accounts for pendingVictimId)
+  const currentPlayerId = state.activePlayerId;
   const allGiftsFrozen = Object.values(state.gifts).filter(g => !g.isWrapped).every(g => g.isFrozen);
 
   const getCurrentPlayerName = () => {
@@ -242,6 +303,19 @@ export function GameRoom({ partyId }) {
       {/* Reaction Overlay - Full screen layer for flying emojis */}
       {socket && <ReactionOverlay socket={socket} />}
       
+      {/* FORCE PLAY-BY-PLAY AT TOP - UNCONDITIONAL */}
+      <div className="w-full bg-red-600 border-8 border-yellow-400 p-8 mb-4 z-50">
+        <h1 className="text-4xl font-bold text-white mb-4">🎬 PLAY-BY-PLAY FEED (FORCED TO TOP)</h1>
+        <GamePlayByPlay
+          state={state}
+          userNames={userNames}
+          userEmails={userEmails}
+        />
+      </div>
+      
+      {/* Developer Simulation Controls (includes Audit Trail) - Only visible when ?sim=true */}
+      <SimulationControls socket={socket} partyId={partyId} gameState={state.gameState} />
+      
       <div className="max-w-6xl mx-auto p-6">
         {/* Connection Health Toast */}
         {!state.ui.isSocketConnected && (
@@ -306,13 +380,16 @@ export function GameRoom({ partyId }) {
           <div className="mb-6">
             <div className="flex overflow-x-auto justify-center gap-2 pb-2">
               {state.participants.map((participant, index) => {
-                const isCurrent = index === state.currentTurnIndex;
+                // Use activePlayerId to determine if this participant is currently active
+                const isCurrent = participant.id === state.activePlayerId;
                 const playerName = participant.id === user?.uid 
                   ? 'You' 
                   : (userNames[participant.id] || userEmails[participant.id] || `Player ${participant.id.slice(0, 8)}`);
+                // For past/future indication, use turnQueue index if available, otherwise fall back to participant index
+                const participantTurnIndex = state.turnQueue?.indexOf(participant.id) ?? index;
                 const isPast = state.gameState?.isBoomerangPhase 
-                  ? index > state.currentTurnIndex
-                  : index < state.currentTurnIndex;
+                  ? participantTurnIndex > state.currentTurnIndex
+                  : participantTurnIndex < state.currentTurnIndex;
                 
                 return (
                   <div
@@ -374,6 +451,51 @@ export function GameRoom({ partyId }) {
         )}
       </div>
 
+      {/* Debug info - always show */}
+      <div className="w-full max-w-4xl mx-auto mb-2 p-2 bg-yellow-500/20 border border-yellow-500/50 rounded text-xs text-yellow-200 font-mono">
+        🔍 TICKER DEBUG: status="{state.status}", activities={state.activities?.length || 0}, phase={state.gameState?.phase || 'N/A'}
+      </div>
+
+      {/* FORCE TEST: This should ALWAYS be visible */}
+      <div className="w-full max-w-4xl mx-auto mb-4 p-4 bg-red-500 border-4 border-red-600 rounded text-white font-bold text-lg">
+        🚨 TEST: If you see this, the render is working. Looking for GamePlayByPlay below...
+      </div>
+
+      {/* Live Activity Ticker */}
+      {state.status === 'PLAYING' ? (
+        <div className="w-full max-w-4xl mx-auto mb-6">
+          {state.activities.length > 0 ? (
+            <GameTicker
+              activities={state.activities}
+              gifts={Object.values(state.gifts)}
+              userNames={userNames}
+              userEmails={userEmails}
+            />
+          ) : (
+            <div className="p-4 bg-slate-800/40 border border-white/5 rounded-xl text-center text-slate-400 text-sm">
+              📋 Activity feed will appear here after the first move...
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="w-full max-w-4xl mx-auto mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-center text-red-300 text-sm">
+          ⚠️ Ticker hidden: status is "{state.status}" (needs "PLAYING")
+        </div>
+      )}
+
+      {/* Play-by-Play Feed - FORCE RENDER FOR TESTING */}
+      <div className="w-full max-w-4xl mx-auto mb-4 p-4 bg-purple-500 border-4 border-purple-600 rounded text-white font-bold">
+        🟣 BEFORE GamePlayByPlay Component
+      </div>
+      <GamePlayByPlay
+        state={state}
+        userNames={userNames}
+        userEmails={userEmails}
+      />
+      <div className="w-full max-w-4xl mx-auto mb-4 p-4 bg-purple-500 border-4 border-purple-600 rounded text-white font-bold">
+        🟣 AFTER GamePlayByPlay Component
+      </div>
+
       {/* Gift Grid */}
       <GiftGrid
         gifts={state.gifts}
@@ -384,6 +506,7 @@ export function GameRoom({ partyId }) {
         userId={user?.uid}
         userNames={userNames}
         userEmails={userEmails}
+        revealingGiftId={revealingGiftId}
       />
 
       {/* End Turn Button */}

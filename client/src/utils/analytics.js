@@ -169,3 +169,161 @@ export const trackButtonClick = (buttonName, location) => {
   });
 };
 
+/**
+ * Track game completion
+ * @param {string} partyId - Party ID
+ * @param {number} duration - Game duration in seconds
+ * @param {number} totalActions - Total number of actions in the game
+ * @param {number} stealCount - Total number of steals
+ * @param {boolean} boomerangMode - Whether boomerang mode was enabled
+ */
+export const trackGameComplete = (partyId, duration, totalActions, stealCount, boomerangMode) => {
+  trackEvent('game_complete', {
+    party_id: partyId,
+    duration_seconds: duration,
+    total_actions: totalActions,
+    steal_count: stealCount,
+    boomerang_mode: boomerangMode,
+  });
+};
+
+/**
+ * Track game abandonment
+ * @param {string} partyId - Party ID
+ * @param {string} phase - Phase where game was abandoned (lobby, setup, in_progress)
+ * @param {number} participantCount - Number of participants when abandoned
+ */
+export const trackGameAbandoned = (partyId, phase, participantCount) => {
+  trackEvent('game_abandoned', {
+    party_id: partyId,
+    phase: phase,
+    participant_count: participantCount,
+  });
+};
+
+/**
+ * Track participant invite
+ * @param {string} partyId - Party ID
+ * @param {string} method - Invite method (email, share_link, etc.)
+ * @param {boolean} success - Whether invite was successfully sent
+ */
+export const trackInviteSent = (partyId, method, success) => {
+  trackEvent('invite_sent', {
+    party_id: partyId,
+    method: method,
+    success: success,
+  });
+};
+
+/**
+ * Track participant join via invite
+ * @param {string} partyId - Party ID
+ * @param {string} inviteMethod - How they joined (email, share_link, direct)
+ */
+export const trackParticipantJoin = (partyId, inviteMethod) => {
+  trackEvent('participant_join', {
+    party_id: partyId,
+    invite_method: inviteMethod,
+  });
+};
+
+/**
+ * Track gift link scraping
+ * @param {string} partyId - Party ID
+ * @param {boolean} success - Whether scraping was successful
+ * @param {string} error - Error message if failed
+ */
+export const trackGiftScrape = (partyId, success, error = null) => {
+  trackEvent('gift_scrape', {
+    party_id: partyId,
+    success: success,
+    error: error,
+  });
+};
+
+/**
+ * Track share action
+ * @param {string} partyId - Party ID
+ * @param {string} method - Share method (copy_link, email, social, etc.)
+ */
+export const trackShare = (partyId, method) => {
+  trackEvent('share', {
+    party_id: partyId,
+    method: method,
+  });
+};
+
+/**
+ * Track reaction/emoji usage
+ * @param {string} partyId - Party ID
+ * @param {string} reactionType - Type of reaction (emoji, etc.)
+ * @param {string} giftId - Gift ID that was reacted to
+ */
+export const trackReaction = (partyId, reactionType, giftId) => {
+  trackEvent('reaction', {
+    party_id: partyId,
+    reaction_type: reactionType,
+    gift_id: giftId,
+  });
+};
+
+/**
+ * Track fulfillment action
+ * @param {string} partyId - Party ID
+ * @param {string} action - Action type (address_added, fulfillment_confirmed)
+ */
+export const trackFulfillment = (partyId, action) => {
+  trackEvent('fulfillment', {
+    party_id: partyId,
+    action: action,
+  });
+};
+
+/**
+ * Track error
+ * @param {string} errorType - Type of error
+ * @param {string} errorMessage - Error message
+ * @param {string} location - Where error occurred
+ */
+export const trackError = (errorType, errorMessage, location) => {
+  trackEvent('error', {
+    error_type: errorType,
+    error_message: errorMessage,
+    location: location,
+  });
+};
+
+/**
+ * Track feature usage
+ * @param {string} featureName - Name of the feature
+ * @param {object} featureData - Additional feature data
+ */
+export const trackFeatureUsage = (featureName, featureData = {}) => {
+  trackEvent('feature_usage', {
+    feature_name: featureName,
+    ...featureData,
+  });
+};
+
+/**
+ * Track session duration
+ * @param {string} page - Page name
+ * @param {number} duration - Duration in seconds
+ */
+export const trackSessionDuration = (page, duration) => {
+  trackEvent('session_duration', {
+    page: page,
+    duration_seconds: duration,
+  });
+};
+
+/**
+ * Track user engagement milestone
+ * @param {string} milestone - Milestone name (first_party, first_game, etc.)
+ */
+export const trackMilestone = (milestone) => {
+  trackEvent('milestone', {
+    milestone: milestone,
+  });
+};
+

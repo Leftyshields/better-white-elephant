@@ -4,7 +4,7 @@
  */
 import { useCallback } from 'react';
 import { useSound } from '../contexts/SoundContext.jsx';
-import { playPop, playSwoosh, playAlert, playSplat, playClink } from '../utils/soundEngine.js';
+import { playPop, playSwoosh, playAlert, playSplat, playClink, playVictory } from '../utils/soundEngine.js';
 
 export function useGameSounds() {
   const { isMuted } = useSound();
@@ -29,12 +29,20 @@ export function useGameSounds() {
     playSplat(isMuted);
   }, [isMuted]);
 
+  const playVictorySound = useCallback(() => {
+    playVictory(isMuted);
+  }, [isMuted]);
+
   return {
     playReaction,
     playSteal,
     playUnwrap,
     playTurnNotification,
     playSplatSound,
+    playVictory: playVictorySound,
   };
 }
+
+
+
 
