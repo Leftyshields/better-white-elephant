@@ -28,7 +28,7 @@ import { db } from '../utils/firebase.js';
 export function GameBoard({ partyId, onEndTurn }) {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { gameState, pickGift, stealGift, endTurn, connected, socket, emitReaction } = useGameSocket(partyId);
+  const { gameState, pickGift, stealGift, endTurn, connected, socket, emitReaction, connectionError } = useGameSocket(partyId);
   
   // Use onEndTurn prop if provided, otherwise fall back to endTurn from hook
   const handleEndTurn = onEndTurn || endTurn;
