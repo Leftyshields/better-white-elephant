@@ -17,15 +17,46 @@ dotenv.config();
 
 const app = express();
 const httpServer = createServer(app);
-// CORS origins - allow both localhost and hostname for development
-const allowedOrigins = [
-  process.env.CLIENT_URL || 'http://localhost:5173',
-  'http://localhost:5173',
-  'http://sandbox-mac-mini.local:5173',
-  'https://stealorreveal.com',
-  'https://www.stealorreveal.com',
-  'https://better-white-elephant.web.app',
-].filter(Boolean);
+// CORS origins - configured via environment variables with safe defaults
+// ALLOWED_ORIGINS can be a comma-separated list of origins
+// CLIENT_URL is also included for backwards compatibility
+const buildAllowedOrigins = () => {
+  const origins = new Set();
+  
+  // Always include localhost for local development (safe default)
+  origins.add('http://localhost:5173');
+  
+  // Include CLIENT_URL if set (backwards compatibility)
+  if (process.env.CLIENT_URL) {
+    origins.add(process.env.CLIENT_URL);
+  }
+  
+  // Parse ALLOWED_ORIGINS from environment (comma-separated)
+  if (process.env.ALLOWED_ORIGINS) {
+    process.env.ALLOWED_ORIGINS.split(',').forEach(origin => {
+      const trimmed = origin.trim();
+      if (trimmed) {
+        origins.add(trimmed);
+      }
+    });
+  }
+  
+  // In production, include common production domains if not already set
+  // This provides a fallback if env vars aren't configured
+  if (process.env.NODE_ENV === 'production') {
+    // Only add these if ALLOWED_ORIGINS wasn't explicitly set
+    // This allows production to work out of the box while still allowing override
+    if (!process.env.ALLOWED_ORIGINS) {
+      origins.add('https://stealorreveal.com');
+      origins.add('https://www.stealorreveal.com');
+      origins.add('https://better-white-elephant.web.app');
+    }
+  }
+  
+  return Array.from(origins);
+};
+
+const allowedOrigins = buildAllowedOrigins();
 
 // Helper function to validate partyId format
 function isValidPartyId(partyId) {

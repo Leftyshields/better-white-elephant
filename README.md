@@ -40,6 +40,9 @@ better-white-elephant/
    - Copy `.env.example` to `.env` in root and server directories
    - Add your Firebase credentials
    - Add Redis connection string
+   - **Server CORS**: Set `ALLOWED_ORIGINS` (comma-separated) or `CLIENT_URL` for allowed origins
+     - Example: `ALLOWED_ORIGINS=https://stealorreveal.com,https://www.stealorreveal.com`
+     - Defaults to localhost for development, production domains for production
    - For Functions: Set up Resend API key (see [DEPLOY_FUNCTIONS.md](./DEPLOY_FUNCTIONS.md))
 
 3. **Firebase setup:**
