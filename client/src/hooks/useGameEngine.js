@@ -22,6 +22,8 @@ export function useGameEngine(partyId) {
   const pendingOptimisticUpdateRef = useRef(null);
   const giftsRef = useRef(gifts);
   const participantsRef = useRef(participants);
+  const retryCountRef = useRef(0);
+  const retryTimeoutRef = useRef(null);
 
   // Keep refs in sync with latest values
   useEffect(() => {
@@ -33,27 +35,66 @@ export function useGameEngine(partyId) {
   useEffect(() => {
     if (!partyId || !user) return;
 
-    // Get auth token and connect
-    auth.currentUser?.getIdToken().then((token) => {
-      const socket = io(SERVER_URL, {
-        auth: { token },
-        transports: ['websocket'],
-      });
+    const connectSocket = () => {
+      // Get auth token and connect
+      auth.currentUser?.getIdToken().then((token) => {
+        console.log(`🔌 Attempting to connect to server: ${SERVER_URL}`);
+        
+        const socket = io(SERVER_URL, {
+          auth: { token },
+          transports: ['websocket', 'polling'], // Add polling as fallback
+          reconnection: true,
+          reconnectionDelay: 1000,
+          reconnectionDelayMax: 5000,
+          reconnectionAttempts: 5,
+          timeout: 10000, // 10 second timeout
+        });
 
-      socketRef.current = socket;
-      setSocket(socket);
+        socketRef.current = socket;
+        setSocket(socket);
 
-      // Socket event listeners
-      socket.on('connect', () => {
-        console.log('✅ Socket connected');
-        dispatch(gameActions.socketConnected());
-        socket.emit('join-party', partyId);
-      });
+        // Socket event listeners
+        socket.on('connect', () => {
+          console.log('✅ Socket connected', { socketId: socket.id, serverUrl: SERVER_URL });
+          dispatch(gameActions.socketConnected());
+          retryCountRef.current = 0;
+          socket.emit('join-party', partyId);
+        });
 
-      socket.on('disconnect', () => {
-        console.log('❌ Socket disconnected');
-        dispatch(gameActions.socketDisconnected());
-      });
+        socket.on('connect_error', (error) => {
+          const errorMessage = error.message || 'Connection failed';
+          console.error('❌ Socket connection error:', {
+            error: errorMessage,
+            serverUrl: SERVER_URL,
+            retryCount: retryCountRef.current,
+          });
+          
+          dispatch(gameActions.socketDisconnected());
+          
+          // Clear any existing retry timeout
+          if (retryTimeoutRef.current) {
+            clearTimeout(retryTimeoutRef.current);
+          }
+          
+          // Don't retry indefinitely - show error after 3 failed attempts
+          if (retryCountRef.current < 3) {
+            retryCountRef.current++;
+            const retryDelay = Math.min(1000 * Math.pow(2, retryCountRef.current), 10000); // Exponential backoff, max 10s
+            console.log(`🔄 Retrying connection in ${retryDelay}ms (attempt ${retryCountRef.current + 1}/3)`);
+            retryTimeoutRef.current = setTimeout(() => {
+              socket.disconnect();
+              connectSocket();
+            }, retryDelay);
+          } else {
+            console.error('❌ Max retry attempts reached. Connection failed.');
+            dispatch(gameActions.setError(`Failed to connect to server at ${SERVER_URL}. Please check that the server is running.`));
+          }
+        });
+
+        socket.on('disconnect', () => {
+          console.log('❌ Socket disconnected');
+          dispatch(gameActions.socketDisconnected());
+        });
 
       socket.on('game-state', (gameState) => {
         // Use refs to get latest values

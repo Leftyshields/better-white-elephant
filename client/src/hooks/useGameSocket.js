@@ -12,32 +12,72 @@ export function useGameSocket(partyId) {
   const [gameState, setGameState] = useState(null);
   const [connected, setConnected] = useState(false);
   const [socket, setSocket] = useState(null);
+  const [connectionError, setConnectionError] = useState(null);
   const socketRef = useRef(null);
+  const retryCountRef = useRef(0);
+  const retryTimeoutRef = useRef(null);
 
   useEffect(() => {
     if (!partyId) return;
 
-    // Get auth token
-    auth.currentUser?.getIdToken().then((token) => {
-      // Connect to socket
-      const socket = io(SERVER_URL, {
-        auth: { token },
-        transports: ['websocket'],
-      });
+    const connectSocket = () => {
+      // Get auth token
+      auth.currentUser?.getIdToken().then((token) => {
+        console.log(`🔌 Attempting to connect to server: ${SERVER_URL}`);
+        
+        // Connect to socket
+        const socket = io(SERVER_URL, {
+          auth: { token },
+          transports: ['websocket', 'polling'], // Add polling as fallback
+          reconnection: true,
+          reconnectionDelay: 1000,
+          reconnectionDelayMax: 5000,
+          reconnectionAttempts: 5,
+          timeout: 10000, // 10 second timeout
+        });
 
-      socketRef.current = socket;
-      setSocket(socket);
+        socketRef.current = socket;
+        setSocket(socket);
 
-      socket.on('connect', () => {
-        console.log('✅ Socket connected', { socketId: socket.id, partyId });
-        setConnected(true);
-        socket.emit('join-party', partyId);
-        console.log('📤 Emitted join-party for', partyId);
-      });
+        socket.on('connect', () => {
+          console.log('✅ Socket connected', { socketId: socket.id, partyId, serverUrl: SERVER_URL });
+          setConnected(true);
+          setConnectionError(null);
+          retryCountRef.current = 0;
+          socket.emit('join-party', partyId);
+          console.log('📤 Emitted join-party for', partyId);
+        });
 
-      socket.on('connect_error', (error) => {
-        console.error('❌ Socket connection error:', error);
-      });
+        socket.on('connect_error', (error) => {
+          const errorMessage = error.message || 'Connection failed';
+          console.error('❌ Socket connection error:', {
+            error: errorMessage,
+            serverUrl: SERVER_URL,
+            retryCount: retryCountRef.current,
+          });
+          
+          setConnectionError(`Cannot connect to server at ${SERVER_URL}. ${errorMessage}`);
+          setConnected(false);
+          
+          // Clear any existing retry timeout
+          if (retryTimeoutRef.current) {
+            clearTimeout(retryTimeoutRef.current);
+          }
+          
+          // Don't retry indefinitely - show error after 3 failed attempts
+          if (retryCountRef.current < 3) {
+            retryCountRef.current++;
+            const retryDelay = Math.min(1000 * Math.pow(2, retryCountRef.current), 10000); // Exponential backoff, max 10s
+            console.log(`🔄 Retrying connection in ${retryDelay}ms (attempt ${retryCountRef.current + 1}/3)`);
+            retryTimeoutRef.current = setTimeout(() => {
+              socket.disconnect();
+              connectSocket();
+            }, retryDelay);
+          } else {
+            console.error('❌ Max retry attempts reached. Connection failed.');
+            setConnectionError(`Failed to connect after ${retryCountRef.current} attempts. Please check that the server is running at ${SERVER_URL}`);
+          }
+        });
 
       socket.on('party-joined', ({ partyId: joinedPartyId, roomName }) => {
         console.log('✅ Successfully joined party room:', { joinedPartyId, roomName, socketId: socket.id });
@@ -74,12 +114,22 @@ export function useGameSocket(partyId) {
       });
     });
 
+    };
+
+    connectSocket();
+
     return () => {
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
+      }
       if (socketRef.current) {
         socketRef.current.disconnect();
         socketRef.current = null;
         setSocket(null);
       }
+      retryCountRef.current = 0;
+      setConnectionError(null);
     };
   }, [partyId]);
 
@@ -124,6 +174,7 @@ export function useGameSocket(partyId) {
     gameState,
     connected,
     socket,
+    connectionError,
     emitAction,
     emitReaction,
     pickGift: (giftId) => {

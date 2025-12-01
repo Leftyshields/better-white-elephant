@@ -678,7 +678,20 @@ export function GameBoard({ partyId, onEndTurn }) {
         <div className="text-center">
           <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mb-4"></div>
           <p className="text-white text-lg">Connecting to game...</p>
-          {!connected && <p className="text-gray-400 text-sm mt-2">Establishing socket connection...</p>}
+          {!connected && (
+          <div className="text-center mt-4">
+            <p className="text-gray-400 text-sm mb-2">Establishing socket connection...</p>
+            {connectionError && (
+              <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-2 text-sm text-red-300 max-w-md mx-auto">
+                <p className="font-semibold mb-1">Connection Error</p>
+                <p className="text-xs">{connectionError}</p>
+                <p className="text-xs mt-2 text-gray-400">
+                  Server URL: {import.meta.env.VITE_SERVER_URL || 'http://localhost:3001'}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
           {connected && !gameState && <p className="text-gray-400 text-sm mt-2">Waiting for game state...</p>}
         </div>
       </div>
