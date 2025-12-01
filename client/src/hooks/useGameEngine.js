@@ -168,20 +168,25 @@ export function useGameEngine(partyId) {
           pendingOptimisticUpdateRef.current = null;
         }
       });
-
-      return () => {
-        socket.disconnect();
-        socketRef.current = null;
-        setSocket(null);
-      };
+    }).catch((error) => {
+      console.error('❌ Error getting auth token:', error);
+      dispatch(gameActions.setError('Failed to authenticate. Please sign in again.'));
     });
+    };
+
+    connectSocket();
 
     return () => {
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
+      }
       if (socketRef.current) {
         socketRef.current.disconnect();
         socketRef.current = null;
         setSocket(null);
       }
+      retryCountRef.current = 0;
     };
   }, [partyId, user]);
 
