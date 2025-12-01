@@ -86,6 +86,41 @@ function cleanForFirestore(obj, depth = 0) {
 }
 
 /**
+ * Convert Firestore Timestamps back to Date objects (for loading from Firestore)
+ */
+function convertFirestoreTimestamps(obj) {
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
+  
+  // Handle Firestore Timestamp objects - convert to Date
+  if (obj && typeof obj === 'object' && obj.toDate && typeof obj.toDate === 'function') {
+    return obj.toDate();
+  }
+  
+  // Handle Firestore Timestamp objects (alternative format with seconds/nanoseconds)
+  if (obj && typeof obj === 'object' && obj.seconds !== undefined) {
+    return new Date(obj.seconds * 1000 + (obj.nanoseconds || 0) / 1000000);
+  }
+  
+  // Handle Arrays
+  if (Array.isArray(obj)) {
+    return obj.map(item => convertFirestoreTimestamps(item));
+  }
+  
+  // Handle plain objects
+  if (typeof obj === 'object' && !(obj instanceof Date) && !(obj instanceof Map) && !(obj instanceof Set)) {
+    const result = {};
+    for (const [key, value] of Object.entries(obj)) {
+      result[key] = convertFirestoreTimestamps(value);
+    }
+    return result;
+  }
+  
+  return obj;
+}
+
+/**
  * Convert Firestore Timestamps to ISO strings for Redis storage
  */
 function cleanForRedis(obj) {
@@ -151,30 +186,46 @@ export async function saveGameState(partyId, gameState, ttl = 86400) {
   // Create a JSON-safe version for Redis (convert Firestore Timestamps to ISO strings)
   const redisState = cleanForRedis(cleanedState);
   
-  // Save to Redis (fast access)
-  await redisClient.setEx(redisKey, ttl, JSON.stringify(redisState));
-  
-  // Save to Firestore (persistence)
+  // CRITICAL: Save to Firestore FIRST (persistence is more important than speed)
   // Firestore requires plain objects with no undefined values
+  let firestoreSaved = false;
   try {
     await db.collection('parties').doc(partyId).update({
       gameState: cleanedState,
       gameStateUpdatedAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
     });
+    firestoreSaved = true;
+    console.log(`✅ Saved game state to Firestore for party ${partyId} (${JSON.stringify(cleanedState).length} bytes)`);
   } catch (error) {
-    console.error(`Error saving game state to Firestore for party ${partyId}:`, error);
-    console.error(`Error details:`, error.message, error.details);
+    console.error(`❌ CRITICAL: Error saving game state to Firestore for party ${partyId}:`, error);
+    console.error(`   Error details:`, error.message, error.details);
     // Log the problematic state structure for debugging (first 1000 chars)
     try {
       const debugStr = JSON.stringify(cleanedState, null, 2);
-      console.error(`Game state structure (first 1000 chars):`, debugStr.substring(0, 1000));
+      console.error(`   Game state structure (first 1000 chars):`, debugStr.substring(0, 1000));
       // Also log the size
-      console.error(`Game state size:`, JSON.stringify(cleanedState).length, 'bytes');
+      console.error(`   Game state size:`, JSON.stringify(cleanedState).length, 'bytes');
     } catch (e) {
-      console.error(`Could not stringify game state for debugging:`, e.message);
+      console.error(`   Could not stringify game state for debugging:`, e.message);
     }
-    // Don't throw - Redis save succeeded, Firestore is backup
+    // CRITICAL: If Firestore save fails, this is a serious issue
+    // Game state will be lost if Redis expires
+    console.error(`⚠️ WARNING: Game state NOT persisted to Firestore for party ${partyId}. Game may be lost if Redis expires.`);
+  }
+  
+  // Save to Redis (fast access) - do this even if Firestore save failed
+  // This ensures the game can continue even if Firestore had issues
+  try {
+    await redisClient.setEx(redisKey, ttl, JSON.stringify(redisState));
+    console.log(`✅ Saved game state to Redis for party ${partyId} (TTL: ${ttl}s)`);
+  } catch (error) {
+    console.error(`❌ Error saving game state to Redis for party ${partyId}:`, error);
+    // If both Redis and Firestore fail, this is critical
+    if (!firestoreSaved) {
+      console.error(`❌ CRITICAL: Both Redis and Firestore saves failed for party ${partyId}! Game state may be lost!`);
+      throw new Error(`Failed to save game state: Both Redis and Firestore failed`);
+    }
   }
 }
 
@@ -202,15 +253,32 @@ export async function loadGameState(partyId) {
       if (partyData.status === 'ACTIVE' && partyData.gameState) {
         const gameState = partyData.gameState;
         console.log(`🔄 Restoring game state from Firestore for party ${partyId}`);
+        console.log(`   Party status: ${partyData.status}, Has gameState: ${!!partyData.gameState}`);
         
-        // Restore to Redis for future fast access
-        await redisClient.setEx(redisKey, 86400, JSON.stringify(gameState));
+        // Convert Firestore Timestamps back to Date objects for compatibility
+        // (Firestore Timestamps need to be converted for the game engine)
+        const convertedState = convertFirestoreTimestamps(gameState);
         
-        return gameState;
+        // Restore to Redis for future fast access (convert back to JSON-safe format)
+        const redisState = cleanForRedis(convertedState);
+        await redisClient.setEx(redisKey, 86400, JSON.stringify(redisState));
+        
+        return convertedState;
+      } else {
+        console.log(`⚠️ Party ${partyId} status: ${partyData.status}, has gameState: ${!!partyData.gameState}`);
+        if (partyData.status !== 'ACTIVE') {
+          console.log(`   Party is not ACTIVE, cannot restore game state`);
+        }
+        if (!partyData.gameState) {
+          console.log(`   No gameState found in Firestore for party ${partyId}`);
+        }
       }
+    } else {
+      console.log(`⚠️ Party document ${partyId} does not exist in Firestore`);
     }
   } catch (error) {
-    console.error(`Error loading game state from Firestore for party ${partyId}:`, error);
+    console.error(`❌ Error loading game state from Firestore for party ${partyId}:`, error);
+    console.error(`   Error stack:`, error.stack);
   }
   
   return null;
