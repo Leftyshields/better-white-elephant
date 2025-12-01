@@ -326,8 +326,16 @@ export function GameRoom({ partyId }) {
 
       {/* Error Toast */}
       {state.ui.lastError && (
-        <div className="fixed top-4 right-4 bg-red-500/10 text-red-300 border border-red-500/20 rounded-lg px-4 py-2 text-sm z-50 animate-fade-in">
-          {state.ui.lastError}
+        <div className="fixed top-4 right-4 bg-red-500/10 text-red-300 border border-red-500/20 rounded-lg px-4 py-2 text-sm z-50 animate-fade-in max-w-md">
+          <div className="flex items-start justify-between gap-2">
+            <span>{state.ui.lastError}</span>
+            <Link
+              to={`/contact?type=bug&message=${encodeURIComponent(`Error: ${state.ui.lastError}\n\nPage: ${window.location.href}\n\nTimestamp: ${new Date().toISOString()}`)}`}
+              className="text-blue-400 hover:text-blue-300 underline text-xs whitespace-nowrap ml-2"
+            >
+              Report
+            </Link>
+          </div>
         </div>
       )}
 

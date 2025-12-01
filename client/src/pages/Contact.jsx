@@ -1,18 +1,63 @@
 /**
- * Contact Page - Web form for support, security issues, and general inquiries
+ * Contact Page - Web form for support, security issues, bug reports, and general inquiries
  */
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { EnvelopeIcon, ShieldCheckIcon, UserIcon, ChatBubbleLeftRightIcon } from '@heroicons/react/24/outline';
+import { useState, useEffect } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { EnvelopeIcon, ShieldCheckIcon, UserIcon, ChatBubbleLeftRightIcon, BugAntIcon } from '@heroicons/react/24/outline';
 
 export function Contact() {
+  const [searchParams] = useSearchParams();
+  const typeParam = searchParams.get('type');
+  
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     subject: '',
     message: '',
-    type: 'general', // 'general', 'account', 'security'
+    type: typeParam || 'general', // 'general', 'account', 'security', 'bug'
   });
+  
+  // Pre-fill bug report info if coming from bug report link
+  useEffect(() => {
+    if (typeParam === 'bug') {
+      // Pre-fill with browser and page info for bug reports
+      const userAgent = navigator.userAgent;
+      const url = window.location.href;
+      const timestamp = new Date().toISOString();
+      const messageParam = searchParams.get('message');
+      
+      setFormData(prev => ({
+        ...prev,
+        type: 'bug',
+        subject: 'Bug Report',
+        message: messageParam || `**Bug Description:**
+[Describe what happened]
+
+**Steps to Reproduce:**
+1. 
+2. 
+3. 
+
+**Expected Behavior:**
+[What should have happened]
+
+**Actual Behavior:**
+[What actually happened]
+
+**Browser Info:**
+${userAgent}
+
+**Page URL:**
+${url}
+
+**Timestamp:**
+${timestamp}
+
+**Additional Context:**
+[Any other relevant information]`,
+      }));
+    }
+  }, [typeParam, searchParams]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState(null); // 'success' | 'error' | null
   const [errorMessage, setErrorMessage] = useState('');
@@ -145,6 +190,7 @@ export function Contact() {
                 className="w-full px-4 py-3 bg-slate-800/50 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               >
                 <option value="general">General Inquiry</option>
+                <option value="bug">Bug Report</option>
                 <option value="account">Account Issue</option>
                 <option value="security">Security Issue / Unauthorized Access</option>
               </select>
@@ -218,6 +264,30 @@ export function Contact() {
                 placeholder="Please provide as much detail as possible..."
               />
             </div>
+
+            {/* Bug Report Notice */}
+            {formData.type === 'bug' && (
+              <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-4">
+                <div className="flex items-start gap-2">
+                  <BugAntIcon className="w-5 h-5 text-orange-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-orange-300 font-semibold mb-1">Bug Report</p>
+                    <p className="text-sm text-slate-300">
+                      Please include as much detail as possible about the bug, including:
+                    </p>
+                    <ul className="text-sm text-slate-300 mt-2 list-disc list-inside space-y-1">
+                      <li>What you were doing when the bug occurred</li>
+                      <li>Steps to reproduce the issue</li>
+                      <li>What you expected to happen vs. what actually happened</li>
+                      <li>Any error messages you saw</li>
+                    </ul>
+                    <p className="text-sm text-slate-300 mt-2">
+                      Browser and page information has been automatically included in your message.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Security Notice */}
             {formData.type === 'security' && (

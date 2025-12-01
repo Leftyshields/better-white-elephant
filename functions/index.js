@@ -239,8 +239,11 @@ export const sendContactEmail = onRequest(
       let recipientEmail = process.env.CONTACT_EMAIL || 'brianshields@gmail.com';
       recipientEmail = recipientEmail.trim();
       
-      // For security issues, use a different subject prefix
-      const subjectPrefix = contactType === 'security' ? '[SECURITY]' : contactType === 'account' ? '[ACCOUNT]' : '[CONTACT]';
+      // For security issues and bug reports, use different subject prefixes
+      const subjectPrefix = contactType === 'security' ? '[SECURITY]' 
+        : contactType === 'bug' ? '[BUG REPORT]'
+        : contactType === 'account' ? '[ACCOUNT]' 
+        : '[CONTACT]';
       const emailSubject = subject 
         ? `${subjectPrefix} ${subject}` 
         : `${subjectPrefix} Contact Form Submission from ${name || email}`;

@@ -74,14 +74,12 @@ export function Footer() {
                 </a>
               </li>
               <li>
-                <a
-                  href="https://github.com/Leftyshields/better-white-elephant/issues"
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <Link
+                  to="/contact?type=bug"
                   className="text-slate-400 hover:text-white transition-colors"
                 >
                   Report a Bug
-                </a>
+                </Link>
               </li>
             </ul>
           </div>

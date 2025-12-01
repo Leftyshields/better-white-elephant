@@ -126,19 +126,27 @@ export function Party() {
               <p className="text-gray-600 mb-6">
                 There was an error loading the party. This might be due to a network issue or the party may no longer exist.
               </p>
-              <div className="flex gap-3">
-                <Button
-                  onClick={() => window.location.reload()}
-                  className="flex-1"
+              <div className="flex flex-col gap-3">
+                <div className="flex gap-3">
+                  <Button
+                    onClick={() => window.location.reload()}
+                    className="flex-1"
+                  >
+                    Retry
+                  </Button>
+                  <Button
+                    onClick={() => window.location.href = '/'}
+                    className="flex-1 bg-gray-500 hover:bg-gray-600"
+                  >
+                    Go Home
+                  </Button>
+                </div>
+                <Link
+                  to="/contact?type=bug"
+                  className="text-center text-sm text-blue-500 hover:text-blue-400 underline"
                 >
-                  Retry
-                </Button>
-                <Button
-                  onClick={() => window.location.href = '/'}
-                  className="flex-1 bg-gray-500 hover:bg-gray-600"
-                >
-                  Go Home
-                </Button>
+                  Report this issue
+                </Link>
               </div>
             </>
           )}
