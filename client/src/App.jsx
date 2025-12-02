@@ -33,7 +33,7 @@ function App() {
       <PartyModalProvider>
         <BrowserRouter>
           <PageViewTracker />
-          <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black">
+          <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black pt-24">
             <Header />
             <Routes>
               <Route path="/" element={<Home />} />

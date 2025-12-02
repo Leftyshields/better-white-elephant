@@ -38,8 +38,19 @@ export function Home() {
   });
   const { showModal: showCreatePartyModal, setShowModal: setShowCreatePartyModal } = usePartyModal();
   const [participantCounts, setParticipantCounts] = useState({});
+  const [isMobile, setIsMobile] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Track mobile breakpoint for 3D transform
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // Check for redirect after authentication
   useEffect(() => {
@@ -423,32 +434,36 @@ export function Home() {
               {/* Tilted UI Mockup Placeholder */}
               <div className="max-w-4xl mx-auto mt-16 relative">
                 <div 
-                  className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-8 shadow-[0_0_40px_-10px_rgba(168,85,247,0.4)]"
+                  className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-4 md:p-8 shadow-[0_0_40px_-10px_rgba(168,85,247,0.4)]"
                   style={{
-                    transform: 'perspective(1000px) rotateX(5deg) rotateY(-5deg)',
-                    transformStyle: 'preserve-3d',
+                    ...(!isMobile ? {
+                      transform: 'perspective(1000px) rotateX(5deg) rotateY(-5deg)',
+                      transformStyle: 'preserve-3d',
+                    } : {}),
                     boxShadow: '0 0 40px -10px rgba(168,85,247,0.4), inset 0 0 20px rgba(168,85,247,0.1)'
                   }}
                 >
-                  <div className="bg-gradient-to-br from-purple-500/20 to-indigo-500/20 rounded-lg p-6">
-                    {/* Game Board Grid - 3x2 */}
-                    <div className="grid grid-cols-3 gap-4">
+                  <div className="bg-gradient-to-br from-purple-500/20 to-indigo-500/20 rounded-lg p-3 md:p-6 relative overflow-hidden">
+                    {/* Fade effect at bottom - only visible on mobile */}
+                    <div className="md:hidden absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-black via-slate-900/50 to-transparent pointer-events-none z-10"></div>
+                    {/* Game Board Grid - 2 columns on mobile, 3 on desktop */}
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-4">
                       {/* Revealed Card #1 - Espresso Machine (Dynamic Owner) */}
-                      <div className="bg-white/10 border border-white/10 backdrop-blur-sm rounded-lg p-4 flex flex-col justify-between aspect-square hover:bg-white/20 transition-all duration-500 relative">
+                      <div className="bg-white/10 border border-white/10 backdrop-blur-sm rounded-lg p-2 md:p-4 flex flex-col justify-between aspect-square hover:bg-white/20 transition-all duration-500 relative">
                         <div className="flex flex-col items-center flex-1 justify-center">
-                          <div className="text-5xl mb-3">☕</div>
-                          <p className="text-base font-semibold text-white text-center">Espresso Machine</p>
+                          <div className="text-3xl md:text-5xl mb-1 md:mb-3">☕</div>
+                          <p className="text-xs md:text-base font-semibold text-white text-center truncate w-full px-1">Espresso Machine</p>
                         </div>
-                        <div className="bg-black/20 w-full p-2 rounded-b-lg flex items-center gap-2">
+                        <div className="bg-black/20 w-full p-1 md:p-2 rounded-b-lg flex items-center gap-1 md:gap-2">
                           {gameState === 1 ? (
                             <>
-                              <div className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs font-bold">S</div>
-                              <span className="text-indigo-300 text-xs font-semibold animate-pulse">Held by: Sarah</span>
+                              <div className="w-4 h-4 md:w-6 md:h-6 rounded-full bg-indigo-500 flex items-center justify-center text-white text-[10px] md:text-xs font-bold">S</div>
+                              <span className="text-indigo-300 text-[10px] md:text-xs font-semibold animate-pulse truncate">Held by: Sarah</span>
                             </>
                           ) : (
                             <>
-                              <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold">T</div>
-                              <span className="text-white/80 text-xs">Held by: Tom</span>
+                              <div className="w-4 h-4 md:w-6 md:h-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-[10px] md:text-xs font-bold">T</div>
+                              <span className="text-white/80 text-[10px] md:text-xs truncate">Held by: Tom</span>
                             </>
                           )}
                         </div>
@@ -456,75 +471,75 @@ export function Home() {
                       
                       {/* Card #2 - Wrapped or Revealed (Vintage Vinyl) */}
                       {gameState === 0 ? (
-                        <div className="bg-white/10 border border-white/10 backdrop-blur-sm rounded-lg p-4 flex flex-col justify-between aspect-square hover:bg-white/20 transition-all duration-500 relative">
+                        <div className="bg-white/10 border border-white/10 backdrop-blur-sm rounded-lg p-2 md:p-4 flex flex-col justify-between aspect-square hover:bg-white/20 transition-all duration-500 relative">
                           <div className="flex flex-col items-center flex-1 justify-center">
-                            <div className="text-5xl mb-3">🎸</div>
-                            <p className="text-base font-semibold text-white text-center">Vintage Vinyl</p>
+                            <div className="text-3xl md:text-5xl mb-1 md:mb-3">🎸</div>
+                            <p className="text-xs md:text-base font-semibold text-white text-center truncate w-full px-1">Vintage Vinyl</p>
                           </div>
-                          <div className="bg-black/20 w-full p-2 rounded-b-lg flex items-center gap-2">
-                            <div className="w-6 h-6 rounded-full bg-purple-500 flex items-center justify-center text-white text-xs font-bold">B</div>
-                            <span className="text-white/80 text-xs">Held by: Brian</span>
+                          <div className="bg-black/20 w-full p-1 md:p-2 rounded-b-lg flex items-center gap-1 md:gap-2">
+                            <div className="w-4 h-4 md:w-6 md:h-6 rounded-full bg-purple-500 flex items-center justify-center text-white text-[10px] md:text-xs font-bold">B</div>
+                            <span className="text-white/80 text-[10px] md:text-xs truncate">Held by: Brian</span>
                           </div>
                         </div>
                       ) : (
-                        <div className="bg-indigo-900/40 border border-white/10 backdrop-blur-sm rounded-lg p-4 flex flex-col justify-between items-center aspect-square hover:bg-indigo-900/50 transition-all duration-500">
+                        <div className="bg-indigo-900/40 border border-white/10 backdrop-blur-sm rounded-lg p-2 md:p-4 flex flex-col justify-between items-center aspect-square hover:bg-indigo-900/50 transition-all duration-500">
                           <div className="flex flex-col items-center flex-1 justify-center">
-                            <div className="text-5xl mb-3">🎁</div>
-                            <p className="text-lg font-bold text-white">Gift #2</p>
+                            <div className="text-3xl md:text-5xl mb-1 md:mb-3">🎁</div>
+                            <p className="text-sm md:text-lg font-bold text-white">Gift #2</p>
                           </div>
-                          <span className="text-xs uppercase tracking-wide text-white/70">WRAPPED</span>
+                          <span className="text-[10px] md:text-xs uppercase tracking-wide text-white/70">WRAPPED</span>
                         </div>
                       )}
                       
                       {/* Revealed Card #3 - Craft Beer Set */}
-                      <div className="bg-white/10 border border-white/10 backdrop-blur-sm rounded-lg p-4 flex flex-col justify-between aspect-square hover:bg-white/20 transition-all duration-500 relative">
+                      <div className="bg-white/10 border border-white/10 backdrop-blur-sm rounded-lg p-2 md:p-4 flex flex-col justify-between aspect-square hover:bg-white/20 transition-all duration-500 relative">
                         <div className="flex flex-col items-center flex-1 justify-center">
-                          <div className="text-5xl mb-3">🍺</div>
-                          <p className="text-base font-semibold text-white text-center">Craft Beer Set</p>
+                          <div className="text-3xl md:text-5xl mb-1 md:mb-3">🍺</div>
+                          <p className="text-xs md:text-base font-semibold text-white text-center truncate w-full px-1">Craft Beer Set</p>
                         </div>
-                        <div className="bg-black/20 w-full p-2 rounded-b-lg flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-full bg-purple-500 flex items-center justify-center text-white text-xs font-bold">B</div>
-                          <span className="text-white/80 text-xs">Held by: Brian</span>
+                        <div className="bg-black/20 w-full p-1 md:p-2 rounded-b-lg flex items-center gap-1 md:gap-2">
+                          <div className="w-4 h-4 md:w-6 md:h-6 rounded-full bg-purple-500 flex items-center justify-center text-white text-[10px] md:text-xs font-bold">B</div>
+                          <span className="text-white/80 text-[10px] md:text-xs truncate">Held by: Brian</span>
                         </div>
                       </div>
                       
                       {/* Wrapped Gift #4 */}
-                      <div className="bg-indigo-900/40 border border-white/10 backdrop-blur-sm rounded-lg p-4 flex flex-col justify-between items-center aspect-square hover:bg-indigo-900/50 transition-all duration-500">
+                      <div className="bg-indigo-900/40 border border-white/10 backdrop-blur-sm rounded-lg p-2 md:p-4 flex flex-col justify-between items-center aspect-square hover:bg-indigo-900/50 transition-all duration-500">
                         <div className="flex flex-col items-center flex-1 justify-center">
-                          <div className="text-5xl mb-3">🎁</div>
-                          <p className="text-lg font-bold text-white">Gift #4</p>
+                          <div className="text-3xl md:text-5xl mb-1 md:mb-3">🎁</div>
+                          <p className="text-sm md:text-lg font-bold text-white">Gift #4</p>
                         </div>
-                        <span className="text-xs uppercase tracking-wide text-white/70">WRAPPED</span>
+                        <span className="text-[10px] md:text-xs uppercase tracking-wide text-white/70">WRAPPED</span>
                       </div>
                       
                       {/* Revealed Card #5 - Gaming Pass (Dynamic Lock State) */}
-                      <div className={`bg-white/10 backdrop-blur-sm rounded-lg p-4 flex flex-col justify-between aspect-square hover:bg-white/20 transition-all duration-500 relative ${gameState === 2 ? 'border-cyan-400 border-2 shadow-[0_0_15px_rgba(34,211,238,0.4)]' : 'border border-white/10'}`}>
+                      <div className={`bg-white/10 backdrop-blur-sm rounded-lg p-2 md:p-4 flex flex-col justify-between aspect-square hover:bg-white/20 transition-all duration-500 relative ${gameState === 2 ? 'border-cyan-400 border-2 shadow-[0_0_15px_rgba(34,211,238,0.4)]' : 'border border-white/10'}`}>
                         {gameState === 2 ? (
-                          <div className="absolute top-2 right-2 bg-cyan-500 rounded-full px-2 py-1">
-                            <span className="text-xs font-semibold text-black">LOCKED 🔒</span>
+                          <div className="absolute top-1 right-1 md:top-2 md:right-2 bg-cyan-500 rounded-full px-1 py-0.5 md:px-2 md:py-1">
+                            <span className="text-[10px] md:text-xs font-semibold text-black">LOCKED 🔒</span>
                           </div>
                         ) : (
-                          <div className="absolute top-2 right-2 bg-red-500/80 rounded-full px-2 py-1">
-                            <span className="text-xs font-semibold text-white">2 Steals</span>
+                          <div className="absolute top-1 right-1 md:top-2 md:right-2 bg-red-500/80 rounded-full px-1 py-0.5 md:px-2 md:py-1">
+                            <span className="text-[10px] md:text-xs font-semibold text-white">2 Steals</span>
                           </div>
                         )}
                         <div className="flex flex-col items-center flex-1 justify-center">
-                          <div className="text-5xl mb-3">🎮</div>
-                          <p className="text-base font-semibold text-white text-center">Gaming Pass</p>
+                          <div className="text-3xl md:text-5xl mb-1 md:mb-3">🎮</div>
+                          <p className="text-xs md:text-base font-semibold text-white text-center truncate w-full px-1">Gaming Pass</p>
                         </div>
-                        <div className="bg-black/20 w-full p-2 rounded-b-lg flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center text-white text-xs font-bold">A</div>
-                          <span className="text-white/80 text-xs">Held by: Alex</span>
+                        <div className="bg-black/20 w-full p-1 md:p-2 rounded-b-lg flex items-center gap-1 md:gap-2">
+                          <div className="w-4 h-4 md:w-6 md:h-6 rounded-full bg-green-500 flex items-center justify-center text-white text-[10px] md:text-xs font-bold">A</div>
+                          <span className="text-white/80 text-[10px] md:text-xs truncate">Held by: Alex</span>
                         </div>
                       </div>
                       
                       {/* Wrapped Gift #6 */}
-                      <div className="bg-indigo-900/40 border border-white/10 backdrop-blur-sm rounded-lg p-4 flex flex-col justify-between items-center aspect-square hover:bg-indigo-900/50 transition-all duration-500">
+                      <div className="bg-indigo-900/40 border border-white/10 backdrop-blur-sm rounded-lg p-2 md:p-4 flex flex-col justify-between items-center aspect-square hover:bg-indigo-900/50 transition-all duration-500">
                         <div className="flex flex-col items-center flex-1 justify-center">
-                          <div className="text-5xl mb-3">🎁</div>
-                          <p className="text-lg font-bold text-white">Gift #6</p>
+                          <div className="text-3xl md:text-5xl mb-1 md:mb-3">🎁</div>
+                          <p className="text-sm md:text-lg font-bold text-white">Gift #6</p>
                         </div>
-                        <span className="text-xs uppercase tracking-wide text-white/70">WRAPPED</span>
+                        <span className="text-[10px] md:text-xs uppercase tracking-wide text-white/70">WRAPPED</span>
                       </div>
                     </div>
                   </div>
@@ -552,7 +567,57 @@ export function Home() {
 
           {/* Features Section */}
           <div id="features-section" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-16">
-            <div className="grid md:grid-cols-3 gap-6 mt-16">
+            {/* Mobile: Compact List Layout */}
+            <div className="flex flex-col md:hidden mt-16">
+              <div className="flex flex-row items-center gap-4 py-4 border-b border-white/5">
+                <div 
+                  className="text-3xl w-12 h-12 flex items-center justify-center flex-shrink-0"
+                  style={{ 
+                    textShadow: '0 0 20px rgba(234, 179, 8, 0.6)',
+                    filter: 'drop-shadow(0 0 8px rgba(250, 204, 21, 0.5))'
+                  }}
+                >
+                  ⚡
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-base font-bold text-white mb-1 tracking-tight">Live Reactions & Rivalries</h3>
+                  <p className="text-xs text-gray-100">Watch the action unfold instantly. Send live emoji reactions and taunts without unmuting your mic.</p>
+                </div>
+              </div>
+              <div className="flex flex-row items-center gap-4 py-4 border-b border-white/5">
+                <div 
+                  className="text-3xl w-12 h-12 flex items-center justify-center flex-shrink-0"
+                  style={{ 
+                    textShadow: '0 0 20px rgba(147, 197, 253, 0.6)',
+                    filter: 'drop-shadow(0 0 8px rgba(147, 197, 253, 0.5))'
+                  }}
+                >
+                  ✨
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-base font-bold text-white mb-1 tracking-tight">Zero-Hassle Setup</h3>
+                  <p className="text-xs text-gray-100">Guests simply paste a link from Amazon or Etsy. We'll try to auto-create a beautiful gift card, with manual entry as a fallback if scraping fails.</p>
+                </div>
+              </div>
+              <div className="flex flex-row items-center gap-4 py-4 border-b border-white/5">
+                <div 
+                  className="text-3xl w-12 h-12 flex items-center justify-center flex-shrink-0"
+                  style={{ 
+                    textShadow: '0 0 20px rgba(59, 130, 246, 0.6)',
+                    filter: 'drop-shadow(0 0 8px rgba(59, 130, 246, 0.5))'
+                  }}
+                >
+                  ✈️
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-base font-bold text-white mb-1 tracking-tight">Auto-Pilot Logistics</h3>
+                  <p className="text-xs text-gray-100">We track the turn order, the rules, and the shipping. When the game ends, we privately swap addresses so prizes get where they need to go.</p>
+                </div>
+              </div>
+            </div>
+            
+            {/* Desktop: Card Grid Layout */}
+            <div className="hidden md:grid md:grid-cols-3 gap-6 mt-16">
               <div className="text-center p-8 bg-white/5 backdrop-blur-sm rounded-2xl border border-white/10 shadow-lg hover:shadow-xl transition-all">
                 <div 
                   className="text-4xl mb-4"

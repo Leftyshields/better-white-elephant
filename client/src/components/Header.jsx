@@ -82,12 +82,12 @@ export function Header() {
   };
 
   return (
-    <header className="absolute top-0 left-0 right-0 z-50 bg-white/10 backdrop-blur-md border-b border-white/20">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-16">
+    <header className="fixed top-0 left-0 right-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-white/10">
+      <div className="max-w-7xl mx-auto px-4 md:px-8">
+        <div className="flex items-center justify-between h-16 md:h-20">
           {/* Title/Logo */}
           <Link to="/" className="flex items-center gap-2">
-            <span className="text-3xl">🎄</span>
+            <span className="text-3xl mr-2">🎄</span>
             <div>
               <h1 className="text-xl font-bold text-white">StealOrReveal.com</h1>
               <p className="text-xs text-gray-200">A Better White Elephant Gift Exchange</p>
