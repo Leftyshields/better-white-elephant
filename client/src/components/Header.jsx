@@ -3,7 +3,7 @@
  */
 import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate, useLocation, useParams } from 'react-router-dom';
-import { SpeakerWaveIcon, SpeakerXMarkIcon, Cog6ToothIcon } from '@heroicons/react/24/outline';
+import { SpeakerWaveIcon, SpeakerXMarkIcon, Cog6ToothIcon, UserIcon } from '@heroicons/react/24/outline';
 import { useAuth } from '../hooks/useAuth.js';
 import { usePartyModal } from '../contexts/PartyModalContext.jsx';
 import { useSound } from '../contexts/SoundContext.jsx';
@@ -22,6 +22,7 @@ export function Header() {
   const { party } = useParty(partyId || '');
   const isAdmin = party?.adminId === user?.uid;
   const isPartyPage = location.pathname.startsWith('/party/');
+  const isLandingPage = location.pathname === '/';
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -82,15 +83,18 @@ export function Header() {
   };
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-white/10">
+    <header className="fixed top-0 left-0 right-0 z-50 bg-slate-950/90 backdrop-blur-md border-b border-white/10">
       <div className="max-w-7xl mx-auto px-4 md:px-8">
-        <div className="flex items-center justify-between h-16 md:h-20">
+        <div className="flex items-center justify-between h-16">
           {/* Title/Logo */}
           <Link to="/" className="flex items-center gap-2">
-            <span className="text-3xl mr-2">🎄</span>
+            <span className="text-3xl">🎄</span>
             <div>
-              <h1 className="text-xl font-bold text-white">StealOrReveal.com</h1>
-              <p className="text-xs text-gray-200">A Better White Elephant Gift Exchange</p>
+              <h1 className="text-lg md:text-xl font-bold text-white tracking-tight">
+                <span className="md:hidden">StealOrReveal</span>
+                <span className="hidden md:inline">StealOrReveal.com</span>
+              </h1>
+              <p className="hidden md:block text-xs text-gray-200">A Better White Elephant Gift Exchange</p>
             </div>
           </Link>
 
@@ -104,29 +108,31 @@ export function Header() {
               How to Play
             </Link>
             
-            {/* Host Party Button - only show on home page when logged in */}
+            {/* Host Party Button - only show on home page when logged in, hidden on mobile */}
             {user && location.pathname === '/' && (
               <button
                 onClick={() => setShowModal(true)}
-                className="px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold rounded-lg hover:from-indigo-600 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl"
+                className="hidden md:block px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold rounded-lg hover:from-indigo-600 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl"
               >
                 Host New Party
               </button>
             )}
             
-            {/* Mute Toggle Button */}
-            <button
-              onClick={toggleMute}
-              className="p-2 rounded-full hover:bg-white/20 transition-colors"
-              aria-label={isMuted ? 'Unmute sounds' : 'Mute sounds'}
-              title={isMuted ? 'Unmute sounds' : 'Mute sounds'}
-            >
-              {isMuted ? (
-                <SpeakerXMarkIcon className="w-5 h-5 text-gray-200" />
-              ) : (
-                <SpeakerWaveIcon className="w-5 h-5 text-gray-200" />
-              )}
-            </button>
+            {/* Mute Toggle Button - Hide on landing page and mobile */}
+            {!isLandingPage && (
+              <button
+                onClick={toggleMute}
+                className="hidden md:block p-2 rounded-full hover:bg-white/20 transition-colors"
+                aria-label={isMuted ? 'Unmute sounds' : 'Mute sounds'}
+                title={isMuted ? 'Unmute sounds' : 'Mute sounds'}
+              >
+                {isMuted ? (
+                  <SpeakerXMarkIcon className="w-5 h-5 text-gray-200" />
+                ) : (
+                  <SpeakerWaveIcon className="w-5 h-5 text-gray-200" />
+                )}
+              </button>
+            )}
 
             {/* Admin Manage Button - Only show on party pages when user is admin */}
             {isPartyPage && isAdmin && (
@@ -202,20 +208,10 @@ export function Header() {
               ) : (
                 <button
                   onClick={signInWithGoogle}
-                  className="flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur-md text-white border border-white/20 rounded-md hover:bg-white/20 transition-colors"
+                  className="text-sm text-slate-300 font-medium hover:text-white transition-colors md:flex md:items-center md:gap-2 md:px-4 md:py-2 md:bg-white/10 md:backdrop-blur-md md:text-white md:border md:border-white/20 md:rounded-md md:hover:bg-white/20"
                 >
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
-                  <span>Sign in</span>
+                  <span className="md:hidden">Log In</span>
+                  <span className="hidden md:inline">Sign in</span>
                 </button>
               )}
             </div>
