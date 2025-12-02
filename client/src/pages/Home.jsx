@@ -343,73 +343,73 @@ export function Home() {
   if (!user) {
     return (
       <>
+      {/* Snow Animation Layers - Fixed to viewport, starts from navbar */}
+      <div className="fixed inset-0 overflow-visible pointer-events-none z-[5]">
+        {/* Layer 1: Fastest, most visible */}
+        {[...Array(50)].map((_, i) => (
+          <div
+            key={`snow-1-${i}`}
+            className="absolute animate-snow-fall"
+            style={{
+              left: `${(i * 2) % 100}%`,
+              top: `-${Math.random() * 10 + 5}%`,
+              fontSize: `${Math.random() * 8 + 10}px`,
+              opacity: 0.6 + Math.random() * 0.2,
+              animationDelay: `${Math.random() * 5}s`,
+              animationDuration: `${15 + Math.random() * 10}s`,
+              color: '#ffffff',
+              textShadow: '0 0 4px rgba(255, 255, 255, 0.8), 0 0 8px rgba(255, 255, 255, 0.4)',
+              filter: 'brightness(1.5) drop-shadow(0 0 2px rgba(255, 255, 255, 0.8))',
+            }}
+          >
+            ❄
+          </div>
+        ))}
+        {/* Layer 2: Medium speed */}
+        {[...Array(40)].map((_, i) => (
+          <div
+            key={`snow-2-${i}`}
+            className="absolute animate-snow-fall"
+            style={{
+              left: `${(i * 2.5) % 100}%`,
+              top: `-${Math.random() * 10 + 5}%`,
+              fontSize: `${Math.random() * 6 + 8}px`,
+              opacity: 0.4 + Math.random() * 0.2,
+              animationDelay: `${Math.random() * 5}s`,
+              animationDuration: `${20 + Math.random() * 10}s`,
+              color: '#ffffff',
+              textShadow: '0 0 4px rgba(255, 255, 255, 0.6), 0 0 8px rgba(255, 255, 255, 0.3)',
+              filter: 'brightness(1.5) drop-shadow(0 0 2px rgba(255, 255, 255, 0.6))',
+            }}
+          >
+            ❄
+          </div>
+        ))}
+        {/* Layer 3: Slowest, most subtle */}
+        {[...Array(30)].map((_, i) => (
+          <div
+            key={`snow-3-${i}`}
+            className="absolute animate-snow-fall"
+            style={{
+              left: `${(i * 3.33) % 100}%`,
+              top: `-${Math.random() * 10 + 5}%`,
+              fontSize: `${Math.random() * 4 + 6}px`,
+              opacity: 0.2 + Math.random() * 0.2,
+              animationDelay: `${Math.random() * 5}s`,
+              animationDuration: `${25 + Math.random() * 10}s`,
+              color: '#ffffff',
+              textShadow: '0 0 4px rgba(255, 255, 255, 0.4), 0 0 8px rgba(255, 255, 255, 0.2)',
+              filter: 'brightness(1.5) drop-shadow(0 0 2px rgba(255, 255, 255, 0.4))',
+            }}
+          >
+            ❄
+          </div>
+        ))}
+      </div>
       <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black relative overflow-hidden">
         {/* Hero Section */}
         <div className="relative overflow-hidden">
-          {/* Snow Animation Layers */}
-          <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-            {/* Layer 1: Fastest, most visible */}
-            {[...Array(30)].map((_, i) => (
-              <div
-                key={`snow-1-${i}`}
-                className="absolute animate-snow-fall"
-                style={{
-                  left: `${(i * 3.33) % 100}%`,
-                  top: `${-Math.random() * 20}%`,
-                  fontSize: `${Math.random() * 8 + 10}px`,
-                  opacity: 0.6 + Math.random() * 0.2,
-                  animationDelay: `${Math.random() * 5}s`,
-                  animationDuration: `${15 + Math.random() * 10}s`,
-                  color: '#ffffff',
-                  textShadow: '0 0 4px rgba(255, 255, 255, 0.8), 0 0 8px rgba(255, 255, 255, 0.4)',
-                  filter: 'brightness(1.5) drop-shadow(0 0 2px rgba(255, 255, 255, 0.8))',
-                }}
-              >
-                ❄
-              </div>
-            ))}
-            {/* Layer 2: Medium speed */}
-            {[...Array(25)].map((_, i) => (
-              <div
-                key={`snow-2-${i}`}
-                className="absolute animate-snow-fall"
-                style={{
-                  left: `${(i * 4) % 100}%`,
-                  top: `${-Math.random() * 20}%`,
-                  fontSize: `${Math.random() * 6 + 8}px`,
-                  opacity: 0.4 + Math.random() * 0.2,
-                  animationDelay: `${Math.random() * 5}s`,
-                  animationDuration: `${20 + Math.random() * 10}s`,
-                  color: '#ffffff',
-                  textShadow: '0 0 4px rgba(255, 255, 255, 0.6), 0 0 8px rgba(255, 255, 255, 0.3)',
-                  filter: 'brightness(1.5) drop-shadow(0 0 2px rgba(255, 255, 255, 0.6))',
-                }}
-              >
-                ❄
-              </div>
-            ))}
-            {/* Layer 3: Slowest, most subtle */}
-            {[...Array(20)].map((_, i) => (
-              <div
-                key={`snow-3-${i}`}
-                className="absolute animate-snow-fall"
-                style={{
-                  left: `${(i * 5) % 100}%`,
-                  top: `${-Math.random() * 20}%`,
-                  fontSize: `${Math.random() * 4 + 6}px`,
-                  opacity: 0.2 + Math.random() * 0.2,
-                  animationDelay: `${Math.random() * 5}s`,
-                  animationDuration: `${25 + Math.random() * 10}s`,
-                  color: '#ffffff',
-                  textShadow: '0 0 4px rgba(255, 255, 255, 0.4), 0 0 8px rgba(255, 255, 255, 0.2)',
-                  filter: 'brightness(1.5) drop-shadow(0 0 2px rgba(255, 255, 255, 0.4))',
-                }}
-              >
-                ❄
-              </div>
-            ))}
-          </div>
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 md:pt-32 pb-16">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 md:pt-32 pb-16 relative z-10">
             <div className="text-center">
               <h1 className="text-4xl md:text-6xl font-bold text-white mb-6 tracking-tight">
                 The Most Fun Your Remote Team Will Have This Holiday.
