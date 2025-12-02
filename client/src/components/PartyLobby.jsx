@@ -768,6 +768,30 @@ export function PartyLobby({ partyId, onStartGame }) {
         </div>
       </div>
 
+      {/* Gift Pile Hero Section */}
+      <div className="bg-slate-900/80 backdrop-blur-xl border border-white/10 shadow-2xl rounded-2xl p-8 text-center">
+        <div className="flex justify-center items-center flex-wrap gap-2 mb-4">
+          {gifts.length > 0 ? (
+            gifts.map((gift, index) => (
+              <span
+                key={gift.id}
+                className="text-6xl -ml-4 first:ml-0 drop-shadow-lg transition-all hover:-translate-y-2"
+                style={{ zIndex: gifts.length - index }}
+              >
+                🎁
+              </span>
+            ))
+          ) : (
+            <div className="text-slate-500 text-lg py-8">
+              Waiting for gifts...
+            </div>
+          )}
+        </div>
+        <div className="text-2xl font-bold text-white">
+          {gifts.length} Gift{gifts.length !== 1 ? 's' : ''} in the Pot
+        </div>
+      </div>
+
       {/* Setup Progress - Collapsible Accordion */}
       <div className="bg-slate-900/80 backdrop-blur-xl border border-white/10 shadow-2xl rounded-2xl overflow-hidden">
         <div className="p-6 border-b border-white/5">
@@ -1675,15 +1699,43 @@ export function PartyLobby({ partyId, onStartGame }) {
                       </div>
                     )}
                     
-                    <Button
-                      onClick={handleStartGame}
-                      disabled={!canStart}
-                      className={`px-12 py-4 text-xl font-bold shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
-                        canStart ? 'shadow-[0_0_20px_rgba(168,85,247,0.5)]' : ''
-                      }`}
-                    >
-                      {canStart ? '🎮 Start Game' : 'Waiting...'}
-                    </Button>
+                    {/* Mobile: Sticky Footer | Desktop: Inline Button */}
+                    <div className="md:inline-block w-full md:w-auto">
+                      {/* Mobile Sticky Footer */}
+                      <div className="md:hidden fixed bottom-6 left-4 right-4 z-50 backdrop-blur-xl bg-slate-900/80 p-4 rounded-2xl border border-white/10 shadow-2xl">
+                        <Button
+                          onClick={handleStartGame}
+                          disabled={!canStart}
+                          className={`w-full px-12 py-4 text-xl font-bold shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                            canStart ? 'shadow-[0_0_20px_rgba(168,85,247,0.5)]' : ''
+                          } ${allReady && canStart ? 'animate-pulse' : ''}`}
+                        >
+                          {canStart ? '🎮 Start Game' : 'Waiting...'}
+                        </Button>
+                        {canStart && (
+                          <p className="text-sm text-slate-300 text-center mt-3">
+                            Once you start, the game will begin and participants can start selecting gifts!
+                          </p>
+                        )}
+                      </div>
+                      {/* Desktop Inline Button */}
+                      <div className="hidden md:block text-center">
+                        <Button
+                          onClick={handleStartGame}
+                          disabled={!canStart}
+                          className={`px-12 py-4 text-xl font-bold shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                            canStart ? 'shadow-[0_0_20px_rgba(168,85,247,0.5)]' : ''
+                          } ${allReady && canStart ? 'animate-pulse' : ''}`}
+                        >
+                          {canStart ? '🎮 Start Game' : 'Waiting...'}
+                        </Button>
+                        {canStart && (
+                          <p className="text-sm text-slate-300 mt-3">
+                            Once you start, the game will begin and participants can start selecting gifts!
+                          </p>
+                        )}
+                      </div>
+                    </div>
                     
                     {canStart && (
                       <p className="text-sm text-slate-300 mt-3">

@@ -628,7 +628,7 @@ export function GameBoard({ partyId, onEndTurn }) {
           <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
             <h2 className="text-2xl font-bold mb-4 text-red-600">Game State Missing</h2>
             <p className="text-gray-600 mb-4">
-              The game state could not be loaded. This usually happens when the game state has expired from server memory (after 24 hours) or the server was restarted.
+              The game state could not be loaded. This usually happens when the server was restarted or there was a data synchronization issue. Active games are persisted for 2 years, and ended games are retained for 1 year per our privacy policy.
             </p>
             {isAdmin && (
               <p className="text-sm text-gray-500 mb-6">

@@ -174,9 +174,14 @@ function cleanForRedis(obj) {
  * Save game state to both Redis and Firestore
  * @param {string} partyId - The party ID
  * @param {object} gameState - The game state object
- * @param {number} ttl - Redis TTL in seconds (default: 86400 = 24 hours)
+ * @param {number} ttl - Redis TTL in seconds (default: auto-calculated based on party status)
+ * 
+ * TTL Calculation:
+ * - Active games: 2 years (63072000s) - ensures games don't expire while active
+ * - Ended games: 1 year (31536000s) - per privacy policy: "Retained for 1 year after the game ends"
+ * - Default: 2 years if party status cannot be determined
  */
-export async function saveGameState(partyId, gameState, ttl = 86400) {
+export async function saveGameState(partyId, gameState, ttl = null) {
   // CRITICAL: Validate partyId matches gameState.partyId to prevent cross-game contamination
   if (!partyId || typeof partyId !== 'string') {
     throw new Error(`Invalid partyId parameter: ${partyId}`);
@@ -196,6 +201,31 @@ export async function saveGameState(partyId, gameState, ttl = 86400) {
   gameState.partyId = partyId;
   
   const redisKey = `game:${partyId}`;
+  
+  // Determine TTL based on party status if not provided
+  // Privacy policy: "Game and Party Data: Retained for 1 year after the game ends"
+  // For active games, use 2 years to ensure they don't expire while active
+  if (ttl === null) {
+    try {
+      const partyDoc = await db.collection('parties').doc(partyId).get();
+      if (partyDoc.exists) {
+        const partyData = partyDoc.data();
+        if (partyData.status === 'ENDED') {
+          // Ended games: 1 year per privacy policy
+          ttl = 31536000; // 1 year in seconds
+        } else {
+          // Active games: 2 years to ensure they don't expire while active
+          ttl = 63072000; // 2 years in seconds
+        }
+      } else {
+        // Default to 2 years if party not found (shouldn't happen, but be safe)
+        ttl = 63072000;
+      }
+    } catch (error) {
+      console.error(`⚠️ Error determining TTL for party ${partyId}, using default 2 years:`, error);
+      ttl = 63072000; // Default to 2 years
+    }
+  }
   
   // Clean the game state for Firestore compatibility
   // This handles Maps, Sets, Dates, undefined values, etc.
@@ -304,9 +334,17 @@ export async function loadGameState(partyId) {
         // CRITICAL: Ensure partyId is set correctly
         convertedState.partyId = partyId;
         
+        // Determine TTL based on party status
+        // Privacy policy: "Game and Party Data: Retained for 1 year after the game ends"
+        let restoreTtl = 63072000; // Default: 2 years for active games
+        if (partyData.status === 'ENDED') {
+          restoreTtl = 31536000; // 1 year for ended games per privacy policy
+        }
+        
         // Restore to Redis for future fast access (convert back to JSON-safe format)
         const redisState = cleanForRedis(convertedState);
-        await redisClient.setEx(redisKey, 86400, JSON.stringify(redisState));
+        await redisClient.setEx(redisKey, restoreTtl, JSON.stringify(redisState));
+        console.log(`✅ Restored game state to Redis for party ${partyId} (TTL: ${restoreTtl}s = ${restoreTtl / 86400} days)`);
         
         return convertedState;
       } else {

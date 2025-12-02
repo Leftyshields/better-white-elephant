@@ -53,6 +53,14 @@ body {
   animation: snow-fall linear infinite;
 }
 
+/* Reduce snow brightness on mobile */
+@media (max-width: 768px) {
+  .snowflake-mobile {
+    filter: brightness(1.1) drop-shadow(0 0 1px rgba(255, 255, 255, 0.4)) !important;
+    opacity: calc(var(--snow-opacity, 1) * 0.6) !important;
+  }
+}
+
 @keyframes pulse-glow {
   0%, 100% {
     transform: scale(1);
