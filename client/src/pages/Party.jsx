@@ -2,7 +2,7 @@
  * Party Page
  */
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth.js';
 import { PartyLobby } from '../components/PartyLobby.jsx';
 import { GameBoard } from '../components/GameBoard.jsx';
@@ -100,6 +100,32 @@ export function Party() {
   if (error) {
     const isPermissionError = error?.code === 'permission-denied' || error?.message?.includes('permission');
     
+    // If permission error and user is not authenticated, show join screen instead
+    if (isPermissionError && !user) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black py-12">
+          <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
+            <h2 className="text-2xl font-bold mb-4">Join This Party</h2>
+            <p className="text-gray-600 mb-6">
+              Sign in to join this White Elephant party!
+            </p>
+            <p className="text-sm text-gray-500 mb-6">
+              Once you sign in, you'll be automatically added to the party.
+            </p>
+            <Button
+              onClick={() => {
+                window.sessionStorage.setItem('redirectAfterAuth', `/party/${partyId}`);
+                window.location.href = '/';
+              }}
+              className="w-full"
+            >
+              Sign In to Join
+            </Button>
+          </div>
+        </div>
+      );
+    }
+    
     return (
       <div className="min-h-screen flex items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black py-12">
         <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
@@ -107,9 +133,9 @@ export function Party() {
           {isPermissionError ? (
             <>
               <p className="text-gray-600 mb-6">
-                You don't have permission to view this party. Please sign in or contact the party host.
+                There was an authentication issue loading this party. Please try signing out and signing back in, or contact the party host.
               </p>
-              {!user && (
+              <div className="flex flex-col gap-3">
                 <Button
                   onClick={() => {
                     window.sessionStorage.setItem('redirectAfterAuth', `/party/${partyId}`);
@@ -117,9 +143,15 @@ export function Party() {
                   }}
                   className="w-full"
                 >
-                  Sign In to Join
+                  Sign In Again
                 </Button>
-              )}
+                <Button
+                  onClick={() => window.location.reload()}
+                  className="w-full bg-gray-500 hover:bg-gray-600"
+                >
+                  Retry
+                </Button>
+              </div>
             </>
           ) : (
             <>
