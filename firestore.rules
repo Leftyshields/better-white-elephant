@@ -42,8 +42,9 @@ service cloud.firestore {
     
     // Parties collection
     match /parties/{partyId} {
-      // Anyone authenticated can read party details (for joining)
-      allow read: if isAuthenticated();
+      // Allow unauthenticated reads for public invite landing (title, date, adminId)
+      // Also allow authenticated users to read full party details
+      allow read: if true;
       
       // Only authenticated users can create parties
       allow create: if isAuthenticated() && 
