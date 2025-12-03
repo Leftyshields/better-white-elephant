@@ -5,7 +5,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth.js';
 import { Button } from './ui/Button.jsx';
-import { doc, getDoc, setDoc, collection, query, where, getDocs, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../utils/firebase.js';
 import { trackParticipantJoin, trackError } from '../utils/analytics.js';
 import { GiftIcon } from '@heroicons/react/24/outline';
@@ -34,17 +34,20 @@ export function PartyInviteLanding({ partyId }) {
           });
 
           // Fetch host name if we have adminId
+          // Note: User profile read requires authentication, so we'll try but fallback gracefully
           if (data.adminId) {
             try {
               const hostDoc = await getDoc(doc(db, 'users', data.adminId));
               if (hostDoc.exists()) {
                 const hostData = hostDoc.data();
+                // Only use displayName/email if available, don't access shippingAddress
                 setHostName(hostData.displayName || hostData.email || 'Party Host');
               } else {
                 setHostName('Party Host');
               }
             } catch (error) {
-              console.error('Error fetching host name:', error);
+              // If permission denied or other error, just use default
+              console.warn('Could not fetch host name (may require auth):', error.message);
               setHostName('Party Host');
             }
           }
@@ -98,24 +101,9 @@ export function PartyInviteLanding({ partyId }) {
     // User is authenticated - join the party
     setJoining(true);
     try {
-      // Check if there's a pending invite for this user's email
-      const userEmail = user.email?.toLowerCase();
-      let pendingInvite = null;
-      
-      if (userEmail) {
-        const invitesSnapshot = await getDocs(
-          query(
-            collection(db, 'parties', partyId, 'pendingInvites'),
-            where('email', '==', userEmail)
-          )
-        );
-        
-        if (!invitesSnapshot.empty) {
-          pendingInvite = invitesSnapshot.docs[0];
-        }
-      }
-
       // Add user as participant
+      // Note: We don't check for pending invites here because that requires admin permissions
+      // The server or admin can handle invite acceptance separately if needed
       const participantRef = doc(db, 'parties', partyId, 'participants', user.uid);
       await setDoc(participantRef, {
         status: 'GOING',
@@ -125,23 +113,19 @@ export function PartyInviteLanding({ partyId }) {
         updatedAt: new Date(),
       });
 
-      // If there was a pending invite, mark it as accepted
-      if (pendingInvite) {
-        await updateDoc(pendingInvite.ref, {
-          status: 'ACCEPTED',
-          acceptedAt: new Date(),
-          userId: user.uid,
-          updatedAt: new Date(),
-        });
-        trackParticipantJoin(partyId, 'email');
-      } else {
-        trackParticipantJoin(partyId, 'share_link');
-      }
+      // Track join via share link (most common case for invite landing)
+      trackParticipantJoin(partyId, 'share_link');
 
       // Reload to show the lobby
       window.location.reload();
     } catch (error) {
       console.error('Error joining party:', error);
+      console.error('Error details:', {
+        code: error.code,
+        message: error.message,
+        partyId,
+        userId: user?.uid
+      });
       trackError('join_party_failed', error.message, 'PartyInviteLanding');
       alert('Failed to join party: ' + error.message);
       setJoining(false);
