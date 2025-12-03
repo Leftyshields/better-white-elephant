@@ -311,6 +311,7 @@ export function PartyInviteLanding({ partyId }) {
             </p>
           )}
         </div>
+        </div>
       </div>
     </div>
   );
