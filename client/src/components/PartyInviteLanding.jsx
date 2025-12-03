@@ -176,7 +176,7 @@ export function PartyInviteLanding({ partyId }) {
   };
 
   return (
-    <>
+    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black relative">
       {/* Snow Animation Layers - Fixed to viewport */}
       <div className="fixed inset-0 overflow-visible pointer-events-none z-[5]">
         {/* Layer 1: Fastest, most visible */}
@@ -256,7 +256,7 @@ export function PartyInviteLanding({ partyId }) {
         })}
       </div>
 
-      <div className="min-h-screen flex items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black py-12 px-4 relative z-10">
+      <div className="flex items-center justify-center py-12 px-4 relative z-10">
         <div className="max-w-md w-full">
         {/* Ticket Stub Card */}
         <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 shadow-2xl rounded-2xl p-8 md:p-10 text-center relative overflow-hidden">
@@ -313,7 +313,6 @@ export function PartyInviteLanding({ partyId }) {
         </div>
       </div>
     </div>
-    </>
   );
 }
 
