@@ -37,9 +37,14 @@ export function useAuth() {
     }
   };
 
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = async (forceAccountSelection = false) => {
     try {
       const provider = new GoogleAuthProvider();
+      // Always prompt for account selection to allow users to choose a different account
+      // This is especially useful when joining a party with a different account
+      provider.setCustomParameters({
+        prompt: 'select_account'
+      });
       const result = await signInWithPopup(auth, provider);
       // Track login - check if this is a new user (first time sign in)
       const isNewUser = result.user.metadata.creationTime === result.user.metadata.lastSignInTime;

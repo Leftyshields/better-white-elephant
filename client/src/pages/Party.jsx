@@ -110,7 +110,7 @@ export function Party() {
               Sign in to join this White Elephant party!
             </p>
             <p className="text-sm text-gray-500 mb-6">
-              Once you sign in, you'll be automatically added to the party.
+              Once you sign in, you'll be automatically added to the party. You'll be able to choose which account to use.
             </p>
             <Button
               onClick={() => {
