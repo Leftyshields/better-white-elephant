@@ -53,7 +53,7 @@ router.post('/batch', async (req, res) => {
         
         if (userDoc.exists) {
           const userData = userDoc.data();
-          firestoreDisplayName = userData.displayName || userData.name || userData.email || null;
+          firestoreDisplayName = userData.displayName || userData.name || null;
           firestoreEmail = userData.email || null;
           isBotUser = userData.isBot === true || isBot;
         }
@@ -64,7 +64,7 @@ router.post('/batch', async (req, res) => {
         if (!isBotUser) {
           try {
             const authUser = await admin.auth().getUser(userId);
-            authDisplayName = authUser.displayName || authUser.email || null;
+            authDisplayName = authUser.displayName || null;
             authEmail = authUser.email || null;
           } catch (authError) {
             // User might not exist in Auth (e.g., deleted account), that's OK
@@ -72,8 +72,12 @@ router.post('/batch', async (req, res) => {
           }
         }
         
-        // Prefer Firestore, fallback to Auth
-        userInfo[userId] = firestoreDisplayName || authDisplayName || userId;
+        // Determine the best display name to use
+        // Prefer Firestore displayName, then Auth displayName, then email username, then userId
+        const finalEmail = firestoreEmail || authEmail;
+        const emailUsername = finalEmail ? finalEmail.split('@')[0] : null;
+        
+        userInfo[userId] = firestoreDisplayName || authDisplayName || emailUsername || userId;
         userEmails[userId] = firestoreEmail || authEmail || null;
         userBots[userId] = isBotUser;
       } catch (error) {

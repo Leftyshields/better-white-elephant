@@ -12,7 +12,8 @@ import {
   GoogleAuthProvider,
   signOut as firebaseSignOut,
 } from 'firebase/auth';
-import { auth } from '../utils/firebase.js';
+import { auth, db } from '../utils/firebase.js';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { trackLogin, trackSignUp } from '../utils/analytics.js';
 
 export function useAuth() {
@@ -20,9 +21,34 @@ export function useAuth() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUser(user);
       setLoading(false);
+      
+      // Sync user data to Firestore whenever user signs in
+      if (user) {
+        try {
+          const userDocRef = doc(db, 'users', user.uid);
+          const userDoc = await getDoc(userDocRef);
+          
+          // Get current Firestore data to preserve shippingAddress if it exists
+          const existingData = userDoc.exists() ? userDoc.data() : {};
+          
+          // Update or create user document with Auth data
+          await setDoc(userDocRef, {
+            displayName: user.displayName || existingData.displayName || user.email?.split('@')[0] || '',
+            email: user.email || existingData.email || '',
+            // Preserve existing shippingAddress if it exists
+            shippingAddress: existingData.shippingAddress || null,
+            // Preserve createdAt if document exists, otherwise set it
+            createdAt: existingData.createdAt || new Date(),
+            updatedAt: new Date(),
+          }, { merge: true });
+        } catch (error) {
+          // Don't block auth flow if Firestore sync fails
+          console.error('Error syncing user data to Firestore:', error);
+        }
+      }
     });
 
     return () => unsubscribe();
