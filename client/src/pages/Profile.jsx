@@ -222,6 +222,7 @@ export function Profile() {
           </Button>
         </div>
       </form>
+      </div>
     </div>
   );
 }
