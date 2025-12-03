@@ -176,8 +176,88 @@ export function PartyInviteLanding({ partyId }) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black py-12 px-4">
-      <div className="max-w-md w-full">
+    <>
+      {/* Snow Animation Layers - Fixed to viewport */}
+      <div className="fixed inset-0 overflow-visible pointer-events-none z-[5]">
+        {/* Layer 1: Fastest, most visible */}
+        {[...Array(50)].map((_, i) => {
+          const randomDelay = Math.random() * 1;
+          const randomTop = Math.random() * 120 - 20;
+          const baseOpacity = 0.6 + Math.random() * 0.2;
+          return (
+            <div
+              key={`snow-1-${i}`}
+              className="absolute animate-snow-fall snowflake-mobile"
+              style={{
+                left: `${(i * 2) % 100}%`,
+                top: `${randomTop}%`,
+                fontSize: `${Math.random() * 8 + 10}px`,
+                opacity: baseOpacity,
+                animationDelay: `${randomDelay}s`,
+                animationDuration: `${15 + Math.random() * 10}s`,
+                color: '#ffffff',
+                textShadow: '0 0 4px rgba(255, 255, 255, 0.8), 0 0 8px rgba(255, 255, 255, 0.4)',
+                filter: 'brightness(1.5) drop-shadow(0 0 2px rgba(255, 255, 255, 0.8))',
+              }}
+            >
+              ❄
+            </div>
+          );
+        })}
+        {/* Layer 2: Medium speed */}
+        {[...Array(40)].map((_, i) => {
+          const randomDelay = Math.random() * 1;
+          const randomTop = Math.random() * 120 - 20;
+          const baseOpacity = 0.4 + Math.random() * 0.2;
+          return (
+            <div
+              key={`snow-2-${i}`}
+              className="absolute animate-snow-fall snowflake-mobile"
+              style={{
+                left: `${(i * 2.5) % 100}%`,
+                top: `${randomTop}%`,
+                fontSize: `${Math.random() * 6 + 8}px`,
+                opacity: baseOpacity,
+                animationDelay: `${randomDelay}s`,
+                animationDuration: `${20 + Math.random() * 10}s`,
+                color: '#ffffff',
+                textShadow: '0 0 4px rgba(255, 255, 255, 0.6), 0 0 8px rgba(255, 255, 255, 0.3)',
+                filter: 'brightness(1.5) drop-shadow(0 0 2px rgba(255, 255, 255, 0.6))',
+              }}
+            >
+              ❄
+            </div>
+          );
+        })}
+        {/* Layer 3: Slowest, most subtle */}
+        {[...Array(30)].map((_, i) => {
+          const randomDelay = Math.random() * 1;
+          const randomTop = Math.random() * 120 - 20;
+          const baseOpacity = 0.2 + Math.random() * 0.2;
+          return (
+            <div
+              key={`snow-3-${i}`}
+              className="absolute animate-snow-fall snowflake-mobile"
+              style={{
+                left: `${(i * 3.33) % 100}%`,
+                top: `${randomTop}%`,
+                fontSize: `${Math.random() * 4 + 6}px`,
+                opacity: baseOpacity,
+                animationDelay: `${randomDelay}s`,
+                animationDuration: `${25 + Math.random() * 10}s`,
+                color: '#ffffff',
+                textShadow: '0 0 4px rgba(255, 255, 255, 0.4), 0 0 8px rgba(255, 255, 255, 0.2)',
+                filter: 'brightness(1.5) drop-shadow(0 0 2px rgba(255, 255, 255, 0.4))',
+              }}
+            >
+              ❄
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="min-h-screen flex items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black py-12 px-4 relative z-10">
+        <div className="max-w-md w-full">
         {/* Ticket Stub Card */}
         <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 shadow-2xl rounded-2xl p-8 md:p-10 text-center relative overflow-hidden">
           {/* Decorative gradient overlay */}
@@ -233,6 +313,7 @@ export function PartyInviteLanding({ partyId }) {
         </div>
       </div>
     </div>
+    </>
   );
 }
 
