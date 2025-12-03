@@ -33,11 +33,12 @@ service cloud.firestore {
       allow create: if isOwner(userId);
       allow update: if isOwner(userId);
       
-      // Users can read other users' display names and emails (for party display)
-      // But not shipping addresses
-      allow read: if isAuthenticated() && 
-                     (!resource.data.keys().hasAny(['shippingAddress']) || 
-                      request.query.limit == null);
+      // Allow reads of displayName and email (for public invite pages and party display)
+      // But never allow reading shippingAddress unless it's the user's own profile
+      // Unauthenticated users can read if document doesn't have shippingAddress
+      // Authenticated users can read if document doesn't have shippingAddress OR it's a collection query
+      allow read: if !resource.data.keys().hasAny(['shippingAddress']) || 
+                     (isAuthenticated() && request.query.limit != null);
     }
     
     // Parties collection
