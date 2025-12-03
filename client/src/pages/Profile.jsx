@@ -10,6 +10,7 @@ import { updateProfile } from 'firebase/auth';
 import { auth, db } from '../utils/firebase.js';
 import { Button } from '../components/ui/Button.jsx';
 import { Input } from '../components/ui/Input.jsx';
+import { LockClosedIcon } from '@heroicons/react/24/outline';
 
 export function Profile() {
   const { user, loading: authLoading } = useAuth();
@@ -101,8 +102,8 @@ export function Profile() {
 
   if (authLoading || loading) {
     return (
-      <div className="max-w-2xl mx-auto p-8">
-        <div className="text-center">Loading profile...</div>
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="text-center text-white">Loading profile...</div>
       </div>
     );
   }
@@ -112,16 +113,17 @@ export function Profile() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto p-8">
-      <h1 className="text-3xl font-bold mb-6">Your Profile</h1>
+    <div className="min-h-screen bg-slate-950 pt-24 pb-16">
+      <div className="max-w-2xl mx-auto px-4">
+        <h1 className="text-3xl font-bold mb-6 text-white">Your Profile</h1>
 
-      {successMessage && (
-        <div className="mb-4 p-4 bg-green-100 border border-green-400 text-green-700 rounded">
-          {successMessage}
-        </div>
-      )}
+        {successMessage && (
+          <div className="mb-4 p-4 bg-emerald-500/20 border border-emerald-500/50 text-emerald-300 rounded-lg">
+            {successMessage}
+          </div>
+        )}
 
-      <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-md p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="bg-slate-900/60 backdrop-blur-xl border border-white/10 shadow-2xl rounded-2xl p-6 md:p-8 space-y-6">
         {/* Display Name */}
         <div>
           <Input
@@ -134,24 +136,27 @@ export function Profile() {
 
         {/* Email (read-only) */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-slate-400 mb-2">
             Email
           </label>
-          <input
-            type="email"
-            value={user.email || ''}
-            disabled
-            className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-500"
-          />
-          <p className="mt-1 text-sm text-gray-500">
+          <div className="relative">
+            <input
+              type="email"
+              value={user.email || ''}
+              disabled
+              className="w-full px-3 py-2 pl-10 border border-slate-800 rounded-md bg-slate-900/30 text-slate-500 cursor-not-allowed"
+            />
+            <LockClosedIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-600" />
+          </div>
+          <p className="mt-1 text-sm text-slate-400">
             Your email cannot be changed
           </p>
         </div>
 
         {/* Shipping Address Section */}
-        <div className="border-t pt-6">
-          <h2 className="text-xl font-semibold mb-4">Shipping Address</h2>
-          <p className="text-sm text-gray-600 mb-4">
+        <div className="border-t border-white/10 pt-6">
+          <h2 className="text-xl font-bold mb-4 text-white">Shipping Address</h2>
+          <p className="text-sm text-slate-400 mb-4">
             This address will be used when you win a gift. Gift submitters will be able to see this address to send you your prize.
           </p>
 
@@ -200,15 +205,19 @@ export function Profile() {
         </div>
 
         {/* Submit Button */}
-        <div className="flex gap-3 justify-end pt-4 border-t">
+        <div className="flex gap-3 justify-end pt-4 border-t border-white/10">
           <Button
             type="button"
-            variant="secondary"
             onClick={() => navigate(-1)}
+            className="text-slate-400 hover:text-white bg-transparent border border-slate-700 hover:border-slate-600"
           >
             Cancel
           </Button>
-          <Button type="submit" disabled={saving}>
+          <Button 
+            type="submit" 
+            disabled={saving}
+            className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-purple-500/20 hover:scale-[1.02] transition-transform disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+          >
             {saving ? 'Saving...' : 'Save Changes'}
           </Button>
         </div>
