@@ -12,6 +12,7 @@ import { Button } from '../components/ui/Button.jsx';
 import { doc, setDoc, getDoc, collection, query, where, getDocs, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../utils/firebase.js';
 import { trackParticipantJoin, trackError } from '../utils/analytics.js';
+import { SEO } from '../components/SEO.jsx';
 
 export function Party() {
   const { partyId } = useParams();
@@ -19,37 +20,62 @@ export function Party() {
   const { user, loading: authLoading } = useAuth();
   const [gameStarted, setGameStarted] = useState(false);
 
+  // SEO for party page
+  const seoElement = (
+    <SEO 
+      title="Join the Party"
+      description="Join a White Elephant gift exchange party. Add your gift, invite friends, and start playing!"
+      url={`/party/${partyId}`}
+    />
+  );
+
   // Show loading state while fetching auth (but not party - we'll show invite landing)
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mb-4"></div>
-          <p className="text-white">Loading...</p>
+      <>
+        {seoElement}
+        <div className="min-h-screen flex items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black">
+          <div className="text-center">
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mb-4"></div>
+            <p className="text-white">Loading...</p>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
   // If user is not authenticated, show invite landing
   if (!user) {
-    return <PartyInviteLanding partyId={partyId} />;
+    return (
+      <>
+        {seoElement}
+        <PartyInviteLanding partyId={partyId} />
+      </>
+    );
   }
 
   // If party failed to load or doesn't exist, show invite landing
   if ((error && !party) || (!party && !loading)) {
-    return <PartyInviteLanding partyId={partyId} />;
+    return (
+      <>
+        {seoElement}
+        <PartyInviteLanding partyId={partyId} />
+      </>
+    );
   }
 
   // If party is still loading, wait
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mb-4"></div>
-          <p className="text-white">Loading party...</p>
+      <>
+        {seoElement}
+        <div className="min-h-screen flex items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black">
+          <div className="text-center">
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mb-4"></div>
+            <p className="text-white">Loading party...</p>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
@@ -78,10 +104,20 @@ export function Party() {
   // Show GameBoard if game is active, ended, or just started
   if (party.status === 'ACTIVE' || party.status === 'ENDED' || gameStarted) {
     console.log('Rendering GameBoard');
-    return <GameBoard partyId={partyId} />;
+    return (
+      <>
+        {seoElement}
+        <GameBoard partyId={partyId} />
+      </>
+    );
   }
 
   console.log('Rendering PartyLobby');
-  return <PartyLobby partyId={partyId} onStartGame={() => setGameStarted(true)} />;
+  return (
+    <>
+      {seoElement}
+      <PartyLobby partyId={partyId} onStartGame={() => setGameStarted(true)} />
+    </>
+  );
 }
 

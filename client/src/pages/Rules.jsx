@@ -11,9 +11,16 @@ import {
   GiftIcon
 } from '@heroicons/react/24/outline';
 import { Button } from '../components/ui/Button.jsx';
+import { SEO } from '../components/SEO.jsx';
 
 export function Rules() {
   return (
+    <>
+    <SEO 
+      title="Official White Elephant Rules & Guide"
+      description="Master the art of the steal. Learn how to play StealOrReveal with our complete guide to White Elephant gift exchange rules, stealing mechanics, and game strategies."
+      url="/rules"
+    />
     <div className="min-h-screen bg-slate-950">
       <div className="max-w-4xl mx-auto pt-24 pb-16 px-4">
         {/* Header Section */}
@@ -227,6 +234,7 @@ export function Rules() {
         </div>
       </div>
     </div>
+    </>
   );
 }
 

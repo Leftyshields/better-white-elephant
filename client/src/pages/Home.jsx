@@ -14,6 +14,7 @@ import { db } from '../utils/firebase.js';
 import { trackCreateParty, trackSignUp, trackLogin, trackButtonClick, trackGameAbandoned, trackError } from '../utils/analytics.js';
 import { usePartyModal } from '../contexts/PartyModalContext.jsx';
 import { Footer } from '../components/Footer.jsx';
+import { SEO } from '../components/SEO.jsx';
 
 export function Home() {
   const { user, signInWithGoogle, signInWithEmailAndPassword, signUpWithEmailAndPassword } = useAuth();
@@ -343,6 +344,11 @@ export function Home() {
   if (!user) {
     return (
       <>
+      <SEO 
+        title="Virtual White Elephant for Remote Teams"
+        description="Host seamless, real-time White Elephant gift exchanges for remote teams. Works with Zoom, Teams, or Meet. Zero-hassle setup, auto-pilot logistics."
+        url="/"
+      />
       {/* Snow Animation Layers - Fixed to viewport, starts from navbar */}
       <div className="fixed inset-0 overflow-visible pointer-events-none z-[5]">
         {/* Layer 1: Fastest, most visible */}
@@ -775,6 +781,11 @@ export function Home() {
 
   return (
     <>
+    <SEO 
+      title="Virtual White Elephant for Remote Teams"
+      description="Host seamless, real-time White Elephant gift exchanges for remote teams. Works with Zoom, Teams, or Meet. Zero-hassle setup, auto-pilot logistics."
+      url="/"
+    />
     {/* Subtle Snowflakes Animation - Fixed to viewport, starts from navbar */}
     <div className="fixed inset-0 overflow-visible pointer-events-none z-[5]">
       {[...Array(40)].map((_, i) => {
