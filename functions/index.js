@@ -71,26 +71,19 @@ export const sendPartyInvite = onRequest(
       const party = partyDoc.data();
 
 
-      // Determine client URL from request headers (Origin or Referer)
-      // This ensures links point to the correct environment (production or local)
-      let clientUrl = req.get('origin') || req.get('referer');
+      // Determine client URL
+      // Default to production
+      let clientUrl = 'https://stealorreveal.com';
 
-      // Clean up trailing slash
-      if (clientUrl && clientUrl.endsWith('/')) {
-        clientUrl = clientUrl.slice(0, -1);
+      // Check if request is from localhost (for development)
+      const origin = req.get('origin') || req.get('referer');
+      if (origin && (origin.includes('localhost') || origin.includes('127.0.0.1'))) {
+        clientUrl = origin;
       }
 
-      // Fallback to env var or defaults if header is missing or not useful
-      if (!clientUrl || clientUrl.includes('cloudfunctions')) {
-        clientUrl = process.env.CLIENT_URL;
-
-        // Safeguard: If CLIENT_URL is localhost but we're not in the emulator, ignore it
-        if (clientUrl && clientUrl.includes('localhost') && !process.env.FUNCTIONS_EMULATOR) {
-          console.warn('⚠️ CLIENT_URL is set to localhost in production. Falling back to default.');
-          clientUrl = null;
-        }
-
-        clientUrl = clientUrl || 'https://stealorreveal.com';
+      // Clean up trailing slash
+      if (clientUrl.endsWith('/')) {
+        clientUrl = clientUrl.slice(0, -1);
       }
       const inviteLink = `${clientUrl}/party/${partyId}`;
       const partyTitle = party.title || 'White Elephant Party';
