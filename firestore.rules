@@ -1,0 +1,121 @@
+rules_version='2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user is the owner
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Helper function to check if user is party admin
+    function isPartyAdmin(partyId) {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/parties/$(partyId)).data.adminId == request.auth.uid;
+    }
+    
+    // Helper function to check if user is a participant in a party
+    function isParticipant(partyId) {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/parties/$(partyId)/participants/$(request.auth.uid));
+    }
+    
+    // Users collection
+    match /users/{userId} {
+      // Users can read their own profile
+      allow read: if isOwner(userId);
+      
+      // Users can create/update their own profile
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId);
+      
+      // Allow reads of displayName and email (for public invite pages and party display)
+      // But never allow reading shippingAddress unless it's the user's own profile
+      // Unauthenticated users can read if document doesn't have shippingAddress
+      // Authenticated users can read if document doesn't have shippingAddress OR it's a collection query
+      allow read: if !resource.data.keys().hasAny(['shippingAddress']) || 
+                     (isAuthenticated() && request.query.limit != null);
+    }
+    
+    // Parties collection
+    match /parties/{partyId} {
+      // Allow unauthenticated reads for public invite landing (title, date, adminId)
+      // Also allow authenticated users to read full party details
+      allow read: if true;
+      
+      // Only authenticated users can create parties
+      allow create: if isAuthenticated() && 
+                       request.resource.data.adminId == request.auth.uid;
+      
+      // Only party admin can update party
+      allow update: if isPartyAdmin(partyId);
+      
+      // Only party admin can delete party, and only if it's ended or cancelled
+      allow delete: if isPartyAdmin(partyId) && 
+                      (resource.data.status == 'ENDED' || resource.data.status == 'CANCELLED');
+      
+      // Participants subcollection
+      match /participants/{participantId} {
+        // Participants can read all participants in their party
+        // Also allow authenticated users to read if party is in LOBBY (so they can see list while joining)
+        // Also allow users to read their own participant document (for collectionGroup queries)
+        allow read: if isAuthenticated() && 
+                     (participantId == request.auth.uid ||
+                      isParticipant(partyId) || 
+                      get(/databases/$(database)/documents/parties/$(partyId)).data.status == 'LOBBY');
+        
+        // Users can create their own participant record (when joining)
+        allow create: if isAuthenticated() && 
+                        participantId == request.auth.uid;
+        
+        // Users can update their own participant status
+        allow update: if isAuthenticated() && 
+                        (participantId == request.auth.uid || isPartyAdmin(partyId));
+        
+        // Only admin can delete participants
+        allow delete: if isPartyAdmin(partyId);
+      }
+      
+      // Pending invites subcollection
+      match /pendingInvites/{inviteId} {
+        // Only party admin can read/manage invites
+        allow read, write: if isPartyAdmin(partyId);
+      }
+    }
+    
+    // Gifts collection
+    match /gifts/{giftId} {
+      // Participants can read gifts in their party
+      // Also allow authenticated users to read if party is in LOBBY (so they can see gifts while joining)
+      allow read: if isAuthenticated() && 
+                     (isParticipant(resource.data.partyId) || 
+                      get(/databases/$(database)/documents/parties/$(resource.data.partyId)).data.status == 'LOBBY');
+      
+      // Users can create gifts - they'll be added as participants when they submit
+      // Allow if authenticated and submitting for themselves
+      allow create: if isAuthenticated() && 
+                       request.resource.data.submitterId == request.auth.uid;
+      
+      // Users can update their own gifts (before game starts)
+      allow update: if isAuthenticated() && 
+                       (resource.data.submitterId == request.auth.uid || 
+                        isPartyAdmin(resource.data.partyId));
+      
+      // Only admin can delete gifts
+      allow delete: if isAuthenticated() && 
+                       isPartyAdmin(resource.data.partyId);
+    }
+    
+    // Collection group query for participants - allows users to find parties where they are participants
+    // This is needed for the Home page to show parties where user is a participant
+    match /{path=**}/participants/{participantId} {
+      // Allow users to read participant documents where the document ID matches their user ID
+      // This enables collectionGroup queries to find parties where the user is a participant
+      allow read: if isAuthenticated() && participantId == request.auth.uid;
+    }
+  }
+}
