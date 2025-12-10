@@ -1,0 +1,60 @@
+# Dependencies
+node_modules/
+package-lock.json
+**/node_modules/
+**/package-lock.json
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+*.env
+
+# Build outputs
+client/dist/
+client/build/
+functions/lib/
+server/dist/
+
+# Firebase
+.firebase/
+.firebaserc.local
+firebase-debug.log
+firebase-debug.*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-*
+
+# OS
+.DS_Store
+Thumbs.db
+*.tmp
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Firebase Admin SDK key
+*-firebase-adminsdk-*.json
+serviceAccountKey.json
+
+# Server specific
+server/.env
+server/.env.local
+
+# Test files
+*.test.js
+*.spec.js
+coverage/
+
+# Redis
+dump.rdb
+
+

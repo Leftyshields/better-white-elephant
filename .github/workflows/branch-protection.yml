@@ -1,0 +1,26 @@
+# This workflow helps ensure branch protection is properly configured
+# It doesn't enforce protection, but serves as documentation
+name: Branch Protection Check
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  check:
+    name: Verify Branch Protection
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Verify main branch protection
+        run: |
+          echo "⚠️ This is a reminder that branch protection should be enabled on GitHub"
+          echo "Go to: Settings → Branches → Add rule for 'main'"
+          echo "See BRANCH_PROTECTION.md for detailed instructions"
+
