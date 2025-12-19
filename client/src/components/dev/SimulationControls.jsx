@@ -25,7 +25,9 @@ export function SimulationControls({ socket, partyId, gameState }) {
   const [botCount, setBotCount] = useState(10);
   const [isAutoPlay, setIsAutoPlay] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState(null);
-  const [showAuditTrail, setShowAuditTrail] = useState(false);
+  // Auto-expand audit trail if game is finished/ended
+  const isGameFinished = party?.status === 'ENDED' || gameState?.phase === 'ENDED' || gameState?.phase === 'FINISHED';
+  const [showAuditTrail, setShowAuditTrail] = useState(isGameFinished);
   const [lastGameState, setLastGameState] = useState(null);
   const [userNames, setUserNames] = useState({});
   const [userEmails, setUserEmails] = useState({});
@@ -60,6 +62,14 @@ export function SimulationControls({ socket, partyId, gameState }) {
       setLastGameState(null);
     }
   }, [gameState, party?.status, party?.gameState]);
+
+  // Auto-expand audit trail when game finishes
+  useEffect(() => {
+    const isFinished = party?.status === 'ENDED' || gameState?.phase === 'ENDED' || gameState?.phase === 'FINISHED';
+    if (isFinished) {
+      setShowAuditTrail(true);
+    }
+  }, [party?.status, gameState?.phase]);
   
   // Fetch user names for display in audit trail
   useEffect(() => {
@@ -735,7 +745,7 @@ export function SimulationControls({ socket, partyId, gameState }) {
             )}
 
             {/* Audit Trail Section */}
-            {gameState && (
+            {(gameState || party?.status === 'ENDED') && (
           <>
             <div className="border-t border-red-500/20 my-3"></div>
             <div className="flex items-center justify-between gap-2">
