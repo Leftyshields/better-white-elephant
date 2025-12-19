@@ -163,51 +163,33 @@ export function useGameReferee(gameState, userNames = {}, userEmails = {}) {
             // Check for turn skipping validation
             if (prevIndex >= 0 && currentIndex >= 0) {
               const expectedNextIndex = prevIndex + 1;
-              const isBoomerangPhase = currentState.isBoomerangPhase;
-              
-              if (isBoomerangPhase) {
-                const expectedBoomerangIndex = prevIndex - 1;
-                if (currentIndex !== expectedBoomerangIndex && currentIndex !== prevIndex && !isStealChain) {
-                  const expectedPlayerId = turnQueue[expectedBoomerangIndex];
-                  const expectedPlayerHasGift = expectedPlayerId ? playerHasGiftAtThisPoint(expectedPlayerId) : false;
-                  const stealStackLength = 0;
-                  
-                  if (stealStackLength === 0 && !expectedPlayerHasGift && Math.abs(currentIndex - expectedBoomerangIndex) > 1) {
-                    initialEntries.push({
-                      id: logIdCounter.current++,
-                      type: 'EVENT',
-                      eventType: 'WARNING',
-                      message: `Turn index skipped: ${prevIndex} -> ${currentIndex} (expected ${expectedBoomerangIndex} in boomerang)`,
-                      timestamp: timestamp,
-                    });
-                  }
-                }
-              } else {
-                if (currentIndex !== expectedNextIndex && currentIndex !== prevIndex && !isStealChain) {
-                  let allSkippedPlayersHaveGifts = true;
-                  const startIndex = Math.min(expectedNextIndex, currentIndex);
-                  const endIndex = Math.max(expectedNextIndex, currentIndex);
-                  
-                  for (let i = startIndex; i < endIndex; i++) {
-                    if (i !== currentIndex && i !== prevIndex) {
-                      const skippedPlayerId = turnQueue[i];
-                      if (skippedPlayerId && !playerHasGiftAtThisPoint(skippedPlayerId)) {
-                        allSkippedPlayersHaveGifts = false;
-                        break;
-                      }
+              // Note: Boomerang phase doesn't reverse turn order - it just continues through the queue
+              // after all players have had a turn. The index still increments, we just wrap around.
+              // So we use the same validation logic for both standard and boomerang phases.
+              if (currentIndex !== expectedNextIndex && currentIndex !== prevIndex && !isStealChain) {
+                let allSkippedPlayersHaveGifts = true;
+                const startIndex = Math.min(expectedNextIndex, currentIndex);
+                const endIndex = Math.max(expectedNextIndex, currentIndex);
+                
+                for (let i = startIndex; i < endIndex; i++) {
+                  if (i !== currentIndex && i !== prevIndex) {
+                    const skippedPlayerId = turnQueue[i];
+                    if (skippedPlayerId && !playerHasGiftAtThisPoint(skippedPlayerId)) {
+                      allSkippedPlayersHaveGifts = false;
+                      break;
                     }
                   }
-                  
-                  const stealStackLength = 0;
-                  if (stealStackLength === 0 && !allSkippedPlayersHaveGifts && Math.abs(currentIndex - expectedNextIndex) > 1) {
-                    initialEntries.push({
-                      id: logIdCounter.current++,
-                      type: 'EVENT',
-                      eventType: 'WARNING',
-                      message: `Turn index skipped: ${prevIndex} -> ${currentIndex} (expected ${expectedNextIndex})`,
-                      timestamp: timestamp,
-                    });
-                  }
+                }
+                
+                const stealStackLength = 0;
+                if (stealStackLength === 0 && !allSkippedPlayersHaveGifts && Math.abs(currentIndex - expectedNextIndex) > 1) {
+                  initialEntries.push({
+                    id: logIdCounter.current++,
+                    type: 'EVENT',
+                    eventType: 'WARNING',
+                    message: `Turn index skipped: ${prevIndex} -> ${currentIndex} (expected ${expectedNextIndex})`,
+                    timestamp: timestamp,
+                  });
                 }
               }
             }
@@ -274,9 +256,11 @@ export function useGameReferee(gameState, userNames = {}, userEmails = {}) {
           // This matches real-time behavior where we log the turn before the action
           // CRITICAL: Skip pre-event TURN entry for:
           // 1. STEAL events - TURN entry is generated after STEAL to show stealer -> victim
-          // 2. END_TURN after STEAL - victim is already active, no need for pre-event TURN entry
+          // 2. END_TURN events - TURN entry is generated after END_TURN to show skip -> next player
+          // 3. END_TURN after STEAL - victim is already active, no need for pre-event TURN entry
           const shouldSkipPreEventTurn = 
             event.type === 'STEAL' || 
+            event.type === 'END_TURN' ||
             (event.type === 'END_TURN' && previousEventType === 'STEAL');
           
           if (!shouldSkipPreEventTurn && simulatedCurrentPlayerId !== null && simulatedCurrentPlayerId !== previousPlayerId && previousPlayerId !== null && previousEventType !== 'STEAL') {
@@ -578,63 +562,41 @@ export function useGameReferee(gameState, userNames = {}, userEmails = {}) {
           return false;
         };
         
-        // In boomerang phase, turns go backwards
-        if (isBoomerangPhase) {
-          const expectedBoomerangIndex = prevTurnIndex - 1;
-          // Skip validation if this is a steal chain (turn goes to victim - valid)
-          if (currentIndex !== expectedBoomerangIndex && currentIndex !== prevTurnIndex && !isStealChain) {
-            // Check if there's a steal stack that would explain the skip
-            const stealStackLength = currentState.stealStack?.length || 0;
-            // Check if the expected player already has a gift (valid skip - they can skip their turn)
-            const expectedPlayerHasGift = playerHasGift(expectedBoomerangIndex);
-            
-            // Only warn if expected player doesn't have a gift (they should have been able to act)
-            // If they have a gift, skipping them is valid (they can skip their turn if happy with their gift)
-            if (stealStackLength === 0 && !expectedPlayerHasGift && Math.abs(currentIndex - expectedBoomerangIndex) > 1) {
-                newLogEntries.push({
-                  id: logIdCounter.current++,
-                  type: 'EVENT',
-                  eventType: 'WARNING',
-                  message: `Turn index skipped: ${prevTurnIndex} -> ${currentIndex} (expected ${expectedBoomerangIndex} in boomerang)`,
-                  timestamp: new Date(),
-                });
-            }
-          }
-        } else {
-          // Normal phase - check for skipping
-          // Skip validation if this is a steal chain (turn goes to victim - valid)
-          if (currentIndex !== expectedNextIndex && currentIndex !== prevTurnIndex && !isStealChain) {
-            // Check if all skipped players have gifts (valid skip - they can all skip their turns)
-            // If any skipped player doesn't have a gift, that's a warning
-            let allSkippedPlayersHaveGifts = true;
-            const startIndex = Math.min(expectedNextIndex, currentIndex);
-            const endIndex = Math.max(expectedNextIndex, currentIndex);
-            
-            // Check each player between expected and actual (excluding the actual player)
-            for (let i = startIndex; i < endIndex; i++) {
-              if (i !== currentIndex && i !== prevTurnIndex) {
-                const skippedPlayerId = currentState.turnOrder[i];
-                if (skippedPlayerId && !playerHasGift(i)) {
-                  allSkippedPlayersHaveGifts = false;
-                  break;
-                }
+        // Note: Boomerang phase doesn't reverse turn order - it just continues through the queue
+        // after all players have had a turn. The index still increments, we just wrap around.
+        // So we use the same validation logic for both standard and boomerang phases.
+        // Skip validation if this is a steal chain (turn goes to victim - valid)
+        if (currentIndex !== expectedNextIndex && currentIndex !== prevTurnIndex && !isStealChain) {
+          // Check if all skipped players have gifts (valid skip - they can all skip their turns)
+          // If any skipped player doesn't have a gift, that's a warning
+          let allSkippedPlayersHaveGifts = true;
+          const startIndex = Math.min(expectedNextIndex, currentIndex);
+          const endIndex = Math.max(expectedNextIndex, currentIndex);
+          
+          // Check each player between expected and actual (excluding the actual player)
+          for (let i = startIndex; i < endIndex; i++) {
+            if (i !== currentIndex && i !== prevTurnIndex) {
+              const skippedPlayerId = currentState.turnOrder[i];
+              if (skippedPlayerId && !playerHasGift(i)) {
+                allSkippedPlayersHaveGifts = false;
+                break;
               }
             }
-            
-            // Check steal stack (though it should be 0 for most cases)
-            const stealStackLength = currentState.stealStack?.length || 0;
-            
-            // Only warn if any skipped player doesn't have a gift (they should have been able to act)
-            // If all skipped players have gifts, skipping them is valid (they can skip their turns)
-            if (stealStackLength === 0 && !allSkippedPlayersHaveGifts && Math.abs(currentIndex - expectedNextIndex) > 1) {
-                newLogEntries.push({
-                  id: logIdCounter.current++,
-                  type: 'EVENT',
-                  eventType: 'WARNING',
-                  message: `Turn index skipped: ${prevTurnIndex} -> ${currentIndex} (expected ${expectedNextIndex})`,
-                  timestamp: new Date(),
-                });
-            }
+          }
+          
+          // Check steal stack (though it should be 0 for most cases)
+          const stealStackLength = currentState.stealStack?.length || 0;
+          
+          // Only warn if any skipped player doesn't have a gift (they should have been able to act)
+          // If all skipped players have gifts, skipping them is valid (they can skip their turns)
+          if (stealStackLength === 0 && !allSkippedPlayersHaveGifts && Math.abs(currentIndex - expectedNextIndex) > 1) {
+            newLogEntries.push({
+              id: logIdCounter.current++,
+              type: 'EVENT',
+              eventType: 'WARNING',
+              message: `Turn index skipped: ${prevTurnIndex} -> ${currentIndex} (expected ${expectedNextIndex})`,
+              timestamp: new Date(),
+            });
           }
         }
       }
