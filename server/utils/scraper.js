@@ -60,7 +60,7 @@ async function scrapeAmazonWithApify(url) {
         'Authorization': `Bearer ${APIFY_API_TOKEN}`
       },
       body: JSON.stringify({
-        categoryUrls: [url], // This actor expects categoryUrls, not startUrls
+        categoryOrProductUrls: [{ url }], // Array of objects with url property
         maxItems: 1 // We only need one product
       })
     });
