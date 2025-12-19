@@ -16,6 +16,8 @@ export default defineConfig({
     baseURL: 'http://localhost:5173',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
+    // Run in headless mode even for UI tests (the UI web server runs separately)
+    headless: true,
   },
 
   projects: [
