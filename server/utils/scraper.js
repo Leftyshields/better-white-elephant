@@ -113,15 +113,16 @@ async function scrapeAmazonWithApify(url) {
       return null;
     }
 
-    // Get results from dataset
-    const datasetResponse = await fetch(`${APIFY_API_BASE}/actor-runs/${runId}/dataset/items`, {
+    // Get results from dataset - use datasetId from run data
+    const datasetResponse = await fetch(`${APIFY_API_BASE}/datasets/${datasetId}/items`, {
       headers: {
         'Authorization': `Bearer ${APIFY_API_TOKEN}`
       }
     });
 
     if (!datasetResponse.ok) {
-      console.error('Failed to fetch Apify results');
+      const errorText = await datasetResponse.text();
+      console.error('[Apify] Failed to fetch dataset items:', datasetResponse.status, errorText);
       return null;
     }
 
