@@ -59,19 +59,48 @@ export async function createTestParty(page) {
 }
 
 /**
- * Create a test party via Firebase Admin (if available in test environment)
- * This is a placeholder - actual implementation depends on test setup
+ * Create a test party via API endpoint (uses Firebase Admin SDK on backend)
+ * @param {Page} page - Playwright page object (for accessing baseURL if needed)
  * @param {Object} options - Party creation options
+ * @param {string} options.adminId - Optional admin user ID
+ * @param {string} options.title - Optional party title
+ * @param {string} options.date - Optional party date (ISO string)
+ * @param {Object} options.config - Optional party config (maxSteals, returnToStart, priceLimit)
  * @returns {Promise<string>} Party ID
  */
-export async function createTestPartyViaAPI(options = {}) {
-  // This would require:
-  // 1. Firebase Admin SDK access
-  // 2. Test user authentication
-  // 3. API endpoint or direct Firestore access
-  
-  // For now, return null to indicate this needs implementation
-  throw new Error('Direct party creation via API not yet implemented - requires Firebase Admin setup');
+export async function createTestPartyViaAPI(page, options = {}) {
+  try {
+    // Default to localhost:3001 for development server
+    // In CI or other environments, this can be overridden via environment variable
+    // or by setting it in Playwright config
+    const serverUrl = process.env.TEST_SERVER_URL || 'http://localhost:3001';
+    
+    const response = await page.request.post(`${serverUrl}/api/test/party`, {
+      data: options,
+    });
+    
+    if (!response.ok()) {
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(`Failed to create test party: ${errorData.error || response.statusText()}`);
+    }
+    
+    const data = await response.json();
+    
+    if (!data.success || !data.partyId) {
+      throw new Error(`Invalid response from test API: ${JSON.stringify(data)}`);
+    }
+    
+    return data.partyId;
+  } catch (error) {
+    console.error('Error creating test party via API:', error);
+    // Try fallback to UI automation if API fails
+    console.warn('Falling back to UI-based party creation...');
+    try {
+      return await createTestParty(page);
+    } catch (fallbackError) {
+      throw new Error(`Test party creation failed (API and UI fallback): ${error.message} | ${fallbackError.message}`);
+    }
+  }
 }
 
 /**

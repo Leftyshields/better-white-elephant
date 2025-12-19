@@ -15,6 +15,17 @@ This document describes the automated testing setup for Better White Elephant, w
 
 ## Setup
 
+### Prerequisites
+
+1. **Backend server must be running** - The E2E tests require the backend server to be running for automated party creation
+   ```bash
+   # In a separate terminal
+   cd server
+   npm start
+   ```
+
+2. **Firebase configuration** - Ensure Firebase Admin SDK is configured with proper credentials in `server/.env`
+
 ### Install Dependencies
 
 ```bash
@@ -37,8 +48,13 @@ npm run test:coverage
 
 ### Run E2E Tests
 
+**Important**: The backend server must be running before running E2E tests. Tests automatically create parties via the test API endpoint.
+
 ```bash
-# Install Playwright browsers
+# Ensure backend server is running (in a separate terminal)
+cd server && npm start
+
+# Install Playwright browsers (first time only)
 npx playwright install
 
 # Run E2E tests (headless mode)
@@ -52,6 +68,10 @@ npm run test:e2e:ui
 # On headless servers, uses xvfb-run automatically
 npm run test:e2e:debug
 ```
+
+**Environment Variables**:
+- `TEST_PARTY_ID`: Optional - If set, tests will use this existing party ID instead of creating a new one (useful for debugging specific parties)
+- `TEST_SERVER_URL`: Optional - Backend server URL (defaults to `http://localhost:3001`)
 
 **Note for Headless Servers**: The `test:e2e:ui` and `test:e2e:debug` commands automatically use `xvfb-run` to provide a virtual display and bind to `0.0.0.0:9323` to allow remote access.
 
@@ -74,6 +94,56 @@ On headless servers:
 - If the server doesn't start: Check that `xvfb` is installed (`sudo apt-get install xvfb` on Ubuntu/Debian)
 - Server not accessible: The UI is configured to bind to `0.0.0.0:9323` in `playwright.config.js`. Ensure your firewall allows connections on port 9323
 - Change port/host: Set environment variables `PLAYWRIGHT_UI_HOST` and `PLAYWRIGHT_UI_PORT`, or modify the `ui` section in `playwright.config.js`
+
+## Automated Party Creation
+
+E2E tests automatically create parties before running using a dedicated test API endpoint. This ensures tests have valid parties to work with without manual setup.
+
+### How It Works
+
+1. **Test API Endpoint**: `POST /api/test/party`
+   - Uses Firebase Admin SDK to create parties (bypasses Firestore security rules)
+   - Only available in development/test environments (protected by `NODE_ENV` check)
+   - Creates party with default configuration: status='LOBBY', maxSteals=3, returnToStart=false
+
+2. **Test Helper Function**: `createTestPartyViaAPI(page, options)`
+   - Located in `client/src/test/e2e/utils/partyHelpers.js`
+   - Called automatically in each test's `beforeEach` hook
+   - Falls back to UI-based creation if API is unavailable
+
+3. **Test Setup**:
+   - Each test file creates a new party in `beforeEach` (unless `TEST_PARTY_ID` env var is set)
+   - Party ID is stored and used throughout the test
+   - Tests can optionally pass custom party configuration (title, date, config)
+
+### API Endpoint Details
+
+**Endpoint**: `POST /api/test/party`
+
+**Request Body** (optional):
+```json
+{
+  "adminId": "test-user-id",
+  "title": "My Test Party",
+  "date": "2024-12-25",
+  "config": {
+    "maxSteals": 3,
+    "returnToStart": false,
+    "priceLimit": null
+  }
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "partyId": "abc123...",
+  "adminId": "test-admin-..."
+}
+```
+
+**Security**: The endpoint is protected and only works in development/test environments. In production, it requires a `X-Test-Secret` header.
 
 ## Simulation Mode Testing
 

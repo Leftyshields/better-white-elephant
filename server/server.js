@@ -8,6 +8,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import gameRoutes from './routes/game.js';
 import userRoutes from './routes/users.js';
+import testRoutes from './routes/test.js';
 import redisClient from './utils/redis.js';
 import { auth, db } from './config/firebase-admin.js';
 import admin from 'firebase-admin';
@@ -165,6 +166,7 @@ app.get('/health', (req, res) => {
 // Routes
 app.use('/api/game', gameRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/test', testRoutes);
 
 // Socket.io authentication and connection handling
 io.use(async (socket, next) => {

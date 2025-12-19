@@ -14,7 +14,9 @@ export default defineConfig({
   
   use: {
     baseURL: 'http://localhost:5173',
-    trace: 'on-first-retry',
+    // Disable traces to prevent capturing sensitive data (API keys, tokens, etc.)
+    // Traces can be enabled manually for debugging: trace: 'on-first-retry'
+    trace: 'off',
     screenshot: 'only-on-failure',
     // Run in headless mode even for UI tests (the UI web server runs separately)
     headless: true,

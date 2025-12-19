@@ -13,14 +13,249 @@
       - generic [ref=e12]:
         - link "How to Play" [ref=e13] [cursor=pointer]:
           - /url: /rules
-        - button "Mute sounds" [ref=e14] [cursor=pointer]:
-          - img [ref=e15]
-        - button "Manage game" [ref=e17] [cursor=pointer]:
-          - img [ref=e18]
-        - button "Sign in" [ref=e22] [cursor=pointer]:
-          - generic [ref=e23]: Sign in
-  - generic [ref=e25]:
-    - heading "Party Not Found" [level=2] [ref=e26]
-    - paragraph [ref=e27]: The party you're looking for doesn't exist or may have been deleted.
-    - button "Go Home" [ref=e28] [cursor=pointer]
+        - button "Sign in" [ref=e15] [cursor=pointer]:
+          - generic [ref=e16]: Sign in
+  - generic:
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+    - generic: ❄
+  - generic [ref=e17]:
+    - generic [ref=e18]:
+      - generic [ref=e20]:
+        - heading "The Most Fun Your Remote Team Will Have This Holiday." [level=1] [ref=e21]
+        - paragraph [ref=e22]: Ditch the spreadsheets. Host a seamless, real-time White Elephant exchange that syncs perfectly with Zoom. No logistics, just laughter.
+        - button "See How It Works" [ref=e24] [cursor=pointer]
+        - generic [ref=e25]:
+          - generic [ref=e28]:
+            - generic [ref=e29]:
+              - generic [ref=e30]:
+                - generic [ref=e31]: ☕
+                - paragraph [ref=e32]: Espresso Machine
+              - generic [ref=e33]:
+                - generic [ref=e34]: T
+                - generic [ref=e35]: "Held by: Tom"
+            - generic [ref=e36]:
+              - generic [ref=e37]:
+                - generic [ref=e38]: 🎸
+                - paragraph [ref=e39]: Vintage Vinyl
+              - generic [ref=e40]:
+                - generic [ref=e41]: B
+                - generic [ref=e42]: "Held by: Brian"
+            - generic [ref=e43]:
+              - generic [ref=e44]:
+                - generic [ref=e45]: 🍺
+                - paragraph [ref=e46]: Craft Beer Set
+              - generic [ref=e47]:
+                - generic [ref=e48]: B
+                - generic [ref=e49]: "Held by: Brian"
+            - generic [ref=e50]:
+              - generic [ref=e51]:
+                - generic [ref=e52]: 🎁
+                - paragraph [ref=e53]: "Gift #4"
+              - generic [ref=e54]: WRAPPED
+            - generic [ref=e55]:
+              - generic [ref=e56]: 2 Steals
+              - generic [ref=e57]:
+                - generic [ref=e58]: 🎮
+                - paragraph [ref=e59]: Gaming Pass
+              - generic [ref=e60]:
+                - generic [ref=e61]: A
+                - generic [ref=e62]: "Held by: Alex"
+            - generic [ref=e63]:
+              - generic [ref=e64]:
+                - generic [ref=e65]: 🎁
+                - paragraph [ref=e66]: "Gift #6"
+              - generic [ref=e67]: WRAPPED
+          - paragraph [ref=e70]: Brian unwrapped the Vintage Vinyl! 🎸
+      - generic [ref=e72]:
+        - generic [ref=e73]:
+          - generic [ref=e74]: ⚡
+          - heading "Live Reactions & Rivalries" [level=3] [ref=e75]
+          - paragraph [ref=e76]: Watch the action unfold instantly. Send live emoji reactions and taunts without unmuting your mic.
+        - generic [ref=e77]:
+          - generic [ref=e78]: ✨
+          - heading "Zero-Hassle Setup" [level=3] [ref=e79]
+          - paragraph [ref=e80]: Guests simply paste a link from Amazon or Etsy. We'll try to auto-create a beautiful gift card, with manual entry as a fallback if scraping fails.
+        - generic [ref=e81]:
+          - generic [ref=e82]: ✈️
+          - heading "Auto-Pilot Logistics" [level=3] [ref=e83]
+          - paragraph [ref=e84]: We track the turn order, the rules, and the shipping. When the game ends, we privately swap addresses so prizes get where they need to go.
+      - generic [ref=e86]:
+        - generic [ref=e87]:
+          - heading "The Cure for 'You're on Mute'" [level=2] [ref=e88]
+          - list [ref=e89]:
+            - listitem [ref=e90]:
+              - generic [ref=e91]: ✅
+              - paragraph [ref=e92]: Works alongside Zoom, Teams, or Meet.
+            - listitem [ref=e93]:
+              - generic [ref=e94]: 🌍
+              - paragraph [ref=e95]: Inclusive for distributed teams in any time zone.
+            - listitem [ref=e96]:
+              - generic [ref=e97]: 🛡️
+              - paragraph [ref=e98]: "HR-Friendly: You set the rules and price limits, we enforce them."
+        - generic [ref=e99]:
+          - generic [ref=e100]:
+            - generic [ref=e102]: S
+            - generic [ref=e103]:
+              - generic [ref=e104]: M
+              - img [ref=e106]
+            - generic [ref=e109]:
+              - generic [ref=e110]: J
+              - img [ref=e112]
+            - generic [ref=e115]:
+              - generic [ref=e116]: A
+              - img [ref=e118]
+          - generic [ref=e121]: 😂
+          - generic [ref=e122]: 🔥
+          - generic [ref=e123]: 🎁
+          - generic [ref=e124]: 🎉
+    - contentinfo [ref=e125]:
+      - generic [ref=e127]:
+        - generic [ref=e128]:
+          - heading "StealOrReveal" [level=3] [ref=e129]
+          - paragraph [ref=e130]: The modern way to host unforgettable White Elephant gift exchanges. 100% free.
+          - paragraph [ref=e131]: © 2025 StealOrReveal
+        - generic [ref=e132]:
+          - heading "Product" [level=4] [ref=e133]
+          - list [ref=e134]:
+            - listitem [ref=e135]:
+              - link "Rules" [ref=e136] [cursor=pointer]:
+                - /url: /rules
+        - generic [ref=e137]:
+          - heading "Resources" [level=4] [ref=e138]
+          - list [ref=e139]:
+            - listitem [ref=e140]:
+              - link "Terms of Service" [ref=e141] [cursor=pointer]:
+                - /url: /terms
+            - listitem [ref=e142]:
+              - link "Privacy Policy" [ref=e143] [cursor=pointer]:
+                - /url: /privacy
+        - generic [ref=e144]:
+          - heading "Community" [level=4] [ref=e145]
+          - list [ref=e146]:
+            - listitem [ref=e147]:
+              - link "GitHub" [ref=e148] [cursor=pointer]:
+                - /url: https://github.com/Leftyshields/better-white-elephant
+                - img [ref=e149]
+                - text: GitHub
+            - listitem [ref=e151]:
+              - link "Report a Bug" [ref=e152] [cursor=pointer]:
+                - /url: /contact?type=bug
 ```

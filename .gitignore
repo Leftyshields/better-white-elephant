@@ -54,6 +54,14 @@ server/.env.local
 *.spec.js
 coverage/
 
+# Playwright test results and traces (may contain sensitive data)
+client/test-results/
+**/test-results/
+**/*trace.zip
+**/*.trace.zip
+playwright-report/
+playwright/.cache/
+
 # Redis
 dump.rdb
 
