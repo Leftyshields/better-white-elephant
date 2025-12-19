@@ -441,15 +441,6 @@ export function Home() {
               
               {/* CTAs */}
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
-                <Button 
-                  onClick={() => {
-                    trackButtonClick('Start a Party for Free', 'hero');
-                    signInWithGoogle();
-                  }} 
-                  className="px-8 py-4 text-lg font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-lg hover:shadow-xl transition-all"
-                >
-                  Start a Party for Free
-                </Button>
                 <button
                   onClick={() => {
                     trackButtonClick('See How It Works', 'hero');
