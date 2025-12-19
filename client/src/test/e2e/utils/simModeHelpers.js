@@ -199,10 +199,3 @@ export async function getCurrentPlayer(page) {
   const gameState = await getGameState(page);
   return gameState?.currentPlayerId || null;
 }
-
-/**
- * Wait for specific audit trail entry
- */
-export async function waitForAuditEntry(page, expectedText, timeout = 10000) {
-  await page.waitForSelector(`text=${expectedText}`, { timeout });
-}
