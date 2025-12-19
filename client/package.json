@@ -21,7 +21,7 @@
     "canvas-confetti": "^1.9.4",
     "firebase": "^10.7.1",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0",
+    "react-dom": "^19.2.3",
     "react-helmet-async": "^2.0.4",
     "react-router-dom": "^6.21.1",
     "socket.io-client": "^4.6.1",
