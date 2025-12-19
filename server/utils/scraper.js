@@ -5,7 +5,7 @@
 import * as cheerio from 'cheerio';
 
 const APIFY_API_TOKEN = process.env.APIFY_API_TOKEN;
-const APIFY_ACTOR_ID = 'junglee/free-amazon-product-scraper';
+const APIFY_ACTOR_ID = 'junglee~free-amazon-product-scraper'; // Use ~ instead of / for API
 const APIFY_API_BASE = 'https://api.apify.com/v2';
 
 /**
@@ -71,7 +71,9 @@ async function scrapeAmazonWithApify(url) {
 
     const runData = await startRunResponse.json();
     const runId = runData.data.id;
+    const datasetId = runData.data.defaultDatasetId;
     console.log('[Apify] Run started with ID:', runId);
+    console.log('[Apify] Dataset ID:', datasetId);
 
     // Poll for run completion (max 60 seconds)
     let completed = false;
