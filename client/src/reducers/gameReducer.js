@@ -270,6 +270,60 @@ export function gameReducer(state = initialState, action) {
     case ActionTypes.GAME_ENDED: {
       const gameState = action.payload.gameState;
       
+      // CRITICAL: Check if incoming state is newer than current state
+      // This prevents stale state from overwriting newer state (e.g., on page reload)
+      // Handle backwards compatibility: if timestamps don't exist, use history length as fallback
+      const incomingVersion = gameState?.stateVersion || (gameState?.updatedAt ? new Date(gameState.updatedAt).getTime() : 0);
+      const currentVersion = state.gameState?.stateVersion || (state.gameState?.updatedAt ? new Date(state.gameState.updatedAt).getTime() : 0);
+      
+      // Fallback: Use history length + currentTurnIndex as version if timestamps don't exist
+      // This helps with backwards compatibility for existing game states
+      const incomingFallbackVersion = incomingVersion || ((gameState?.history?.length || 0) * 1000 + (gameState?.currentTurnIndex || 0));
+      const currentFallbackVersion = currentVersion || ((state.gameState?.history?.length || 0) * 1000 + (state.currentTurnIndex || -1));
+      
+      // #region agent log
+      console.log('[DEBUG]',{location:'gameReducer.js:GAME_UPDATED:VERSION_CHECK',message:'Version check before update',data:{actionType:action.type,incomingVersion:incomingVersion||'N/A',currentVersion:currentVersion||'N/A',incomingFallbackVersion,currentFallbackVersion,incomingTurnIndex:gameState?.currentTurnIndex,currentTurnIndex:state.currentTurnIndex,incomingHistoryLength:gameState?.history?.length||0,currentHistoryLength:state.gameState?.history?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'});
+      // #endregion
+      
+      // Only update if incoming state is newer OR if we don't have a current state
+      // Also allow updates if the action is GAME_STARTED (always accept initial state)
+      if (action.type !== ActionTypes.GAME_STARTED && 
+          incomingFallbackVersion > 0 && 
+          currentFallbackVersion > 0 && 
+          incomingFallbackVersion < currentFallbackVersion) {
+        console.warn('[GameReducer] ⚠️ Rejecting stale game state update:', {
+          actionType: action.type,
+          incomingVersion: incomingVersion || 'N/A',
+          currentVersion: currentVersion || 'N/A',
+          incomingFallbackVersion,
+          currentFallbackVersion,
+          incomingTurnIndex: gameState?.currentTurnIndex,
+          currentTurnIndex: state.currentTurnIndex,
+          incomingHistoryLength: gameState?.history?.length || 0,
+          currentHistoryLength: state.gameState?.history?.length || 0,
+        });
+        // #region agent log
+        console.log('[DEBUG]',{location:'gameReducer.js:GAME_UPDATED:REJECTED',message:'State update rejected as stale',data:{actionType:action.type,incomingVersion:incomingVersion||'N/A',currentVersion:currentVersion||'N/A',incomingFallbackVersion,currentFallbackVersion},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'});
+        // #endregion
+        // Reject stale update - return current state
+        return state;
+      }
+      
+      if (incomingVersion > 0 || currentVersion > 0) {
+        console.log('[GameReducer] ✅ Accepting state update:', {
+          actionType: action.type,
+          incomingVersion: incomingVersion || 'N/A',
+          currentVersion: currentVersion || 'N/A',
+          incomingFallbackVersion,
+          currentFallbackVersion,
+          currentTurnIndex: gameState?.currentTurnIndex,
+          historyLength: gameState?.history?.length || 0,
+        });
+        // #region agent log
+        console.log('[DEBUG]',{location:'gameReducer.js:GAME_UPDATED:ACCEPTED',message:'State update accepted',data:{actionType:action.type,incomingVersion:incomingVersion||'N/A',currentVersion:currentVersion||'N/A',incomingFallbackVersion,currentFallbackVersion,currentTurnIndex:gameState?.currentTurnIndex,historyLength:gameState?.history?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'});
+        // #endregion
+      }
+      
       // Extract state machine fields from server gameState
       const turnQueue = gameState?.turnQueue || [];
       const currentTurnIndex = gameState?.currentTurnIndex ?? -1;

@@ -141,6 +141,8 @@ router.post('/start', async (req, res) => {
       config, // Store config in game state
       history: [], // Initialize empty history array
       reactionCount: 0, // Initialize reaction count to track emoji reactions (hype level)
+      stateVersion: Date.now(), // Add timestamp for state versioning to prevent stale updates
+      updatedAt: new Date().toISOString(), // ISO timestamp for easy comparison
     };
 
     // Save to both Redis and Firestore
@@ -154,6 +156,33 @@ router.post('/start', async (req, res) => {
 
     // Emit socket event (handled in server.js)
     req.io?.to(`party:${partyId}`).emit('game-started', gameState);
+
+    // Schedule bot refresh simulation for all bots in the game
+    setTimeout(async () => {
+      try {
+        const { scheduleBotRefreshSimulation } = await import('../utils/bot-utils.js');
+        if (scheduleBotRefreshSimulation && req.io) {
+          // Get all bot participant IDs
+          const participantsSnapshot = await db
+            .collection('parties')
+            .doc(partyId)
+            .collection('participants')
+            .where('status', '==', 'GOING')
+            .get();
+          
+          const botIds = participantsSnapshot.docs
+            .map(doc => doc.id)
+            .filter(id => id.startsWith('bot_'));
+          
+          if (botIds.length > 0) {
+            console.log(`🔄 Scheduling refresh simulation for ${botIds.length} bots in party ${partyId}`);
+            scheduleBotRefreshSimulation(partyId, botIds, req.io);
+          }
+        }
+      } catch (error) {
+        console.error('Error scheduling bot refresh simulation on game start:', error);
+      }
+    }, 3000);
 
     // Check if first player is a bot and trigger auto-play
     // Use longer delay (2 seconds) to ensure all clients have received game-started event
@@ -296,6 +325,10 @@ router.post('/end', async (req, res) => {
     finalState.state.config = gameState.config;
     await saveGameState(partyId, finalState.state);
 
+    // Stop bot refresh simulation when game ends
+    const { stopBotRefreshSimulation } = await import('../utils/bot-utils.js');
+    stopBotRefreshSimulation(partyId);
+
     // Emit socket event to notify all clients
     if (req.io) {
       req.io.to(`party:${partyId}`).emit('game-ended', finalState);
@@ -305,6 +338,50 @@ router.post('/end', async (req, res) => {
   } catch (error) {
     console.error('Error ending game:', error);
     res.status(500).json({ error: 'Failed to end game', message: error.message });
+  }
+});
+
+/**
+ * GET /api/game/state/:partyId
+ * Get current game state (for TanStack Query / page reload scenarios)
+ * Requires authentication
+ */
+router.get('/state/:partyId', async (req, res) => {
+  try {
+    const { partyId } = req.params;
+    const userId = req.user?.uid;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    if (!partyId || typeof partyId !== 'string' || partyId.length === 0 || partyId.length > 128) {
+      return res.status(400).json({ error: 'Valid partyId is required' });
+    }
+
+    // Verify user is a participant
+    const participantsSnapshot = await db
+      .collection('parties')
+      .doc(partyId)
+      .collection('participants')
+      .where('__name__', '==', userId)
+      .get();
+    
+    if (participantsSnapshot.empty) {
+      return res.status(403).json({ error: 'You are not a participant in this party' });
+    }
+
+    // Load game state from Redis or Firestore
+    const gameState = await loadGameState(partyId);
+    
+    if (!gameState) {
+      return res.status(404).json({ error: 'Game state not found' });
+    }
+
+    res.json(gameState);
+  } catch (error) {
+    console.error('Error fetching game state:', error);
+    res.status(500).json({ error: 'Failed to fetch game state', message: error.message });
   }
 });
 

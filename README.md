@@ -47,6 +47,11 @@ better-white-elephant/
      - Get your token from [Apify Console](https://console.apify.com/account/integrations)
      - The scraper will automatically use Apify for Amazon URLs if the token is set
      - Falls back to cheerio scraping if token is not set or Apify fails
+   - **Bot Refresh Simulation (Optional)**: Set `BOT_REFRESH_SIMULATION=true` in server `.env` to enable periodic bot refresh simulation
+     - Simulates realistic browser refresh behavior for bots (disconnect/reconnect scenarios)
+     - Helps test state version checking and prevent stale state resets
+     - Bots will randomly refresh every 30-120 seconds with 30% probability
+     - Useful for testing the game state persistence and version checking fixes
    - For Functions: Set up Resend API key (see [DEPLOY_FUNCTIONS.md](./DEPLOY_FUNCTIONS.md))
 
 3. **Firebase setup:**

@@ -200,6 +200,10 @@ export async function saveGameState(partyId, gameState, ttl = null) {
   // Force partyId into gameState to ensure consistency
   gameState.partyId = partyId;
   
+  // Update state version and timestamp on every save
+  gameState.stateVersion = Date.now();
+  gameState.updatedAt = new Date().toISOString();
+  
   const redisKey = `game:${partyId}`;
   
   // Determine TTL based on party status if not provided
@@ -305,6 +309,15 @@ export async function loadGameState(partyId) {
     }
     // Ensure partyId is set
     parsed.partyId = partyId;
+    
+    // Backwards compatibility: Add stateVersion and updatedAt if missing
+    if (!parsed.stateVersion) {
+      parsed.stateVersion = Date.now();
+    }
+    if (!parsed.updatedAt) {
+      parsed.updatedAt = new Date().toISOString();
+    }
+    
     return parsed;
   }
   
@@ -333,6 +346,14 @@ export async function loadGameState(partyId) {
         
         // CRITICAL: Ensure partyId is set correctly
         convertedState.partyId = partyId;
+        
+        // Backwards compatibility: Add stateVersion and updatedAt if missing
+        if (!convertedState.stateVersion) {
+          convertedState.stateVersion = Date.now();
+        }
+        if (!convertedState.updatedAt) {
+          convertedState.updatedAt = new Date().toISOString();
+        }
         
         // Determine TTL based on party status
         // Privacy policy: "Game and Party Data: Retained for 1 year after the game ends"

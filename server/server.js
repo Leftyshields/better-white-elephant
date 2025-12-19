@@ -333,6 +333,8 @@ io.on('connection', (socket) => {
 
   socket.on('steal-gift', async ({ partyId, giftId }) => {
     try {
+      console.log(`[Server] 📥 Received steal-gift event:`, { partyId, giftId, userId: socket.userId });
+      
       // Validate inputs
       if (!isValidPartyId(partyId) || !isValidGiftId(giftId)) {
         socket.emit('error', { message: 'Invalid party ID or gift ID' });
@@ -374,8 +376,9 @@ io.on('connection', (socket) => {
       // Ensure partyId is set in gameState before creating engine
       gameState.partyId = partyId;
       const engine = new GameEngine(gameState, config);
-
+      
       engine.stealGift(giftId, socket.userId);
+      
       const newState = engine.getState();
       // Preserve config in state
       newState.config = gameState.config;
@@ -394,6 +397,7 @@ io.on('connection', (socket) => {
         checkAndMakeBotMove(partyId, newState, io).catch(console.error);
       }, 1000); // Shorter delay for steal (no reveal animation needed)
     } catch (error) {
+      console.error(`[Server] ❌ Error in steal-gift:`, error);
       socket.emit('error', { message: error.message });
     }
   });
@@ -760,6 +764,15 @@ io.on('connection', (socket) => {
       // Note: Firestore real-time listeners will automatically update the participants list
       io.to(`party:${partyId}`).emit('participants-updated');
       console.log(`📢 Notified all clients in party:${partyId} - ${count} bots added to Firestore`);
+      
+      // Schedule refresh simulation for added bots (if game is active)
+      const { scheduleBotRefreshSimulation } = await import('./utils/bot-utils.js');
+      const { loadGameState } = await import('./utils/game-state-persistence.js');
+      const gameState = await loadGameState(partyId);
+      if (gameState && gameState.phase === 'ACTIVE') {
+        const botIds = addedBots.map(b => b.id);
+        scheduleBotRefreshSimulation(partyId, botIds, io);
+      }
     } catch (error) {
       console.error('❌ Error adding bots:', error);
       console.error('Error stack:', error.stack);

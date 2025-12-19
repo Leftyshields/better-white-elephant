@@ -97,16 +97,36 @@ export function useGameEngine(partyId) {
         });
 
       socket.on('game-state', (gameState) => {
+        console.log('[GameEngine] 📥 Received game-state event:', {
+          currentTurnIndex: gameState?.currentTurnIndex,
+          currentPlayerId: gameState?.currentPlayerId,
+          historyLength: gameState?.history?.length || 0,
+          timestamp: Date.now()
+        });
         // Use refs to get latest values
         dispatch(gameActions.gameStateReceived(gameState, giftsRef.current, participantsRef.current));
       });
 
       socket.on('game-started', (gameState) => {
+        console.log('[GameEngine] 📥 Received game-started event:', {
+          currentTurnIndex: gameState?.currentTurnIndex,
+          currentPlayerId: gameState?.currentPlayerId,
+          timestamp: Date.now()
+        });
         // Use refs to get latest values
         dispatch(gameActions.gameStarted(gameState, giftsRef.current, participantsRef.current));
       });
 
       socket.on('game-updated', (gameState) => {
+        console.log('[GameEngine] 📥 Received game-updated event:', {
+          currentTurnIndex: gameState?.currentTurnIndex,
+          currentPlayerId: gameState?.currentPlayerId,
+          historyLength: gameState?.history?.length || 0,
+          timestamp: Date.now()
+        });
+        // #region agent log
+        console.log('[DEBUG]',{location:'useGameEngine.js:game-updated:RECEIVED',message:'Client received game-updated event',data:{currentTurnIndex:gameState?.currentTurnIndex,currentPlayerId:gameState?.currentPlayerId,historyLength:gameState?.history?.length,stateVersion:gameState?.stateVersion,updatedAt:gameState?.updatedAt},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'});
+        // #endregion
         // Clear pending optimistic update since server state is authoritative
         pendingOptimisticUpdateRef.current = null;
         // Use refs to get latest values
@@ -197,13 +217,10 @@ export function useGameEngine(partyId) {
     }
   }, [gifts]);
 
-  // Dispatch game state updates when participants change (for ordering)
-  useEffect(() => {
-    if (state.gameState && participants.length > 0 && gifts.length > 0) {
-      // Re-dispatch current game state to update participants ordering
-      dispatch(gameActions.gameUpdated(state.gameState, gifts, participants));
-    }
-  }, [participants.length, gifts.length]); // Only when counts change
+  // FIXED: Removed problematic useEffect that was re-dispatching stale game state
+  // This was causing state resets when participants/gifts changed
+  // Instead, we rely on the reducer to handle participant ordering from the action payload
+  // The mergeGifts and orderParticipants functions already handle this correctly
 
   // Optimistic action handlers
   const handlePickGift = useCallback((giftId) => {
@@ -305,8 +322,41 @@ export function useGameEngine(partyId) {
     if (gift.isFrozen) return false;
     if (gift.ownerId === user?.uid) return false; // Can't steal your own gift
     
+    // RULE 4: Immediate Steal-Back Prevention (U-Turn Rule)
+    // Per GAME_RULES.md Rule 4: "A player CANNOT steal a gift that was just stolen from them on the SAME turn"
+    if (gift.lastOwnerId === user?.uid) {
+      return false; // Can't steal back a gift immediately after losing it on the same turn
+    }
+    
+    // RULE 1: One Gift Per Person (Double-Dip Prevention)
+    // Check if player already has a gift
+    const playerHasGift = Object.values(state.gifts).some(g => 
+      !g.isWrapped && g.ownerId === user?.uid
+    );
+    
+    if (playerHasGift) {
+      // Player has a gift - can only steal if:
+      // - Exception 1: Player 1's Final Turn (bookend exception)
+      // - Exception 2: Boomerang Phase (players can swap) - only if returnToStart is enabled
+      const turnOrder = state.gameState?.turnOrder || [];
+      const turnQueue = state.turnQueue || [];
+      const returnToStart = state.gameState?.config?.returnToStart || false;
+      // Boomerang phase only exists if returnToStart is enabled AND we're in the second half of the queue
+      const isBoomerangPhase = returnToStart && (
+        state.gameState?.isBoomerangPhase || 
+        (state.currentTurnIndex >= (turnOrder.length || 0))
+      );
+      const isLastIndex = state.currentTurnIndex === (turnQueue.length - 1);
+      const isPlayer1 = turnOrder.length > 0 && turnOrder[0] === user?.uid;
+      const isPlayer1FinalTurn = isLastIndex && isPlayer1;
+      
+      if (!isBoomerangPhase && !isPlayer1FinalTurn) {
+        return false; // Player has a gift and it's not boomerang phase or Player 1's final turn
+      }
+    }
+    
     return true;
-  }, [isMyTurn, state.status, state.gifts, user?.uid]);
+  }, [isMyTurn, state.status, state.gifts, state.gameState, state.currentTurnIndex, state.turnQueue, user?.uid]);
 
   // Emit reaction method
   const emitReaction = useCallback((emoji) => {

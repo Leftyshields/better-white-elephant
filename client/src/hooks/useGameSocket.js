@@ -134,8 +134,18 @@ export function useGameSocket(partyId) {
   }, [partyId]);
 
   const emitAction = (action, data) => {
+    // #region agent log
+    console.log('[DEBUG]',{location:'useGameSocket.js:emitAction',message:'emitAction called',data:{action,data,hasSocket:!!socketRef.current,connected,socketConnected:socketRef.current?.connected},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'});
+    // #endregion
     if (socketRef.current && connected) {
+      // #region agent log
+      console.log('[DEBUG]',{location:'useGameSocket.js:emitAction:EMITTING',message:'Emitting socket event',data:{action,payload:{partyId,...data},socketId:socketRef.current?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'});
+      // #endregion
       socketRef.current.emit(action, { partyId, ...data });
+    } else {
+      // #region agent log
+      console.log('[DEBUG]',{location:'useGameSocket.js:emitAction:BLOCKED',message:'Cannot emit: socket not connected',data:{action,hasSocket:!!socketRef.current,connected,socketConnected:socketRef.current?.connected},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'});
+      // #endregion
     }
   };
 
@@ -182,6 +192,9 @@ export function useGameSocket(partyId) {
       emitAction('pick-gift', { giftId });
     },
     stealGift: (giftId) => {
+      // #region agent log
+      console.log('[DEBUG]',{location:'useGameSocket.js:stealGift',message:'stealGift called',data:{giftId,partyId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'});
+      // #endregion
       trackGameAction('steal', partyId);
       emitAction('steal-gift', { giftId });
     },

@@ -13,6 +13,15 @@ const activeBotTimers = new Map();
 const botMoveAttempts = new Map();
 const MAX_MOVE_ATTEMPTS = 10; // Prevent infinite loops
 
+// Track bot refresh timers to simulate browser refresh behavior
+const botRefreshTimers = new Map();
+
+// Configuration for bot refresh simulation
+const BOT_REFRESH_ENABLED = process.env.BOT_REFRESH_SIMULATION === 'true' || false;
+const BOT_REFRESH_INTERVAL_MIN = 30000; // 30 seconds minimum between refreshes
+const BOT_REFRESH_INTERVAL_MAX = 120000; // 2 minutes maximum between refreshes
+const BOT_REFRESH_PROBABILITY = 0.3; // 30% chance of refresh per interval
+
 /**
  * Clear all bot timers and state for a party (for recovery/reset)
  */
@@ -36,7 +45,17 @@ export function clearBotState(partyId) {
   }
   attemptKeysToDelete.forEach(key => botMoveAttempts.delete(key));
   
-  console.log(`🧹 Cleared bot state for party ${partyId} (${keysToDelete.length} timers, ${attemptKeysToDelete.length} attempts)`);
+  // Clear refresh timers
+  const refreshKeysToDelete = [];
+  for (const key of botRefreshTimers.keys()) {
+    if (key.startsWith(`${partyId}:`)) {
+      clearTimeout(botRefreshTimers.get(key));
+      refreshKeysToDelete.push(key);
+    }
+  }
+  refreshKeysToDelete.forEach(key => botRefreshTimers.delete(key));
+  
+  console.log(`🧹 Cleared bot state for party ${partyId} (${keysToDelete.length} timers, ${attemptKeysToDelete.length} attempts, ${refreshKeysToDelete.length} refresh timers)`);
 }
 
 /**
@@ -100,8 +119,12 @@ export function botMakeDecision(gameState) {
   const isQueueExhausted = currentTurnIndex >= turnQueueLength;
   
   // Check if we're in boomerang phase (second half of turn queue)
-  const isBoomerangPhase = currentTurnIndex >= (turnOrder?.length || 0);
+  // CRITICAL: Boomerang phase only exists if returnToStart is enabled
   const returnToStart = config?.returnToStart || false;
+  const isBoomerangPhase = returnToStart && (
+    gameState.isBoomerangPhase || 
+    (currentTurnIndex >= (turnOrder?.length || 0))
+  );
 
   // CRITICAL: If queue is exhausted but wrapped gifts remain, bot MUST pick a wrapped gift
   // This prevents the game from getting stuck in an infinite loop
@@ -836,9 +859,22 @@ export async function forceBotSteal(partyId, io) {
     }
 
     // Check if bot has already acted this turn
+    // CRITICAL: If current player is a victim (currentVictim), they should always be able to act
+    // Their turnAction should be cleared, but even if there's stale data, allow forcing the action
     const turnActionMap = new Map(gameState.turnAction);
-    if (turnActionMap.get(currentPlayerId)) {
+    const isVictim = gameState.currentVictim === currentPlayerId;
+    const hasActed = turnActionMap.get(currentPlayerId);
+    
+    // Only block if they're not a victim AND they've already acted
+    if (!isVictim && hasActed) {
       throw new Error('Bot has already acted this turn');
+    }
+    
+    // If they're a victim or have stale data, ensure turnAction is cleared
+    if (isVictim || hasActed) {
+      // Clear stale turnAction - the engine will handle setting it correctly
+      turnActionMap.set(currentPlayerId, null);
+      gameState.turnAction = Array.from(turnActionMap.entries());
     }
 
     // Find stealable gifts
@@ -926,9 +962,22 @@ export async function forceBotSkip(partyId, io) {
     }
 
     // Check if bot has already acted this turn
+    // CRITICAL: If current player is a victim (currentVictim), they should always be able to act
+    // Their turnAction should be cleared, but even if there's stale data, allow forcing the action
     const turnActionMap = new Map(gameState.turnAction);
-    if (turnActionMap.get(currentPlayerId)) {
+    const isVictim = gameState.currentVictim === currentPlayerId;
+    const hasActed = turnActionMap.get(currentPlayerId);
+    
+    // Only block if they're not a victim AND they've already acted
+    if (!isVictim && hasActed) {
       throw new Error('Bot has already acted this turn');
+    }
+    
+    // If they're a victim or have stale data, ensure turnAction is cleared
+    if (isVictim || hasActed) {
+      // Clear stale turnAction - the engine will handle setting it correctly
+      turnActionMap.set(currentPlayerId, null);
+      gameState.turnAction = Array.from(turnActionMap.entries());
     }
 
     console.log(`🤖 [FORCED SKIP] Bot ${currentPlayerId} skipping turn`);
@@ -999,9 +1048,22 @@ export async function forceBotPick(partyId, io) {
     }
 
     // Check if bot has already acted this turn
+    // CRITICAL: If current player is a victim (currentVictim), they should always be able to act
+    // Their turnAction should be cleared, but even if there's stale data, allow forcing the action
     const turnActionMap = new Map(gameState.turnAction);
-    if (turnActionMap.get(currentPlayerId)) {
+    const isVictim = gameState.currentVictim === currentPlayerId;
+    const hasActed = turnActionMap.get(currentPlayerId);
+    
+    // Only block if they're not a victim AND they've already acted
+    if (!isVictim && hasActed) {
       throw new Error('Bot has already acted this turn');
+    }
+    
+    // If they're a victim or have stale data, ensure turnAction is cleared
+    if (isVictim || hasActed) {
+      // Clear stale turnAction - the engine will handle setting it correctly
+      turnActionMap.set(currentPlayerId, null);
+      gameState.turnAction = Array.from(turnActionMap.entries());
     }
 
     // Check if there are wrapped gifts
@@ -1041,6 +1103,132 @@ export async function forceBotPick(partyId, io) {
   } catch (error) {
     console.error(`❌ Error forcing bot pick for party ${partyId}:`, error);
     throw error;
+  }
+}
+
+/**
+ * Simulate browser refresh for a bot by triggering a reconnection scenario
+ * This tests the state version checking and prevents stale state resets
+ */
+export async function simulateBotRefresh(partyId, botId, io) {
+  try {
+    if (!BOT_REFRESH_ENABLED) {
+      return; // Refresh simulation disabled
+    }
+
+    // Load current game state
+    const gameState = await loadGameState(partyId);
+    if (!gameState) {
+      console.log(`🔄 [Bot Refresh] No game state found for party ${partyId}, skipping refresh simulation`);
+      return;
+    }
+
+    // Only simulate refresh if game is active
+    if (gameState.phase !== 'ACTIVE') {
+      return;
+    }
+
+    console.log(`🔄 [Bot Refresh] Simulating browser refresh for bot ${botId} in party ${partyId}`);
+    console.log(`   Current turn index: ${gameState.currentTurnIndex}, History length: ${gameState.history?.length || 0}`);
+    
+    // Simulate what happens when a bot's browser refreshes:
+    // 1. Their socket would disconnect (we skip this as bots don't have sockets)
+    // 2. They reconnect and join the party room
+    // 3. Server sends them the current game-state event
+    
+    // Emit game-state event to the bot's socket (if it exists) or to the party room
+    // This simulates what would happen on reconnection
+    // Since bots are server-side, we emit to the party room and log it
+    const roomName = `party:${partyId}`;
+    const room = io.sockets.adapter.rooms.get(roomName);
+    
+    if (room && room.size > 0) {
+      console.log(`📤 [Bot Refresh] Sending game-state event to party room (${room.size} clients connected)`);
+      // This will trigger the state version checking logic in the client
+      io.to(roomName).emit('game-state', gameState);
+      console.log(`✅ [Bot Refresh] Game-state event sent for bot ${botId} refresh simulation`);
+      console.log(`   State version: ${gameState.stateVersion || 'N/A'}, Updated: ${gameState.updatedAt || 'N/A'}`);
+    } else {
+      console.log(`⚠️ [Bot Refresh] No clients connected to party room ${roomName}, skipping emit`);
+    }
+
+  } catch (error) {
+    console.error(`❌ [Bot Refresh] Error simulating refresh for bot ${botId} in party ${partyId}:`, error);
+  }
+}
+
+/**
+ * Schedule periodic random refresh simulations for all bots in a party
+ * This simulates realistic browser behavior where users occasionally refresh
+ */
+export function scheduleBotRefreshSimulation(partyId, botIds, io) {
+  if (!BOT_REFRESH_ENABLED) {
+    return; // Refresh simulation disabled
+  }
+
+  // Clear any existing refresh timers for this party
+  const refreshKeysToDelete = [];
+  for (const key of botRefreshTimers.keys()) {
+    if (key.startsWith(`${partyId}:`)) {
+      clearTimeout(botRefreshTimers.get(key));
+      refreshKeysToDelete.push(key);
+    }
+  }
+  refreshKeysToDelete.forEach(key => botRefreshTimers.delete(key));
+
+  // Schedule refresh simulation for each bot
+  botIds.forEach(botId => {
+    if (!isBot(botId)) {
+      return; // Skip non-bots
+    }
+
+    const scheduleNextRefresh = () => {
+      // Random interval between min and max
+      const interval = BOT_REFRESH_INTERVAL_MIN + 
+        Math.random() * (BOT_REFRESH_INTERVAL_MAX - BOT_REFRESH_INTERVAL_MIN);
+      
+      const timerKey = `${partyId}:${botId}:refresh`;
+      
+      const timerId = setTimeout(async () => {
+        botRefreshTimers.delete(timerKey);
+        
+        // Random probability check - only refresh sometimes
+        if (Math.random() < BOT_REFRESH_PROBABILITY) {
+          await simulateBotRefresh(partyId, botId, io);
+        }
+        
+        // Schedule next refresh (only if game is still active)
+        const { loadGameState } = await import('./game-state-persistence.js');
+        const gameState = await loadGameState(partyId);
+        if (gameState && gameState.phase === 'ACTIVE') {
+          scheduleNextRefresh();
+        }
+      }, interval);
+      
+      botRefreshTimers.set(timerKey, timerId);
+      console.log(`📅 [Bot Refresh] Scheduled refresh simulation for bot ${botId} in party ${partyId} in ${Math.round(interval / 1000)}s`);
+    };
+
+    // Start scheduling for this bot
+    scheduleNextRefresh();
+  });
+}
+
+/**
+ * Stop refresh simulation for a party
+ */
+export function stopBotRefreshSimulation(partyId) {
+  const refreshKeysToDelete = [];
+  for (const key of botRefreshTimers.keys()) {
+    if (key.startsWith(`${partyId}:`)) {
+      clearTimeout(botRefreshTimers.get(key));
+      refreshKeysToDelete.push(key);
+    }
+  }
+  refreshKeysToDelete.forEach(key => botRefreshTimers.delete(key));
+  
+  if (refreshKeysToDelete.length > 0) {
+    console.log(`🛑 [Bot Refresh] Stopped ${refreshKeysToDelete.length} refresh simulations for party ${partyId}`);
   }
 }
 

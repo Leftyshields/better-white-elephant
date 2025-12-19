@@ -10,6 +10,7 @@
   "dependencies": {
     "@headlessui/react": "^2.2.9",
     "@heroicons/react": "^2.2.0",
+    "@tanstack/react-query": "^5.90.12",
     "canvas-confetti": "^1.9.4",
     "firebase": "^10.7.1",
     "react": "^18.2.0",

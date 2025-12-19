@@ -70,7 +70,7 @@ export const GiftGrid = memo(function GiftGrid({
                 userId={userId}
                 onSteal={actions.stealGift}
                 canPick={false}
-                canSteal={canSteal(gift.id)}
+                canSteal={(()=>{const result=canSteal(gift.id);console.log('[DEBUG]',{location:'GiftGrid.jsx:canSteal',message:'canSteal result passed to GiftCard',data:{giftId:gift.id,canStealResult:result},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'});return result;})()}
                 revealingGiftId={revealingGiftId}
               />
             );

@@ -23,9 +23,13 @@ export const GiftCard = memo(function GiftCard({
   compact = false,
   giftNumber,
   revealingGiftId = null,
+  isMyGift = false,
 }) {
   const isOwned = ownerId === userId;
   const isCurrentPlayer = currentPlayerId === userId;
+  // Recalculate isMyGift from gift prop to avoid stale prop values
+  // This ensures the badge always shows correctly even if the passed prop is stale
+  const computedIsMyGift = gift?.submitterId === userId || isMyGift;
   const [imageError, setImageError] = useState(false);
   const [isRevealing, setIsRevealing] = useState(false);
   const revealTimerRef = useRef(null);
@@ -85,12 +89,18 @@ export const GiftCard = memo(function GiftCard({
   return (
     <div
       id={`gift-${gift.id}`}
-      className={`bg-white/5 backdrop-blur-md border border-white/10 rounded-xl overflow-hidden hover:border-white/30 transition-all ${
+      className={`bg-white/5 backdrop-blur-md border rounded-xl overflow-hidden hover:border-white/30 transition-all ${
         compact && shouldShowWrapped
           ? 'p-2 aspect-square h-24 cursor-pointer'
           : 'p-4 w-full sm:w-[280px] md:w-[320px]'
       } ${
-        isFrozen ? 'border-red-400/50 opacity-75' : ''
+        isFrozen 
+          ? 'border-red-400/50 opacity-75' 
+          : computedIsMyGift && shouldShowWrapped && isCurrentPlayer && canPick
+          ? 'border-amber-400/60 ring-2 ring-amber-400/30'
+          : computedIsMyGift && !shouldShowWrapped
+          ? 'border-amber-400/40'
+          : 'border-white/10'
       } ${isOwned ? 'ring-2 ring-indigo-500/50' : ''} ${revealShakeClass} ${revealScaleClass}`}
       onClick={compact && shouldShowWrapped && isCurrentPlayer && canPick ? () => onPick(gift.id) : undefined}
     >
@@ -103,6 +113,12 @@ export const GiftCard = memo(function GiftCard({
                 #{giftNumber}
               </div>
             )}
+            {computedIsMyGift && (
+              <div className="absolute bottom-1 left-1 bg-amber-500/90 text-white shadow-lg shadow-amber-500/50 text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 z-10 border border-amber-300/50 whitespace-nowrap">
+                <span className="text-[8px]">⚠️</span>
+                <span>Your Gift</span>
+              </div>
+            )}
             {isCurrentPlayer && canPick && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-xl opacity-0 hover:opacity-100 transition-opacity">
                 <span className="text-white text-xs font-semibold">Click to Pick</span>
@@ -110,9 +126,24 @@ export const GiftCard = memo(function GiftCard({
             )}
           </div>
         ) : (
-          <div className="text-center py-8">
+          <div className="text-center py-8 relative">
             <div className="text-6xl mb-4">🎁</div>
+            {/* Show "Your Gift" badge during reveal if it's my gift */}
+            {computedIsMyGift && !isWrapped && isRevealing && (
+              <div className="absolute top-2 right-2 bg-amber-500/90 text-white shadow-lg shadow-amber-500/50 text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1 z-20 border border-amber-300/50">
+                <GiftIcon className="w-3 h-3" />
+                <span>Your Gift</span>
+              </div>
+            )}
             <p className="text-white/50 font-medium tracking-widest uppercase mb-4">Mystery Gift</p>
+            {computedIsMyGift && !isRevealing && (
+              <div className="mb-3 bg-amber-500/20 border border-amber-400/50 rounded-lg px-4 py-2">
+                <p className="text-amber-300 text-sm font-semibold flex items-center justify-center gap-2">
+                  <span>⚠️</span>
+                  <span>You added this gift</span>
+                </p>
+              </div>
+            )}
             {isCurrentPlayer && canPick && !isRevealing && (
               <Button
                 onClick={() => onPick(gift.id)}
@@ -153,6 +184,13 @@ export const GiftCard = memo(function GiftCard({
                 {stealCount} STEAL{stealCount !== 1 ? 'S' : ''}
               </div>
             ) : null}
+            {/* Your Gift Badge - Shows on unwrapped gifts (always visible when gift is unwrapped) */}
+            {computedIsMyGift && !isWrapped && (
+              <div className="absolute top-2 right-2 bg-amber-500/90 text-white shadow-lg shadow-amber-500/50 text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1 z-20 border border-amber-300/50">
+                <GiftIcon className="w-3 h-3" />
+                <span>Your Gift</span>
+              </div>
+            )}
           </div>
           
           <h3 className="text-white font-bold truncate mb-2">{gift.title || 'Gift'}</h3>
@@ -168,9 +206,16 @@ export const GiftCard = memo(function GiftCard({
           )}
           {isCurrentPlayer && canSteal && !isFrozen && !isOwned && (
             <Button
-              onClick={() => onSteal(gift.id)}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('[GiftCard] 🔘 Steal button clicked!', { giftId: gift.id, canSteal, isFrozen, isOwned });
+                console.log('[DEBUG]',{location:'GiftCard.jsx:onClick',message:'Steal button clicked',data:{giftId:gift.id,canSteal,isFrozen,isOwned},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'});
+                onSteal(gift.id);
+              }}
               className="w-full mt-auto"
               variant="secondary"
+              disabled={false}
             >
               Steal Gift
             </Button>
@@ -190,8 +235,17 @@ export const GiftCard = memo(function GiftCard({
               <div className={`w-6 h-6 rounded-full bg-gradient-to-tr ${getAvatarGradient(ownerId)} flex items-center justify-center text-white text-xs font-bold`}>
                 {ownerName ? ownerName.charAt(0).toUpperCase() : '?'}
               </div>
-              <span className="text-sm text-slate-300">
-                {isOwned ? 'Your gift' : `Held by: ${ownerName || 'Player'}`}
+              <span className="text-sm text-slate-300 flex-1">
+                {isOwned ? 'Held by you' : `Held by: ${ownerName || 'Player'}`}
+              </span>
+            </div>
+          )}
+          {/* Show "Your Gift" indicator even when no owner (shouldn't happen for unwrapped, but safety check) */}
+          {!ownerId && computedIsMyGift && !isWrapped && (
+            <div className="bg-black/20 p-3 flex items-center gap-2 mt-auto rounded-lg">
+              <span className="text-amber-400 text-sm flex items-center gap-1">
+                <GiftIcon className="w-4 h-4" />
+                <span>Your Gift</span>
               </span>
             </div>
           )}
@@ -214,7 +268,8 @@ export const GiftCard = memo(function GiftCard({
     prevProps.compact === nextProps.compact &&
     prevProps.giftNumber === nextProps.giftNumber &&
     prevProps.onEndTurn === nextProps.onEndTurn &&
-    prevProps.revealingGiftId === nextProps.revealingGiftId
+    prevProps.revealingGiftId === nextProps.revealingGiftId &&
+    prevProps.isMyGift === nextProps.isMyGift
   );
 });
 

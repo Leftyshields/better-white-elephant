@@ -156,7 +156,21 @@ export class GameEngine {
     // CRITICAL: Use calculated active player (victim-first priority)
     const activePlayer = this.calculateActivePlayer();
     if (activePlayer !== playerId) return false;
-    if (this.turnAction.get(playerId)) return false; // Already acted this turn
+    
+    // Check if player is in second half of boomerang queue
+    const isInSecondHalf = this.turnQueue && 
+      this.currentTurnIndex >= (this.turnOrder?.length || 0);
+    
+    // Calculate Player 1's final turn (bookend exception)
+    const isLastIndex = this.currentTurnIndex === (this.turnQueue.length - 1);
+    const isPlayer1 = this.turnOrder && this.turnOrder[0] === playerId;
+    const isPlayer1FinalTurn = isLastIndex && isPlayer1;
+    
+    // In boomerang phase or Player 1's final turn, players can steal even after picking
+    // This allows swapping (picking then stealing in boomerang phase)
+    if (this.turnAction.get(playerId) && !isInSecondHalf && !isPlayer1FinalTurn) {
+      return false; // Already acted this turn (only in standard phase)
+    }
     
     const gift = this.unwrappedGifts.get(giftId);
     if (!gift) return false; // Gift doesn't exist or is wrapped
@@ -172,10 +186,6 @@ export class GameEngine {
     if (gift.lastOwnerId === playerId) {
       throw new Error('Cannot steal back a gift immediately after losing it on the same turn');
     }
-    
-    // Check if player is in second half of boomerang queue
-    const isInSecondHalf = this.turnQueue && 
-      this.currentTurnIndex >= (this.turnOrder?.length || 0);
     
     // RULE 9: Wrapped Gift Claiming (Unwrap Before Final Turn)
     // Per GAME_RULES.md Rule 9: All wrapped gifts SHOULD be unwrapped before Player 1's final turn
@@ -953,6 +963,7 @@ export class GameEngine {
     // Update stored value for consistency
     this.isBoomerangPhase = computedBoomerangPhase;
     
+    const stateVersion = Date.now();
     return {
       partyId: this.partyId, // CRITICAL: Always include partyId in state
       currentTurnIndex: this.currentTurnIndex || 0,
@@ -969,6 +980,8 @@ export class GameEngine {
       config: this.config || { maxSteals: 3, returnToStart: false }, // Include config in state
       history: [...this.history], // Include history in state
       reactionCount: this.reactionCount || 0, // Track emoji reactions (hype level)
+      stateVersion: stateVersion, // Add timestamp for state versioning
+      updatedAt: new Date().toISOString(), // ISO timestamp for easy comparison
     };
   }
 
