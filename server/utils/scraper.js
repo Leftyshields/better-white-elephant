@@ -60,9 +60,8 @@ async function scrapeAmazonWithApify(url) {
         'Authorization': `Bearer ${APIFY_API_TOKEN}`
       },
       body: JSON.stringify({
-        startUrls: [{ url }],
+        categoryUrls: [url], // This actor expects categoryUrls, not startUrls
         maxItems: 1 // We only need one product
-        // Note: countryCode is not a valid parameter for this actor
       })
     });
 
