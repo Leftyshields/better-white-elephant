@@ -808,19 +808,11 @@ export function Home() {
     <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black relative flex flex-col">
       {/* My Parties Section */}
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 z-10 pt-4">
-        <div className="mb-8 flex items-center justify-between">
+        <div className="mb-8">
           <div>
             <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">My Parties</h2>
             <p className="text-slate-400">Manage your gift exchanges and join ongoing games</p>
           </div>
-          {user && (
-            <button
-              onClick={() => setShowCreatePartyModal(true)}
-              className="px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold rounded-lg hover:from-indigo-600 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl"
-            >
-              Host New Party
-            </button>
-          )}
         </div>
 
         {loadingParties && (
