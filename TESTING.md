@@ -55,6 +55,11 @@ npm run test:e2e:debug
 
 **Note for Headless Servers**: The `test:e2e:ui` and `test:e2e:debug` commands automatically use `xvfb-run` to provide a virtual display and bind to `0.0.0.0:9323` to allow remote access.
 
+**⚠️ Important**: Playwright UI mode on headless servers has limitations:
+- The UI web server is accessible and you can **browse and view tests**
+- **Interactive test execution may not work** - the test runner view may show `about:blank` because Playwright UI requires local browser automation
+- **For actual test execution on headless servers, use `npm run test:e2e` (headless mode)** - this works perfectly
+
 On headless servers:
 - **Recommended**: Use `npm run test:e2e` for regular headless testing (no display needed)
 - **For UI Mode**: Playwright UI mode starts a web server on port 9323, bound to `0.0.0.0` for network access. To access it:
