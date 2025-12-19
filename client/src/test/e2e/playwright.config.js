@@ -12,12 +12,6 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: 'html',
   
-  // UI mode configuration - accessible via network (e.g., sandbox-mac-mini.local:9323)
-  ui: {
-    host: process.env.PLAYWRIGHT_UI_HOST || '0.0.0.0',
-    port: parseInt(process.env.PLAYWRIGHT_UI_PORT, 10) || 9323,
-  },
-  
   use: {
     baseURL: 'http://localhost:5173',
     trace: 'on-first-retry',
