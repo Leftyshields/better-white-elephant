@@ -49,9 +49,14 @@ async function scrapeAmazonWithApify(url) {
 
   try {
     const endpoint = `${APIFY_API_BASE}/acts/${APIFY_ACTOR_ID}/runs`;
+    const requestBody = {
+      categoryUrls: [url], // Try categoryUrls as array of strings (as error suggests)
+      maxItems: 1
+    };
     console.log('[Apify] Starting actor run...');
     console.log('[Apify] Endpoint URL:', endpoint);
     console.log('[Apify] Actor ID:', APIFY_ACTOR_ID);
+    console.log('[Apify] Request body:', JSON.stringify(requestBody, null, 2));
     // Start Apify actor run
     const startRunResponse = await fetch(endpoint, {
       method: 'POST',
@@ -59,10 +64,7 @@ async function scrapeAmazonWithApify(url) {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${APIFY_API_TOKEN}`
       },
-      body: JSON.stringify({
-        categoryOrProductUrls: [{ url }], // Array of objects with url property
-        maxItems: 1 // We only need one product
-      })
+      body: JSON.stringify(requestBody)
     });
 
     if (!startRunResponse.ok) {
