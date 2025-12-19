@@ -41,12 +41,19 @@ npm run test:coverage
 # Install Playwright browsers
 npx playwright install
 
-# Run E2E tests
+# Run E2E tests (headless mode)
 npm run test:e2e
 
-# UI mode (interactive)
-npx playwright test --ui
+# UI mode (interactive) - requires display/X server
+# On headless servers, uses xvfb-run automatically
+npm run test:e2e:ui
+
+# Debug mode - requires display/X server
+# On headless servers, uses xvfb-run automatically
+npm run test:e2e:debug
 ```
+
+**Note for Headless Servers**: The `test:e2e:ui` and `test:e2e:debug` commands automatically use `xvfb-run` to provide a virtual display. If you encounter display-related errors, ensure `xvfb` is installed (`sudo apt-get install xvfb` on Ubuntu/Debian).
 
 ## Simulation Mode Testing
 
