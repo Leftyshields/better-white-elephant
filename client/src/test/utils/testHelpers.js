@@ -2,6 +2,7 @@
  * Test utilities for automated frontend testing
  * Provides helpers for simulation mode testing
  */
+import { vi } from 'vitest';
 
 /**
  * Navigate to a party page with simulation mode enabled
