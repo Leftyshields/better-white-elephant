@@ -175,28 +175,36 @@ export function useGameEngine(partyId) {
       socket.on('error', ({ message }) => {
         console.error('Socket error:', message);
         
-        // Format user-friendly error messages
-        let userFriendlyMessage = message;
+        // Don't show error toast for expected game state errors
+        // These are normal game conditions, not actual errors
+        const isExpectedGameStateError = 
+          message.includes('No stealable gifts available') ||
+          message.includes('Cannot steal gift: invalid action') ||
+          message.includes('already acted this turn') ||
+          message.includes('Cannot steal back');
         
-        // Map technical error messages to user-friendly ones
-        if (message.includes('No stealable gifts available') || message.includes('Cannot steal gift')) {
-          userFriendlyMessage = 'No stealable gifts available. All gifts are either locked or cannot be stolen right now.';
-        } else if (message.includes('already acted this turn')) {
-          userFriendlyMessage = 'You have already acted this turn. Please wait for your next turn.';
-        } else if (message.includes('Cannot steal back')) {
-          userFriendlyMessage = 'You cannot steal this gift back yet. Wait until the next turn.';
-        } else if (message.includes('Game is not active')) {
-          userFriendlyMessage = 'The game is not currently active.';
-        } else if (message.includes('Socket not connected')) {
-          userFriendlyMessage = 'Connection lost. Please refresh the page.';
+        // Only show error toast for unexpected/critical errors
+        if (!isExpectedGameStateError) {
+          // Format user-friendly error messages
+          let userFriendlyMessage = message;
+          
+          // Map technical error messages to user-friendly ones
+          if (message.includes('Game is not active')) {
+            userFriendlyMessage = 'The game is not currently active.';
+          } else if (message.includes('Socket not connected')) {
+            userFriendlyMessage = 'Connection lost. Please refresh the page.';
+          }
+          
+          dispatch(gameActions.errorReceived(userFriendlyMessage));
+        } else {
+          // For expected errors, just log and rollback but don't show toast
+          console.log('Expected game state condition (not showing error toast):', message);
         }
         
-        dispatch(gameActions.errorReceived(userFriendlyMessage));
-        
-        // Track error
+        // Track error (still track even if not shown)
         trackError('socket_error', message, 'useGameEngine');
         
-        // Rollback optimistic update on error
+        // Rollback optimistic update on error (always rollback regardless of error type)
         if (pendingOptimisticUpdateRef.current) {
           dispatch({
             type: ActionTypes.ROLLBACK_OPTIMISTIC_UPDATE,
