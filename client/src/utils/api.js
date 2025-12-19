@@ -2,8 +2,7 @@
  * API Client Utilities
  */
 import { auth } from './firebase.js';
-
-const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
+import { SERVER_URL } from './config.js';
 
 /**
  * Make authenticated API request

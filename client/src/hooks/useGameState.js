@@ -6,8 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRef, useEffect, useCallback } from 'react';
 import { useAuth } from './useAuth.js';
 import { useParty } from './useParty.js';
-
-const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
+import { SERVER_URL } from '../utils/config.js';
 
 /**
  * Fetch game state from server (fallback for when socket is disconnected)

@@ -11,9 +11,6 @@ import { apiRequest } from '../../utils/api.js';
 import { validateGameHistory } from '../../utils/gameValidator.js';
 
 export function SimulationControls({ socket, partyId, gameState }) {
-  // #region agent log
-  fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:RENDER',message:'SimulationControls render',data:{hasSocket:!!socket,hasPartyId:!!partyId,hasGameState:!!gameState},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C'})}).catch(()=>{});
-  // #endregion
   
   try {
     // Check if simulation mode is enabled via URL query parameter
@@ -157,9 +154,6 @@ export function SimulationControls({ socket, partyId, gameState }) {
     };
 
     const handleError = ({ message, code }) => {
-      // #region agent log
-      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:socket:error',message:'Socket error received',data:{message,code},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-      // #endregion
       console.error('❌ Socket error:', message, { code });
       setFeedbackMessage({ type: 'error', text: `Error: ${message}` });
       // Add to audit trail
@@ -170,9 +164,6 @@ export function SimulationControls({ socket, partyId, gameState }) {
     
     // Handle unhandled errors from bot actions
     const handleBotActionError = (error) => {
-      // #region agent log
-      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:socket:botActionError',message:'Bot action error',data:{error:error?.message || String(error),hasStack:!!error?.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-      // #endregion
       console.error('❌ Bot action error:', error);
       setFeedbackMessage({ type: 'error', text: `Bot action failed: ${error?.message || 'Unknown error'}` });
     };
@@ -316,9 +307,6 @@ export function SimulationControls({ socket, partyId, gameState }) {
 
   // Handle force bot move
   const handleForceBotMove = () => {
-    // #region agent log
-    fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:handleForceBotMove:ENTRY',message:'handleForceBotMove called',data:{hasSocket:!!socket,isConnected:socket?.connected,hasGameState:!!lastGameState,partyId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
     try {
       if (!socket || !socket.connected) {
         console.warn('⚠️ Cannot force bot move - socket not connected');
@@ -332,9 +320,6 @@ export function SimulationControls({ socket, partyId, gameState }) {
       }
 
       const currentPlayerId = lastGameState.currentPlayerId;
-      // #region agent log
-      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:handleForceBotMove:BEFORE_EMIT',message:'Before emitting bot move',data:{currentPlayerId,isBot:currentPlayerId?.startsWith('bot_')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       if (!currentPlayerId || !currentPlayerId.startsWith('bot_')) {
         setFeedbackMessage({ type: 'error', text: 'Current player is not a bot' });
         return;
@@ -343,13 +328,7 @@ export function SimulationControls({ socket, partyId, gameState }) {
       socket.emit('admin_force_bot_move', { partyId });
       console.log(`🤖 Forcing bot move for party ${partyId}`);
       setFeedbackMessage({ type: 'success', text: 'Forcing bot move...' });
-      // #region agent log
-      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:handleForceBotMove:AFTER_EMIT',message:'After emitting bot move',data:{partyId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
     } catch (error) {
-      // #region agent log
-      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:handleForceBotMove:ERROR',message:'Error in handleForceBotMove',data:{error:error.message,stack:error.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       console.error('Error forcing bot move:', error);
       const errorMessage = `Failed to force bot move: ${error.message}`;
       setFeedbackMessage({ type: 'error', text: errorMessage });
@@ -361,9 +340,6 @@ export function SimulationControls({ socket, partyId, gameState }) {
   };
 
   const handleForceBotSteal = () => {
-    // #region agent log
-    fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:handleForceBotSteal:ENTRY',message:'handleForceBotSteal called',data:{hasSocket:!!socket,isConnected:socket?.connected,hasGameState:!!lastGameState,partyId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
     try {
       if (!socket || !socket.connected) {
         console.warn('⚠️ Cannot force bot steal - socket not connected');
@@ -386,9 +362,6 @@ export function SimulationControls({ socket, partyId, gameState }) {
       console.log(`🤖 Forcing bot steal for party ${partyId}`);
       setFeedbackMessage({ type: 'success', text: 'Forcing bot to steal...' });
     } catch (error) {
-      // #region agent log
-      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:handleForceBotSteal:ERROR',message:'Error in handleForceBotSteal',data:{error:error.message,stack:error.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       console.error('Error forcing bot steal:', error);
       const errorMessage = `Failed to force bot steal: ${error.message}`;
       setFeedbackMessage({ type: 'error', text: errorMessage });
@@ -400,9 +373,6 @@ export function SimulationControls({ socket, partyId, gameState }) {
   };
 
   const handleForceBotPick = () => {
-    // #region agent log
-    fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:handleForceBotPick:ENTRY',message:'handleForceBotPick called',data:{hasSocket:!!socket,isConnected:socket?.connected,hasGameState:!!lastGameState,partyId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
     try {
       if (!socket || !socket.connected) {
         console.warn('⚠️ Cannot force bot pick - socket not connected');
@@ -425,9 +395,6 @@ export function SimulationControls({ socket, partyId, gameState }) {
       console.log(`🤖 Forcing bot pick for party ${partyId}`);
       setFeedbackMessage({ type: 'success', text: 'Forcing bot to pick...' });
     } catch (error) {
-      // #region agent log
-      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:handleForceBotPick:ERROR',message:'Error in handleForceBotPick',data:{error:error.message,stack:error.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       console.error('Error forcing bot pick:', error);
       const errorMessage = `Failed to force bot pick: ${error.message}`;
       setFeedbackMessage({ type: 'error', text: errorMessage });
@@ -439,9 +406,6 @@ export function SimulationControls({ socket, partyId, gameState }) {
   };
 
   const handleForceBotSkip = () => {
-    // #region agent log
-    fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:handleForceBotSkip:ENTRY',message:'handleForceBotSkip called',data:{hasSocket:!!socket,isConnected:socket?.connected,hasGameState:!!lastGameState,partyId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
     try {
       if (!socket || !socket.connected) {
         console.warn('⚠️ Cannot force bot skip - socket not connected');
@@ -464,9 +428,6 @@ export function SimulationControls({ socket, partyId, gameState }) {
       console.log(`🤖 Forcing bot skip for party ${partyId}`);
       setFeedbackMessage({ type: 'success', text: 'Forcing bot to skip...' });
     } catch (error) {
-      // #region agent log
-      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:handleForceBotSkip:ERROR',message:'Error in handleForceBotSkip',data:{error:error.message,stack:error.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       console.error('Error forcing bot skip:', error);
       const errorMessage = `Failed to force bot skip: ${error.message}`;
       setFeedbackMessage({ type: 'error', text: errorMessage });
@@ -800,22 +761,13 @@ export function SimulationControls({ socket, partyId, gameState }) {
                 {auditLog && auditLog.length > 0 && (
                   <button
                     onClick={() => {
-                      // #region agent log
-                      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:CopyButton:ENTRY',message:'Copy button clicked',data:{auditLogLength:auditLog?.length,hasAuditLog:!!auditLog},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-                      // #endregion
                       try {
                         if (!auditLog || !Array.isArray(auditLog)) {
-                          // #region agent log
-                          fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:CopyButton:ERROR',message:'auditLog is invalid',data:{auditLog,type:typeof auditLog,isArray:Array.isArray(auditLog)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-                          // #endregion
                           setFeedbackMessage({ type: 'error', text: 'Audit log not available' });
                           return;
                         }
                         const logText = auditLog
                           .map((entry) => {
-                            // #region agent log
-                            fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:CopyButton:MAP_ENTRY',message:'Processing audit log entry',data:{hasEntry:!!entry,hasTimestamp:!!entry?.timestamp,hasType:!!entry?.type,hasMessage:!!entry?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-                            // #endregion
                             if (!entry) return '';
                             const timestamp = entry.timestamp ? formatTimestamp(entry.timestamp) : 'N/A';
                             const typeLabel = entry.type === 'SNAPSHOT' ? 'SNAPSHOT' : (entry.eventType || entry.type || 'UNKNOWN');
@@ -853,16 +805,10 @@ export function SimulationControls({ socket, partyId, gameState }) {
                         navigator.clipboard.writeText(logText).then(() => {
                           setFeedbackMessage({ type: 'success', text: 'Audit trail copied to clipboard!' });
                         }).catch((err) => {
-                          // #region agent log
-                          fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:CopyButton:CLIPBOARD_ERROR',message:'Clipboard write failed',data:{error:err.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-                          // #endregion
                           console.error('Failed to copy:', err);
                           setFeedbackMessage({ type: 'error', text: 'Failed to copy to clipboard' });
                         });
                       } catch (error) {
-                        // #region agent log
-                        fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:CopyButton:ERROR',message:'Error in copy handler',data:{error:error.message,stack:error.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-                        // #endregion
                         console.error('Error copying audit log:', error);
                         setFeedbackMessage({ type: 'error', text: `Error: ${error.message}` });
                       }
@@ -1031,9 +977,6 @@ export function SimulationControls({ socket, partyId, gameState }) {
     </div>
   );
   } catch (error) {
-    // #region agent log
-    fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:CATCH',message:'Error in SimulationControls render',data:{error:error.message,stack:error.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C'})}).catch(()=>{});
-    // #endregion
     console.error('❌ Error in SimulationControls:', error);
     return (
       <div className="fixed bottom-4 left-4 z-[9999] bg-red-900/90 border border-red-500 rounded-lg p-4 text-red-200 text-xs">

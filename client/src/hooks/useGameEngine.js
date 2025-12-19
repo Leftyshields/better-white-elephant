@@ -10,8 +10,7 @@ import { gameReducer, initialState, ActionTypes, gameActions } from '../reducers
 import { io } from 'socket.io-client';
 import { auth } from '../utils/firebase.js';
 import { trackGameAction, trackGameComplete, trackError, trackEvent } from '../utils/analytics.js';
-
-const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
+import { SERVER_URL } from '../utils/config.js';
 
 export function useGameEngine(partyId) {
   const { user } = useAuth();
@@ -124,9 +123,6 @@ export function useGameEngine(partyId) {
           historyLength: gameState?.history?.length || 0,
           timestamp: Date.now()
         });
-        // #region agent log
-        console.log('[DEBUG]',{location:'useGameEngine.js:game-updated:RECEIVED',message:'Client received game-updated event',data:{currentTurnIndex:gameState?.currentTurnIndex,currentPlayerId:gameState?.currentPlayerId,historyLength:gameState?.history?.length,stateVersion:gameState?.stateVersion,updatedAt:gameState?.updatedAt},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'});
-        // #endregion
         // Clear pending optimistic update since server state is authoritative
         pendingOptimisticUpdateRef.current = null;
         // Use refs to get latest values
@@ -387,34 +383,18 @@ export function useGameEngine(partyId) {
   }, [isMyTurn, state.status, state.gifts, state.gameState, state.currentTurnIndex, state.turnQueue, user?.uid]);
 
   const canSteal = useCallback((giftId) => {
-    // #region agent log
-    fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useGameEngine.js:canSteal:ENTRY',message:'canSteal called',data:{giftId,isMyTurn,status:state.status,userId:user?.uid},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
-    
     if (!isMyTurn || state.status !== 'PLAYING') {
-      // #region agent log
-      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useGameEngine.js:canSteal:BLOCKED',message:'Blocked: not my turn or not playing',data:{giftId,isMyTurn,status:state.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       return false;
     }
     
     const gift = state.gifts[giftId];
     if (!gift || gift.isWrapped) {
-      // #region agent log
-      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useGameEngine.js:canSteal:BLOCKED',message:'Blocked: gift not found or wrapped',data:{giftId,hasGift:!!gift,isWrapped:gift?.isWrapped},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
       return false;
     }
     if (gift.isFrozen) {
-      // #region agent log
-      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useGameEngine.js:canSteal:BLOCKED',message:'Blocked: gift frozen',data:{giftId,isFrozen:gift.isFrozen,stealCount:gift.stealCount},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
       return false;
     }
     if (gift.ownerId === user?.uid) {
-      // #region agent log
-      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useGameEngine.js:canSteal:BLOCKED',message:'Blocked: own gift',data:{giftId,ownerId:gift.ownerId,userId:user?.uid},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
       return false; // Can't steal your own gift
     }
     
@@ -431,16 +411,10 @@ export function useGameEngine(partyId) {
     );
     
     if (gift.lastOwnerId === user?.uid) {
-      // #region agent log
-      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useGameEngine.js:canSteal:U_TURN_CHECK',message:'U-turn rule check',data:{giftId,lastOwnerId:gift.lastOwnerId,userId:user?.uid,isBoomerangPhase,currentTurnIndex:state.currentTurnIndex,turnOrderLength:turnOrder.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-      // #endregion
       // In boomerang phase, allow stealing even if lastOwnerId matches (turn has advanced)
       // The U-turn rule only prevents immediate steal-back on the SAME turn
       // Since we're in boomerang phase, turns have advanced, so allow the steal
       if (!isBoomerangPhase) {
-        // #region agent log
-        fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useGameEngine.js:canSteal:BLOCKED',message:'Blocked: U-turn rule (not boomerang)',data:{giftId,lastOwnerId:gift.lastOwnerId,userId:user?.uid},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-        // #endregion
         return false; // Can't steal back a gift immediately after losing it on the same turn (standard phase only)
       }
     }
@@ -451,10 +425,6 @@ export function useGameEngine(partyId) {
       !g.isWrapped && g.ownerId === user?.uid
     );
     
-    // #region agent log
-    fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useGameEngine.js:canSteal:PLAYER_HAS_GIFT',message:'Checking if player has gift',data:{giftId,playerHasGift,isBoomerangPhase,currentTurnIndex:state.currentTurnIndex,turnOrderLength:turnOrder.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
-    
     if (playerHasGift) {
       // Player has a gift - can only steal if:
       // - Exception 1: Player 1's Final Turn (bookend exception)
@@ -464,16 +434,10 @@ export function useGameEngine(partyId) {
       const isPlayer1FinalTurn = isLastIndex && isPlayer1;
       
       if (!isBoomerangPhase && !isPlayer1FinalTurn) {
-        // #region agent log
-        fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useGameEngine.js:canSteal:BLOCKED',message:'Blocked: has gift but not boomerang/final',data:{giftId,playerHasGift,isBoomerangPhase,isPlayer1FinalTurn,returnToStart,currentTurnIndex:state.currentTurnIndex,turnOrderLength:turnOrder.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-        // #endregion
         return false; // Player has a gift and it's not boomerang phase or Player 1's final turn
       }
     }
     
-    // #region agent log
-    fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useGameEngine.js:canSteal:ALLOWED',message:'Steal allowed',data:{giftId,stealCount:gift.stealCount,isFrozen:gift.isFrozen,playerHasGift,isBoomerangPhase},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C,D'})}).catch(()=>{});
-    // #endregion
     return true;
   }, [isMyTurn, state.status, state.gifts, state.gameState, state.currentTurnIndex, state.turnQueue, user?.uid]);
 

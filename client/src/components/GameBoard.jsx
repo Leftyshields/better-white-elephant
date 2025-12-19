@@ -686,7 +686,7 @@ export function GameBoard({ partyId, onEndTurn }) {
                 <p className="font-semibold mb-1">Connection Error</p>
                 <p className="text-xs">{connectionError}</p>
                 <p className="text-xs mt-2 text-gray-400">
-                  Server URL: {import.meta.env.VITE_SERVER_URL || 'http://localhost:3001'}
+                  Server URL: {import.meta.env.VITE_SERVER_URL || (typeof window !== 'undefined' && (window.location.hostname === 'stealorreveal.com' || window.location.hostname === 'www.stealorreveal.com') ? `https://api.${window.location.hostname.replace('www.', '')}` : 'http://localhost:3001')}
                 </p>
               </div>
             )}
@@ -774,18 +774,12 @@ export function GameBoard({ partyId, onEndTurn }) {
     gameState?.isBoomerangPhase || 
     (gameState?.currentTurnIndex >= (gameState?.turnOrder?.length || 0))
   );
-  // #region agent log
-  console.log('[DEBUG]',{location:'GameBoard.jsx:BOOMERANG_CALC',message:'Boomerang phase calculation',data:{returnToStart,isBoomerangPhase,isBoomerangPhaseFromState:gameState?.isBoomerangPhase,currentTurnIndex:gameState?.currentTurnIndex,turnOrderLength:gameState?.turnOrder?.length,turnQueueLength:gameState?.turnQueue?.length,computedCheck:gameState?.currentTurnIndex >= (gameState?.turnOrder?.length || 0)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'});
-  // #endregion
   
   // Check if player has a gift
   const playerHasGift = unwrappedGiftList.some((gift) => {
     const giftData = unwrappedMap.get(gift.id);
     return giftData?.ownerId === user?.uid;
   });
-  // #region agent log
-  console.log('[DEBUG]',{location:'GameBoard.jsx:PLAYER_HAS_GIFT',message:'Player has gift check',data:{playerHasGift,userId:user?.uid,unwrappedGiftList:unwrappedGiftList.map(g=>({id:g.id,ownerId:unwrappedMap.get(g.id)?.ownerId}))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'});
-  // #endregion
   
   // Check if a gift was originally submitted by the current user
   const isMyGift = (gift) => gift?.submitterId === user?.uid;
@@ -794,34 +788,19 @@ export function GameBoard({ partyId, onEndTurn }) {
     (!playerHasGift || wrappedGifts.length > 0 || isPlayer1FinalTurn);
   
   const canSteal = (giftId) => {
-    // #region agent log
-    console.log('[DEBUG]',{location:'GameBoard.jsx:canSteal:ENTRY',message:'canSteal called',data:{giftId,currentAction,userId:user?.uid,isBoomerangPhase,isPlayer1FinalTurn},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'});
-    // #endregion
     // In boomerang phase or Player 1's final turn, players can steal even after picking
     // This allows swapping (picking then stealing in boomerang phase)
     if (currentAction !== null && !isBoomerangPhase && !isPlayer1FinalTurn) {
-      // #region agent log
-      console.log('[DEBUG]',{location:'GameBoard.jsx:canSteal:EARLY_RETURN',message:'Blocked: already acted (not boomerang/final)',data:{giftId,currentAction,isBoomerangPhase,isPlayer1FinalTurn},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'});
-      // #endregion
       return false; // Already acted this turn (only in standard phase)
     }
     const gift = unwrappedMap.get(giftId);
     if (!gift) {
-      // #region agent log
-      console.log('[DEBUG]',{location:'GameBoard.jsx:canSteal:EARLY_RETURN',message:'Blocked: gift not found',data:{giftId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'});
-      // #endregion
       return false;
     }
     if (gift.isFrozen) {
-      // #region agent log
-      console.log('[DEBUG]',{location:'GameBoard.jsx:canSteal:EARLY_RETURN',message:'Blocked: gift frozen',data:{giftId,isFrozen:gift.isFrozen},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'});
-      // #endregion
       return false;
     }
     if (gift.ownerId === user?.uid) {
-      // #region agent log
-      console.log('[DEBUG]',{location:'GameBoard.jsx:canSteal:EARLY_RETURN',message:'Blocked: own gift',data:{giftId,ownerId:gift.ownerId,userId:user?.uid},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'});
-      // #endregion
       return false; // Can't steal your own gift
     }
     
@@ -830,9 +809,6 @@ export function GameBoard({ partyId, onEndTurn }) {
     // Once the turn advances, players CAN steal back gifts they lost
     // Note: lastOwnerId is cleared when turns advance, so this check only prevents immediate steal-back
     if (gift.lastOwnerId === user?.uid) {
-      // #region agent log
-      console.log('[DEBUG]',{location:'GameBoard.jsx:canSteal:EARLY_RETURN',message:'Blocked: U-turn rule',data:{giftId,lastOwnerId:gift.lastOwnerId,userId:user?.uid},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'});
-      // #endregion
       return false; // Can't steal back a gift immediately after losing it on the same turn
     }
     
@@ -847,19 +823,10 @@ export function GameBoard({ partyId, onEndTurn }) {
     // In Standard Phase, players with gifts cannot steal UNLESS:
     // - Exception 1: Player 1's Final Turn (bookend exception) - Per GAME_RULES.md Rule 1
     // - Exception 2: Boomerang Phase (players can swap)
-    // #region agent log
-    console.log('[DEBUG]',{location:'GameBoard.jsx:canSteal:BEFORE_FINAL_CHECK',message:'Before final check',data:{giftId,playerHasGift,isBoomerangPhase,isPlayer1FinalTurn,returnToStart:gameState?.config?.returnToStart,currentTurnIndex:gameState?.currentTurnIndex,turnOrderLength:gameState?.turnOrder?.length,turnQueueLength:gameState?.turnQueue?.length,isBoomerangPhaseFromState:gameState?.isBoomerangPhase},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B'});
-    // #endregion
     if (playerHasGift && !isBoomerangPhase && !isPlayer1FinalTurn) {
-      // #region agent log
-      console.log('[DEBUG]',{location:'GameBoard.jsx:canSteal:BLOCKED',message:'Blocked: has gift but not boomerang/final',data:{giftId,playerHasGift,isBoomerangPhase,isPlayer1FinalTurn,returnToStart:gameState?.config?.returnToStart,currentTurnIndex:gameState?.currentTurnIndex},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B'});
-      // #endregion
       return false; // Player has a gift and it's not Player 1's final turn
     }
     
-    // #region agent log
-    console.log('[DEBUG]',{location:'GameBoard.jsx:canSteal:ALLOWED',message:'Steal allowed',data:{giftId,playerHasGift,isBoomerangPhase,isPlayer1FinalTurn},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B'});
-    // #endregion
     return true;
   };
 
@@ -869,7 +836,9 @@ export function GameBoard({ partyId, onEndTurn }) {
     }
 
     try {
-      const serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
+      // Use centralized config for server URL
+      const isProd = typeof window !== 'undefined' && (window.location.hostname === 'stealorreveal.com' || window.location.hostname === 'www.stealorreveal.com');
+      const serverUrl = import.meta.env.VITE_SERVER_URL || (isProd ? `https://api.${window.location.hostname.replace('www.', '')}` : 'http://localhost:3001');
       const response = await fetch(`${serverUrl}/api/game/end`, {
         method: 'POST',
         headers: {

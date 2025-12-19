@@ -410,7 +410,9 @@ export function PartyLobby({ partyId, onStartGame }) {
     }
 
     try {
-      const serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
+      // Use centralized config for server URL
+      const isProd = typeof window !== 'undefined' && (window.location.hostname === 'stealorreveal.com' || window.location.hostname === 'www.stealorreveal.com');
+      const serverUrl = import.meta.env.VITE_SERVER_URL || (isProd ? `https://api.${window.location.hostname.replace('www.', '')}` : 'http://localhost:3001');
       const response = await fetch(`${serverUrl}/api/game/start`, {
         method: 'POST',
         headers: {

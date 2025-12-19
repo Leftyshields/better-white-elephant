@@ -18,19 +18,11 @@ export const GiftGrid = memo(function GiftGrid({
   userEmails = {},
   revealingGiftId = null,
 }) {
-  // #region agent log
-  fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'GiftGrid.jsx:RENDER',message:'GiftGrid render',data:{giftsCount:Object.keys(gifts||{}).length,firstGiftId:Object.keys(gifts||{})[0],firstGiftHasImage:!!gifts?.[Object.keys(gifts||{})[0]]?.image,firstGiftImage:gifts?.[Object.keys(gifts||{})[0]]?.image},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B,C,D'})}).catch(()=>{});
-  // #endregion
   const giftList = Object.values(gifts || {});
   
   // Separate wrapped and unwrapped gifts
   const wrappedGifts = giftList.filter(gift => gift.isWrapped);
   
-  // #region agent log
-  wrappedGifts.forEach(gift => {
-    fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'GiftGrid.jsx:WRAPPED_GIFT',message:'Wrapped gift data',data:{giftId:gift.id,hasImage:!!gift.image,imageUrl:gift.image,title:gift.title,isWrapped:gift.isWrapped},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-  });
-  // #endregion
   
   // Sort unwrapped gifts by lastInteractedAt (most recent first)
   const unwrappedGifts = giftList
@@ -42,9 +34,6 @@ export const GiftGrid = memo(function GiftGrid({
       return (a.id || '').localeCompare(b.id || ''); // Fallback to ID for stable sort
     });
   
-  // #region agent log
-  fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'GiftGrid.jsx:AFTER_SORT',message:'After filtering and sorting',data:{wrappedCount:wrappedGifts.length,unwrappedCount:unwrappedGifts.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-  // #endregion
 
   return (
     <div className="space-y-8">
@@ -54,9 +43,6 @@ export const GiftGrid = memo(function GiftGrid({
           <h2 className="text-xl font-semibold mb-4 text-white text-center">Wrapped Gifts</h2>
           <div className="flex flex-wrap justify-center gap-3 w-full">
             {wrappedGifts.map((gift, index) => {
-              // #region agent log
-              fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'GiftGrid.jsx:WRAPPED_RENDER',message:'Rendering wrapped gift card',data:{giftId:gift.id,hasImage:!!gift.image,imageUrl:gift.image,compact:true,giftNumber:index+1},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B,C'})}).catch(()=>{});
-              // #endregion
               return (
                 <GiftCard
                   key={gift.id}
@@ -88,9 +74,6 @@ export const GiftGrid = memo(function GiftGrid({
                 ? (userNames[gift.ownerId] || userEmails[gift.ownerId] || null)
                 : null;
               
-              // #region agent log
-              fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'GiftGrid.jsx:UNWRAPPED_RENDER',message:'Rendering unwrapped gift card',data:{giftId:gift.id,hasImage:!!gift.image,imageUrl:gift.image},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-              // #endregion
               
               return (
                 <GiftCard
