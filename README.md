@@ -43,6 +43,10 @@ better-white-elephant/
    - **Server CORS**: Set `ALLOWED_ORIGINS` (comma-separated) or `CLIENT_URL` for allowed origins
      - Example: `ALLOWED_ORIGINS=https://stealorreveal.com,https://www.stealorreveal.com`
      - Defaults to localhost for development, production domains for production
+   - **Apify API (Optional)**: Set `APIFY_API_TOKEN` in server `.env` for enhanced Amazon product scraping
+     - Get your token from [Apify Console](https://console.apify.com/account/integrations)
+     - The scraper will automatically use Apify for Amazon URLs if the token is set
+     - Falls back to cheerio scraping if token is not set or Apify fails
    - For Functions: Set up Resend API key (see [DEPLOY_FUNCTIONS.md](./DEPLOY_FUNCTIONS.md))
 
 3. **Firebase setup:**

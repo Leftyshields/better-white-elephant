@@ -1,7 +1,145 @@
 /**
  * Gift URL Scraper - Extract OG tags from URLs
+ * Uses Apify Amazon scraper for Amazon URLs, cheerio for others
  */
 import * as cheerio from 'cheerio';
+
+const APIFY_API_TOKEN = process.env.APIFY_API_TOKEN;
+const APIFY_ACTOR_ID = 'junglee/free-amazon-product-scraper';
+const APIFY_API_BASE = 'https://api.apify.com/v2';
+
+/**
+ * Check if URL is an Amazon URL
+ * @param {string} hostname - URL hostname
+ * @returns {boolean}
+ */
+function isAmazonUrl(hostname) {
+  return hostname.includes('amazon.') || hostname.includes('amzn.');
+}
+
+/**
+ * Extract ASIN from Amazon product URL
+ * @param {string} url - Amazon product URL
+ * @returns {string|null} - ASIN or null
+ */
+function extractAmazonASIN(url) {
+  // Try to extract ASIN from URL
+  // Amazon URLs can have formats like:
+  // - /dp/B09X7MPX8L
+  // - /product/B09X7MPX8L
+  // - /gp/product/B09X7MPX8L
+  // - ?asin=B09X7MPX8L
+  const asinMatch = url.match(/(?:dp|product|gp\/product)\/([A-Z0-9]{10})|\?asin=([A-Z0-9]{10})/i);
+  return asinMatch ? (asinMatch[1] || asinMatch[2]) : null;
+}
+
+/**
+ * Scrape Amazon product using Apify API
+ * @param {string} url - Amazon product URL
+ * @returns {Promise<{title: string, image: string, price: string|null}>}
+ */
+async function scrapeAmazonWithApify(url) {
+  if (!APIFY_API_TOKEN) {
+    console.warn('APIFY_API_TOKEN not set, falling back to cheerio scraper for Amazon');
+    return null;
+  }
+
+  try {
+    // Start Apify actor run
+    const startRunResponse = await fetch(`${APIFY_API_BASE}/acts/${APIFY_ACTOR_ID}/runs`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${APIFY_API_TOKEN}`
+      },
+      body: JSON.stringify({
+        startUrls: [{ url }],
+        maxItems: 1, // We only need one product
+        countryCode: 'US' // Default, could be extracted from URL
+      })
+    });
+
+    if (!startRunResponse.ok) {
+      const errorText = await startRunResponse.text();
+      console.error('Apify start run failed:', errorText);
+      return null;
+    }
+
+    const runData = await startRunResponse.json();
+    const runId = runData.data.id;
+
+    // Poll for run completion (max 60 seconds)
+    let completed = false;
+    let attempts = 0;
+    const maxAttempts = 30; // 30 attempts * 2 seconds = 60 seconds max
+
+    while (!completed && attempts < maxAttempts) {
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+      attempts++;
+
+      const statusResponse = await fetch(`${APIFY_API_BASE}/actor-runs/${runId}`, {
+        headers: {
+          'Authorization': `Bearer ${APIFY_API_TOKEN}`
+        }
+      });
+
+      if (!statusResponse.ok) {
+        console.error('Apify status check failed');
+        return null;
+      }
+
+      const statusData = await statusResponse.json();
+      const status = statusData.data.status;
+
+      if (status === 'SUCCEEDED') {
+        completed = true;
+      } else if (status === 'FAILED' || status === 'ABORTED' || status === 'TIMED-OUT') {
+        console.error(`Apify run ${status.toLowerCase()}`);
+        return null;
+      }
+    }
+
+    if (!completed) {
+      console.error('Apify run timed out');
+      return null;
+    }
+
+    // Get results from dataset
+    const datasetResponse = await fetch(`${APIFY_API_BASE}/actor-runs/${runId}/dataset/items`, {
+      headers: {
+        'Authorization': `Bearer ${APIFY_API_TOKEN}`
+      }
+    });
+
+    if (!datasetResponse.ok) {
+      console.error('Failed to fetch Apify results');
+      return null;
+    }
+
+    const items = await datasetResponse.json();
+    if (!items || items.length === 0) {
+      console.error('No items returned from Apify');
+      return null;
+    }
+
+    const product = items[0];
+
+    // Map Apify response to our format
+    return {
+      title: product.title || 'Amazon Product',
+      image: product.thumbnailImage || null,
+      price: product.price ? `${product.price.currency || '$'}${product.price.value}` : null,
+      // Include additional data that might be useful
+      asin: product.asin || null,
+      brand: product.brand || null,
+      stars: product.stars || null,
+      reviewsCount: product.reviewsCount || null
+    };
+  } catch (error) {
+    console.error('Apify scraping error:', error);
+    return null; // Fall back to cheerio
+  }
+}
 
 /**
  * Scrape gift metadata from URL
@@ -36,6 +174,17 @@ export async function scrapeGiftMetadata(url) {
       throw new Error('Localhost URLs are not allowed');
     }
 
+    // Try Apify for Amazon URLs first
+    if (isAmazonUrl(hostname)) {
+      const apifyResult = await scrapeAmazonWithApify(fullUrl);
+      if (apifyResult) {
+        return apifyResult;
+      }
+      // Fall through to cheerio if Apify fails
+      console.log('Apify failed, falling back to cheerio for Amazon URL');
+    }
+
+    // Use cheerio scraper (fallback or for non-Amazon URLs)
     // Fetch the page with better headers to avoid blocking
     const response = await fetch(fullUrl, {
       headers: {
