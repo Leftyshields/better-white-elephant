@@ -18,6 +18,7 @@ export const ActionTypes = {
   GAME_ENDED: 'GAME_ENDED',
   GIFTS_METADATA_LOADED: 'GIFTS_METADATA_LOADED',
   ERROR_RECEIVED: 'ERROR_RECEIVED',
+  ERROR_CLEARED: 'ERROR_CLEARED',
   // Optimistic updates
   OPTIMISTIC_PICK: 'OPTIMISTIC_PICK',
   OPTIMISTIC_STEAL: 'OPTIMISTIC_STEAL',
@@ -274,6 +275,15 @@ export function gameReducer(state = initialState, action) {
         ui: {
           ...state.ui,
           lastError: action.payload.message,
+        },
+      };
+    
+    case ActionTypes.ERROR_CLEARED:
+      return {
+        ...state,
+        ui: {
+          ...state.ui,
+          lastError: null,
         },
       };
 

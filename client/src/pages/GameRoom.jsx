@@ -19,10 +19,46 @@ import { GiftIcon } from '@heroicons/react/24/outline';
 import confetti from 'canvas-confetti';
 import { apiRequest } from '../utils/api.js';
 
+// Error Toast Component with auto-dismiss
+function ErrorToast({ message, onDismiss }) {
+  useEffect(() => {
+    // Auto-dismiss after 8 seconds
+    const timer = setTimeout(() => {
+      onDismiss();
+    }, 8000);
+    
+    return () => clearTimeout(timer);
+  }, [onDismiss]);
+  
+  return (
+    <div className="fixed top-4 right-4 bg-red-500/10 text-red-300 border border-red-500/20 rounded-lg px-4 py-2 text-sm z-50 animate-fade-in max-w-md shadow-lg">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1">
+          <div className="font-semibold mb-1">⚠️ Action Failed</div>
+          <span>{message}</span>
+        </div>
+        <button
+          onClick={onDismiss}
+          className="text-red-400 hover:text-red-300 ml-2 text-lg leading-none"
+          aria-label="Dismiss error"
+        >
+          ×
+        </button>
+        <a
+          href={`/contact?type=bug&message=${encodeURIComponent(`Error: ${message}\n\nPage: ${window.location.href}\n\nTimestamp: ${new Date().toISOString()}`)}`}
+          className="text-blue-400 hover:text-blue-300 underline text-xs whitespace-nowrap ml-2"
+        >
+          Report
+        </a>
+      </div>
+    </div>
+  );
+}
+
 export function GameRoom({ partyId }) {
   const { user } = useAuth();
   const { party } = useParty(partyId);
-  const { state, actions, derived, socket, emitReaction } = useGameEngine(partyId);
+  const { state, actions, derived, socket, emitReaction, dispatch } = useGameEngine(partyId);
   const { playTurnNotification, playSteal, playUnwrap } = useGameSounds();
   const [userNames, setUserNames] = useState({});
   const [userEmails, setUserEmails] = useState({});
@@ -425,17 +461,14 @@ export function GameRoom({ partyId }) {
 
       {/* Error Toast */}
       {state.ui.lastError && (
-        <div className="fixed top-4 right-4 bg-red-500/10 text-red-300 border border-red-500/20 rounded-lg px-4 py-2 text-sm z-50 animate-fade-in max-w-md">
-          <div className="flex items-start justify-between gap-2">
-            <span>{state.ui.lastError}</span>
-            <a
-              href={`/contact?type=bug&message=${encodeURIComponent(`Error: ${state.ui.lastError}\n\nPage: ${window.location.href}\n\nTimestamp: ${new Date().toISOString()}`)}`}
-              className="text-blue-400 hover:text-blue-300 underline text-xs whitespace-nowrap ml-2"
-            >
-              Report
-            </a>
-          </div>
-        </div>
+        <ErrorToast
+          message={state.ui.lastError}
+          onDismiss={() => {
+            if (dispatch) {
+              dispatch({ type: 'ERROR_CLEARED' });
+            }
+          }}
+        />
       )}
 
       {/* Developer Simulation Controls (includes Audit Trail) - Only visible when ?sim=true */}

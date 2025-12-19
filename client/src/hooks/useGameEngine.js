@@ -174,7 +174,24 @@ export function useGameEngine(partyId) {
 
       socket.on('error', ({ message }) => {
         console.error('Socket error:', message);
-        dispatch(gameActions.errorReceived(message));
+        
+        // Format user-friendly error messages
+        let userFriendlyMessage = message;
+        
+        // Map technical error messages to user-friendly ones
+        if (message.includes('No stealable gifts available') || message.includes('Cannot steal gift')) {
+          userFriendlyMessage = 'No stealable gifts available. All gifts are either locked or cannot be stolen right now.';
+        } else if (message.includes('already acted this turn')) {
+          userFriendlyMessage = 'You have already acted this turn. Please wait for your next turn.';
+        } else if (message.includes('Cannot steal back')) {
+          userFriendlyMessage = 'You cannot steal this gift back yet. Wait until the next turn.';
+        } else if (message.includes('Game is not active')) {
+          userFriendlyMessage = 'The game is not currently active.';
+        } else if (message.includes('Socket not connected')) {
+          userFriendlyMessage = 'Connection lost. Please refresh the page.';
+        }
+        
+        dispatch(gameActions.errorReceived(userFriendlyMessage));
         
         // Track error
         trackError('socket_error', message, 'useGameEngine');
@@ -478,6 +495,7 @@ export function useGameEngine(partyId) {
     },
     socket,
     emitReaction,
+    dispatch,
   };
 }
 
