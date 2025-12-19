@@ -48,9 +48,12 @@ async function scrapeAmazonWithApify(url) {
   }
 
   try {
+    const endpoint = `${APIFY_API_BASE}/acts/${APIFY_ACTOR_ID}/runs`;
     console.log('[Apify] Starting actor run...');
+    console.log('[Apify] Endpoint URL:', endpoint);
+    console.log('[Apify] Actor ID:', APIFY_ACTOR_ID);
     // Start Apify actor run
-    const startRunResponse = await fetch(`${APIFY_API_BASE}/acts/${APIFY_ACTOR_ID}/runs`, {
+    const startRunResponse = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -58,8 +61,8 @@ async function scrapeAmazonWithApify(url) {
       },
       body: JSON.stringify({
         startUrls: [{ url }],
-        maxItems: 1, // We only need one product
-        countryCode: 'US' // Default, could be extracted from URL
+        maxItems: 1 // We only need one product
+        // Note: countryCode is not a valid parameter for this actor
       })
     });
 
