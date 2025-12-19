@@ -314,18 +314,110 @@ export function useGameEngine(partyId) {
     return Object.values(state.gifts).some(gift => gift.isWrapped);
   }, [isMyTurn, state.status, state.gifts]);
 
-  const canSteal = useCallback((giftId) => {
-    if (!isMyTurn || state.status !== 'PLAYING') return false;
+  const getStealBlockReason = useCallback((giftId) => {
+    if (!isMyTurn || state.status !== 'PLAYING') {
+      return null; // Not shown - not your turn
+    }
     
     const gift = state.gifts[giftId];
-    if (!gift || gift.isWrapped) return false;
-    if (gift.isFrozen) return false;
-    if (gift.ownerId === user?.uid) return false; // Can't steal your own gift
+    if (!gift || gift.isWrapped) {
+      return null; // Not shown - gift doesn't exist or wrapped
+    }
+    if (gift.isFrozen) {
+      return "This gift is locked (3 steals)";
+    }
+    if (gift.ownerId === user?.uid) {
+      return null; // Not shown - own gift
+    }
+    
+    // Check U-turn rule
+    const turnOrder = state.gameState?.turnOrder || [];
+    const turnQueue = state.turnQueue || [];
+    const returnToStart = state.gameState?.config?.returnToStart || false;
+    const isBoomerangPhase = returnToStart && (
+      state.gameState?.isBoomerangPhase || 
+      (state.currentTurnIndex >= (turnOrder.length || 0))
+    );
+    
+    if (gift.lastOwnerId === user?.uid && !isBoomerangPhase) {
+      return "You can't steal this gift back yet - wait until the next turn";
+    }
+    
+    // Check if player has gift
+    const playerHasGift = Object.values(state.gifts).some(g => 
+      !g.isWrapped && g.ownerId === user?.uid
+    );
+    
+    if (playerHasGift) {
+      const isLastIndex = state.currentTurnIndex === (turnQueue.length - 1);
+      const isPlayer1 = turnOrder.length > 0 && turnOrder[0] === user?.uid;
+      const isPlayer1FinalTurn = isLastIndex && isPlayer1;
+      
+      if (!isBoomerangPhase && !isPlayer1FinalTurn) {
+        return "You already have a gift - you can only swap in boomerang phase";
+      }
+    }
+    
+    return null; // No blocking reason
+  }, [isMyTurn, state.status, state.gifts, state.gameState, state.currentTurnIndex, state.turnQueue, user?.uid]);
+
+  const canSteal = useCallback((giftId) => {
+    // #region agent log
+    fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useGameEngine.js:canSteal:ENTRY',message:'canSteal called',data:{giftId,isMyTurn,status:state.status,userId:user?.uid},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    
+    if (!isMyTurn || state.status !== 'PLAYING') {
+      // #region agent log
+      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useGameEngine.js:canSteal:BLOCKED',message:'Blocked: not my turn or not playing',data:{giftId,isMyTurn,status:state.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      return false;
+    }
+    
+    const gift = state.gifts[giftId];
+    if (!gift || gift.isWrapped) {
+      // #region agent log
+      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useGameEngine.js:canSteal:BLOCKED',message:'Blocked: gift not found or wrapped',data:{giftId,hasGift:!!gift,isWrapped:gift?.isWrapped},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
+      return false;
+    }
+    if (gift.isFrozen) {
+      // #region agent log
+      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useGameEngine.js:canSteal:BLOCKED',message:'Blocked: gift frozen',data:{giftId,isFrozen:gift.isFrozen,stealCount:gift.stealCount},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
+      return false;
+    }
+    if (gift.ownerId === user?.uid) {
+      // #region agent log
+      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useGameEngine.js:canSteal:BLOCKED',message:'Blocked: own gift',data:{giftId,ownerId:gift.ownerId,userId:user?.uid},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
+      return false; // Can't steal your own gift
+    }
     
     // RULE 4: Immediate Steal-Back Prevention (U-Turn Rule)
     // Per GAME_RULES.md Rule 4: "A player CANNOT steal a gift that was just stolen from them on the SAME turn"
+    // CRITICAL: In boomerang phase, the U-turn rule should allow stealing after a turn has passed
+    // Check if we're in boomerang phase - if so, lastOwnerId might be stale and should be allowed
+    const turnOrder = state.gameState?.turnOrder || [];
+    const turnQueue = state.turnQueue || [];
+    const returnToStart = state.gameState?.config?.returnToStart || false;
+    const isBoomerangPhase = returnToStart && (
+      state.gameState?.isBoomerangPhase || 
+      (state.currentTurnIndex >= (turnOrder.length || 0))
+    );
+    
     if (gift.lastOwnerId === user?.uid) {
-      return false; // Can't steal back a gift immediately after losing it on the same turn
+      // #region agent log
+      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useGameEngine.js:canSteal:U_TURN_CHECK',message:'U-turn rule check',data:{giftId,lastOwnerId:gift.lastOwnerId,userId:user?.uid,isBoomerangPhase,currentTurnIndex:state.currentTurnIndex,turnOrderLength:turnOrder.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+      // In boomerang phase, allow stealing even if lastOwnerId matches (turn has advanced)
+      // The U-turn rule only prevents immediate steal-back on the SAME turn
+      // Since we're in boomerang phase, turns have advanced, so allow the steal
+      if (!isBoomerangPhase) {
+        // #region agent log
+        fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useGameEngine.js:canSteal:BLOCKED',message:'Blocked: U-turn rule (not boomerang)',data:{giftId,lastOwnerId:gift.lastOwnerId,userId:user?.uid},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
+        return false; // Can't steal back a gift immediately after losing it on the same turn (standard phase only)
+      }
     }
     
     // RULE 1: One Gift Per Person (Double-Dip Prevention)
@@ -334,27 +426,29 @@ export function useGameEngine(partyId) {
       !g.isWrapped && g.ownerId === user?.uid
     );
     
+    // #region agent log
+    fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useGameEngine.js:canSteal:PLAYER_HAS_GIFT',message:'Checking if player has gift',data:{giftId,playerHasGift,isBoomerangPhase,currentTurnIndex:state.currentTurnIndex,turnOrderLength:turnOrder.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
+    
     if (playerHasGift) {
       // Player has a gift - can only steal if:
       // - Exception 1: Player 1's Final Turn (bookend exception)
       // - Exception 2: Boomerang Phase (players can swap) - only if returnToStart is enabled
-      const turnOrder = state.gameState?.turnOrder || [];
-      const turnQueue = state.turnQueue || [];
-      const returnToStart = state.gameState?.config?.returnToStart || false;
-      // Boomerang phase only exists if returnToStart is enabled AND we're in the second half of the queue
-      const isBoomerangPhase = returnToStart && (
-        state.gameState?.isBoomerangPhase || 
-        (state.currentTurnIndex >= (turnOrder.length || 0))
-      );
       const isLastIndex = state.currentTurnIndex === (turnQueue.length - 1);
       const isPlayer1 = turnOrder.length > 0 && turnOrder[0] === user?.uid;
       const isPlayer1FinalTurn = isLastIndex && isPlayer1;
       
       if (!isBoomerangPhase && !isPlayer1FinalTurn) {
+        // #region agent log
+        fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useGameEngine.js:canSteal:BLOCKED',message:'Blocked: has gift but not boomerang/final',data:{giftId,playerHasGift,isBoomerangPhase,isPlayer1FinalTurn,returnToStart,currentTurnIndex:state.currentTurnIndex,turnOrderLength:turnOrder.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+        // #endregion
         return false; // Player has a gift and it's not boomerang phase or Player 1's final turn
       }
     }
     
+    // #region agent log
+    fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useGameEngine.js:canSteal:ALLOWED',message:'Steal allowed',data:{giftId,stealCount:gift.stealCount,isFrozen:gift.isFrozen,playerHasGift,isBoomerangPhase},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C,D'})}).catch(()=>{});
+    // #endregion
     return true;
   }, [isMyTurn, state.status, state.gifts, state.gameState, state.currentTurnIndex, state.turnQueue, user?.uid]);
 
@@ -380,6 +474,7 @@ export function useGameEngine(partyId) {
       isMyTurn,
       canPick,
       canSteal,
+      getStealBlockReason,
     },
     socket,
     emitReaction,

@@ -1246,183 +1246,186 @@ export function GameBoard({ partyId, onEndTurn }) {
         </div>
       )}
       
-      <div className="max-w-6xl mx-auto p-6 pt-24">
-        {/* Unified HUD Container */}
-        <div className="w-full max-w-5xl mx-auto mb-8 p-4 rounded-2xl bg-slate-900/60 backdrop-blur-xl border border-white/10 grid grid-cols-1 md:grid-cols-[auto_minmax(0,1fr)_350px] gap-6 items-center">
-          {/* Left Section: Game Status */}
-          <div className="flex flex-col gap-2 items-start flex-shrink-0 min-w-[200px]">
-            {/* Rounds Remaining */}
-            {phase === 'ACTIVE' && (
-              <div className="bg-slate-700/50 text-slate-300 border border-white/10 px-3 py-1 rounded-full text-xs font-mono mb-2 inline-block">
-                {roundsInfo.roundsRemaining} turn{roundsInfo.roundsRemaining !== 1 ? 's' : ''} remaining
-              </div>
-            )}
-            {/* Boomerang Badge */}
-            {(party?.config?.returnToStart || gameState.isBoomerangPhase) && (
-              <div className="bg-indigo-500/20 text-indigo-300 text-[10px] uppercase tracking-wider px-2 py-1 rounded-full border border-indigo-500/30">
-                {gameState.isBoomerangPhase ? '🔄 Boomerang Round!' : '🔄 Boomerang Rule Active'}
-              </div>
-            )}
-          </div>
-
-          {/* Center Section: Turn Indicator */}
-          <div className="text-center min-w-0">
-            {currentPlayerId === user?.uid ? (
-              <>
-                <p className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-white to-purple-300 drop-shadow-[0_0_10px_rgba(255,255,255,0.5)] animate-pulse">
-                  Your Turn!
-                </p>
-                {/* Action Buttons */}
-                <div className="mt-4 flex gap-3 justify-center items-center">
-                  {/* Skip Turn Button - Always visible when it's your turn */}
-                  {!currentAction && (
-                    <button
-                      onClick={handleEndTurn}
-                      className="bg-slate-700 text-white hover:bg-slate-600 hover:scale-105 rounded-full px-6 py-2 font-bold shadow-[0_0_15px_rgba(148,163,184,0.3)] transition-all duration-300 transform"
-                      title="Skip your turn and keep your current gift"
-                    >
-                      Skip Turn
-                    </button>
-                  )}
-                  {/* End Turn Button - Shows after you've acted */}
-                  {currentAction && (
-                    <button
-                      onClick={handleEndTurn}
-                      className="bg-white text-indigo-900 hover:bg-indigo-50 hover:scale-105 rounded-full px-8 py-2 font-bold shadow-[0_0_20px_rgba(255,255,255,0.3)] transition-all duration-300 transform animate-fade-in-up"
-                    >
-                      End Turn
-                    </button>
-                  )}
-                </div>
-              </>
-            ) : (
-              <p className="text-xl text-slate-300 animate-pulse whitespace-nowrap truncate">
-                Waiting for <span className="text-white font-semibold truncate">{getCurrentPlayerName()}</span>...
-              </p>
-            )}
-          </div>
-
-          {/* Right Section: Player Queue */}
-          {gameState?.turnOrder && gameState.turnOrder.length > 0 && (
-            <div className="flex overflow-x-auto gap-2 py-4 max-w-full md:max-w-none [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] [mask-image:linear-gradient(to_right,transparent_0px,black_40px,black_calc(100%_-_40px),transparent_100%)]">
-              <div className="flex gap-2 px-12 items-center">
-                {gameState.turnOrder.map((playerId, index) => {
-                const isCurrent = playerId === currentPlayerId;
-                const playerName = playerId === user?.uid 
-                  ? 'You' 
-                  : (userNames[playerId] || userEmails[playerId] || (playerId ? `Player ${playerId.slice(0, 8)}` : 'Unknown'));
-                const currentPlayerIndex = currentPlayerId ? gameState.turnOrder.indexOf(currentPlayerId) : -1;
-                const isPast = gameState.isBoomerangPhase 
-                  ? index > currentPlayerIndex
-                  : index < currentPlayerIndex;
-                
-                return (
-                  <div
-                    key={playerId}
-                    ref={isCurrent ? activePlayerRef : null}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-all flex-shrink-0 whitespace-nowrap ${
-                      isCurrent
-                        ? 'bg-indigo-600 text-white border border-indigo-400 shadow-[0_0_20px_rgba(99,102,241,0.4)] scale-125'
-                        : isPast
-                        ? 'bg-slate-800/30 border border-white/5 text-slate-500'
-                        : 'bg-slate-800/50 border border-white/10 text-slate-400'
-                    }`}
-                  >
-                    <span className="font-bold mr-1">{index + 1}.</span>
-                    {playerName}
-                    {isCurrent && <span className="ml-2">👈</span>}
+      {/* Main Dashboard Grid Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 h-[calc(100vh-96px)] overflow-hidden">
+        {/* Left Column: Game Board (3 columns on large screens) */}
+        <div className="lg:col-span-3 flex flex-col h-full overflow-hidden relative">
+          {/* Turn Bar - Sticky at top */}
+          <div className="sticky top-0 z-10 bg-slate-950/95 backdrop-blur-md pt-4 pb-4 border-b border-white/5">
+            {/* Unified HUD Container */}
+            <div className="w-full max-w-5xl mx-auto px-4 p-4 rounded-2xl bg-slate-900/60 backdrop-blur-xl border border-white/10 grid grid-cols-1 md:grid-cols-[auto_minmax(0,1fr)_350px] gap-6 items-center">
+              {/* Left Section: Game Status */}
+              <div className="flex flex-col gap-2 items-start flex-shrink-0 min-w-[200px]">
+                {/* Rounds Remaining */}
+                {phase === 'ACTIVE' && (
+                  <div className="bg-slate-700/50 text-slate-300 border border-white/10 px-3 py-1 rounded-full text-xs font-mono mb-2 inline-block">
+                    {roundsInfo.roundsRemaining} turn{roundsInfo.roundsRemaining !== 1 ? 's' : ''} remaining
                   </div>
-                );
-              })}
+                )}
+                {/* Boomerang Badge */}
+                {(party?.config?.returnToStart || gameState.isBoomerangPhase) && (
+                  <div className="bg-indigo-500/20 text-indigo-300 text-[10px] uppercase tracking-wider px-2 py-1 rounded-full border border-indigo-500/30">
+                    {gameState.isBoomerangPhase ? '🔄 Boomerang Round!' : '🔄 Boomerang Rule Active'}
+                  </div>
+                )}
               </div>
-            </div>
-          )}
-        </div>
 
-        {/* Show message to non-admins when all gifts are frozen */}
-        {phase === 'ACTIVE' && !isAdmin && allGiftsFrozen && (
-          <div className="mb-6">
-            <div className="bg-orange-50 border-2 border-orange-300 rounded-lg p-4">
-              <p className="text-sm font-semibold text-orange-800 mb-2">
-                🎉 All gifts are frozen! Waiting for admin to end the game.
-              </p>
+              {/* Center Section: Turn Indicator */}
+              <div className="text-center min-w-0">
+                {currentPlayerId === user?.uid ? (
+                  <>
+                    <p className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-white to-purple-300 drop-shadow-[0_0_10px_rgba(255,255,255,0.5)] animate-pulse">
+                      Your Turn!
+                    </p>
+                    {/* Action Buttons */}
+                    <div className="mt-4 flex gap-3 justify-center items-center">
+                      {/* Skip Turn Button - Always visible when it's your turn */}
+                      {!currentAction && (
+                        <button
+                          onClick={handleEndTurn}
+                          className="bg-slate-700 text-white hover:bg-slate-600 hover:scale-105 rounded-full px-6 py-2 font-bold shadow-[0_0_15px_rgba(148,163,184,0.3)] transition-all duration-300 transform"
+                          title="Skip your turn and keep your current gift"
+                        >
+                          Skip Turn
+                        </button>
+                      )}
+                      {/* End Turn Button - Shows after you've acted */}
+                      {currentAction && (
+                        <button
+                          onClick={handleEndTurn}
+                          className="bg-white text-indigo-900 hover:bg-indigo-50 hover:scale-105 rounded-full px-8 py-2 font-bold shadow-[0_0_20px_rgba(255,255,255,0.3)] transition-all duration-300 transform animate-fade-in-up"
+                        >
+                          End Turn
+                        </button>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-xl text-slate-300 animate-pulse whitespace-nowrap truncate">
+                    Waiting for <span className="text-white font-semibold truncate">{getCurrentPlayerName()}</span>...
+                  </p>
+                )}
+              </div>
+
+              {/* Right Section: Player Queue */}
+              {gameState?.turnOrder && gameState.turnOrder.length > 0 && (
+                <div className="flex overflow-x-auto gap-2 py-4 max-w-full md:max-w-none [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] [mask-image:linear-gradient(to_right,transparent_0px,black_40px,black_calc(100%_-_40px),transparent_100%)]">
+                  <div className="flex gap-2 px-12 items-center">
+                    {gameState.turnOrder.map((playerId, index) => {
+                    const isCurrent = playerId === currentPlayerId;
+                    const playerName = playerId === user?.uid 
+                      ? 'You' 
+                      : (userNames[playerId] || userEmails[playerId] || (playerId ? `Player ${playerId.slice(0, 8)}` : 'Unknown'));
+                    const currentPlayerIndex = currentPlayerId ? gameState.turnOrder.indexOf(currentPlayerId) : -1;
+                    const isPast = gameState.isBoomerangPhase 
+                      ? index > currentPlayerIndex
+                      : index < currentPlayerIndex;
+                    
+                    return (
+                      <div
+                        key={playerId}
+                        ref={isCurrent ? activePlayerRef : null}
+                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-all flex-shrink-0 whitespace-nowrap ${
+                          isCurrent
+                            ? 'bg-indigo-600 text-white border border-indigo-400 shadow-[0_0_20px_rgba(99,102,241,0.4)] scale-125'
+                            : isPast
+                            ? 'bg-slate-800/30 border border-white/5 text-slate-500'
+                            : 'bg-slate-800/50 border border-white/10 text-slate-400'
+                        }`}
+                      >
+                        <span className="font-bold mr-1">{index + 1}.</span>
+                        {playerName}
+                        {isCurrent && <span className="ml-2">👈</span>}
+                      </div>
+                    );
+                  })}
+                  </div>
+                </div>
+              )}
             </div>
+
+            {/* Show message to non-admins when all gifts are frozen */}
+            {phase === 'ACTIVE' && !isAdmin && allGiftsFrozen && (
+              <div className="mt-4 px-4">
+                <div className="bg-orange-50 border-2 border-orange-300 rounded-lg p-4">
+                  <p className="text-sm font-semibold text-orange-800 mb-2">
+                    🎉 All gifts are frozen! Waiting for admin to end the game.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
-        )}
-      </div>
 
-      {/* 2-Column Grid Layout: Gifts (Left) | Play-by-Play (Right) */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_350px] gap-6 items-start">
-        {/* Left Column: Gifts */}
-        <div>
-          {/* Wrapped Gifts */}
-          {wrappedGiftList.length > 0 && (
-            <div className="mb-8">
-              <h2 className="text-xl font-semibold mb-4 text-white text-center">Wrapped Gifts</h2>
-              <div className="flex flex-wrap justify-center gap-3 w-full">
-                {wrappedGiftList.map((gift, index) => (
-                  <GiftCard
-                    key={gift.id}
-                    gift={gift}
-                    isWrapped={true}
-                    compact={true}
-                    giftNumber={index + 1}
-                    currentPlayerId={currentPlayerId}
-                    userId={user?.uid}
-                    onPick={pickGift}
-                    canPick={canPick}
-                    canSteal={false}
-                    revealingGiftId={revealingGiftId}
-                    isMyGift={isMyGift(gift)}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Unwrapped Gifts */}
-          {unwrappedGiftList.length > 0 && (
-            <div>
-              <div className="border-t border-white/5 mt-4 mb-6"></div>
-              <div className="flex flex-wrap justify-center gap-6 w-full max-w-7xl mx-auto">
-                {unwrappedGiftList.map((gift) => {
-                  const giftData = unwrappedMap.get(gift.id);
-                  const ownerId = giftData?.ownerId;
-                  const getOwnerName = () => {
-                    if (!ownerId) return null;
-                    if (ownerId === user?.uid) return 'You';
-                    return userNames[ownerId] || userEmails[ownerId] || null;
-                  };
-                  
-                  return (
+          {/* Scrollable Gift Container */}
+          <div className="flex-1 overflow-y-auto p-6">
+            {/* Wrapped Gifts */}
+            {wrappedGiftList.length > 0 && (
+              <div className="mb-8">
+                <h2 className="text-xl font-semibold mb-4 text-white text-center">Wrapped Gifts</h2>
+                <div className="flex flex-wrap justify-center gap-3 w-full">
+                  {wrappedGiftList.map((gift, index) => (
                     <GiftCard
                       key={gift.id}
                       gift={gift}
-                      isWrapped={false}
-                      ownerId={ownerId}
-                      ownerName={getOwnerName()}
-                      stealCount={giftData?.stealCount || 0}
-                      isFrozen={giftData?.isFrozen || false}
+                      isWrapped={true}
+                      compact={true}
+                      giftNumber={index + 1}
                       currentPlayerId={currentPlayerId}
                       userId={user?.uid}
-                      onSteal={stealGift}
-                      onEndTurn={handleEndTurn}
-                      canPick={false}
-                      canSteal={canSteal(gift.id)}
+                      onPick={pickGift}
+                      canPick={canPick}
+                      canSteal={false}
                       revealingGiftId={revealingGiftId}
                       isMyGift={isMyGift(gift)}
                     />
-                  );
-                })}
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+
+            {/* Unwrapped Gifts */}
+            {unwrappedGiftList.length > 0 && (
+              <div>
+                <div className="border-t border-white/5 mt-4 mb-6"></div>
+                <div className="flex flex-wrap justify-center gap-6 w-full max-w-7xl mx-auto">
+                  {unwrappedGiftList.map((gift) => {
+                    const giftData = unwrappedMap.get(gift.id);
+                    const ownerId = giftData?.ownerId;
+                    const getOwnerName = () => {
+                      if (!ownerId) return null;
+                      if (ownerId === user?.uid) return 'You';
+                      return userNames[ownerId] || userEmails[ownerId] || null;
+                    };
+                    
+                    return (
+                      <GiftCard
+                        key={gift.id}
+                        gift={gift}
+                        isWrapped={false}
+                        ownerId={ownerId}
+                        ownerName={getOwnerName()}
+                        stealCount={giftData?.stealCount || 0}
+                        isFrozen={giftData?.isFrozen || false}
+                        currentPlayerId={currentPlayerId}
+                        userId={user?.uid}
+                        onSteal={stealGift}
+                        onEndTurn={handleEndTurn}
+                        canPick={false}
+                        canSteal={canSteal(gift.id)}
+                        revealingGiftId={revealingGiftId}
+                        isMyGift={isMyGift(gift)}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Right Column: Play-by-Play Sidebar */}
-        {/* Keep visible even when game ends (before viewResults) so players can see final log entries */}
+        {/* Right Column: Live Feed (1 column on large screens) */}
         {(phase === 'ACTIVE' || showGameOverModal) && (
-          <div className="lg:sticky lg:top-6 lg:h-[calc(100vh-3rem)] flex flex-col">
+          <div className="lg:col-span-1 border-l border-white/10 h-full flex flex-col bg-slate-900/20 overflow-y-auto">
             <GamePlayByPlay
               state={{
                 status: gameState?.phase === 'ACTIVE' ? 'PLAYING' : gameState?.phase === 'ENDED' ? 'FINISHED' : 'LOBBY',

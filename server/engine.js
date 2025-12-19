@@ -260,6 +260,7 @@ export class GameEngine {
       stealCount: 0,
       isFrozen: false,
       lastOwnerId: null, // No previous owner for picked gifts
+      lastInteractedAt: Date.now(), // Track when gift was last interacted with
     });
 
     // Mark player as having acted
@@ -417,6 +418,8 @@ export class GameEngine {
       // playerGift.isFrozen = playerGift.isFrozen; // Retain existing value
       // Track last owner for U-Turn prevention
       playerGift.lastOwnerId = playerId; // The stealing player was the previous owner
+      // Update interaction timestamp for exchanged gift
+      playerGift.lastInteractedAt = Date.now();
     }
     // Note: If stealing player had no gift, previous owner will get a turn to pick a new gift
 
@@ -425,6 +428,8 @@ export class GameEngine {
     stolenGift.ownerId = playerId;
     // Update lastOwnerId to track previous owner for U-Turn prevention
     stolenGift.lastOwnerId = previousOwnerId;
+    // Update interaction timestamp for stolen gift
+    stolenGift.lastInteractedAt = Date.now();
     
     // CRITICAL: Final validation - ensure stealer doesn't have multiple gifts
     // Check if stealer now owns multiple gifts (should only own the stolen gift)

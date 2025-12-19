@@ -144,6 +144,9 @@ function canPlayerAct(playerId, turnQueue, currentTurnIndex, turnOrder, isBoomer
  * Merge Firestore gifts (Base Layer) with game state (Live Layer)
  */
 function mergeGifts(firestoreGifts, gameState) {
+  // #region agent log
+  fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gameReducer.js:mergeGifts:ENTRY',message:'mergeGifts called',data:{firestoreGiftsCount:firestoreGifts?.length,hasGameState:!!gameState},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
   const merged = {};
   
   // Handle case where gameState might not exist yet
@@ -155,6 +158,9 @@ function mergeGifts(firestoreGifts, gameState) {
   // Start with Firestore metadata (Base Layer)
   if (firestoreGifts && Array.isArray(firestoreGifts)) {
     firestoreGifts.forEach(gift => {
+      // #region agent log
+      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gameReducer.js:mergeGifts:BEFORE_MERGE',message:'Firestore gift before merge',data:{giftId:gift.id,hasImage:!!gift.image,imageUrl:gift.image,title:gift.title,isWrapped:wrappedGifts.includes(gift.id)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       merged[gift.id] = {
         ...gift, // Base Layer: id, title, image, url, price, submitterId, partyId
         isWrapped: wrappedGifts.includes(gift.id),
@@ -162,24 +168,39 @@ function mergeGifts(firestoreGifts, gameState) {
         stealCount: 0,
         isFrozen: false,
         lastOwnerId: null,
+        lastInteractedAt: null,
       };
+      // #region agent log
+      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gameReducer.js:mergeGifts:AFTER_BASE_MERGE',message:'Merged gift after base layer',data:{giftId:merged[gift.id].id,hasImage:!!merged[gift.id].image,imageUrl:merged[gift.id].image,isWrapped:merged[gift.id].isWrapped},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
     });
   }
   
   // Apply Live Layer from game state
   unwrappedGiftsMap.forEach((giftData, giftId) => {
     if (merged[giftId]) {
+      // #region agent log
+      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gameReducer.js:mergeGifts:BEFORE_UNWRAP_MERGE',message:'Before unwrapping merge',data:{giftId,hasImageBefore:!!merged[giftId].image,imageUrlBefore:merged[giftId].image},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       merged[giftId] = {
         ...merged[giftId],
         ownerId: giftData.ownerId || null,
         stealCount: giftData.stealCount || 0,
         isFrozen: giftData.isFrozen || false,
         lastOwnerId: giftData.lastOwnerId || null,
+        lastInteractedAt: giftData.lastInteractedAt || null,
         isWrapped: false,
       };
+      // #region agent log
+      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gameReducer.js:mergeGifts:AFTER_UNWRAP_MERGE',message:'After unwrapping merge',data:{giftId,hasImageAfter:!!merged[giftId].image,imageUrlAfter:merged[giftId].image},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
     }
   });
   
+  // #region agent log
+  const mergedGiftsWithImages = Object.values(merged).filter(g => g.image).length;
+  fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gameReducer.js:mergeGifts:EXIT',message:'mergeGifts complete',data:{totalGifts:Object.keys(merged).length,giftsWithImages:mergedGiftsWithImages},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
   return merged;
 }
 

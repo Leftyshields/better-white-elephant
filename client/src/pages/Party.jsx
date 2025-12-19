@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth.js';
 import { PartyLobby } from '../components/PartyLobby.jsx';
-import { GameBoard } from '../components/GameBoard.jsx';
+import { GameRoom } from './GameRoom.jsx';
 import { PartyInviteLanding } from '../components/PartyInviteLanding.jsx';
 import { useParty } from '../hooks/useParty.js';
 import { Button } from '../components/ui/Button.jsx';
@@ -101,13 +101,13 @@ export function Party() {
     gameStarted
   });
 
-  // Show GameBoard if game is active, ended, or just started
+  // Show GameRoom if game is active, ended, or just started
   if (party.status === 'ACTIVE' || party.status === 'ENDED' || gameStarted) {
-    console.log('Rendering GameBoard');
+    console.log('Rendering GameRoom');
     return (
       <>
         {seoElement}
-        <GameBoard partyId={partyId} />
+        <GameRoom partyId={partyId} />
       </>
     );
   }

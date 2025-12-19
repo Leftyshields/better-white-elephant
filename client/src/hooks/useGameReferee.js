@@ -803,6 +803,21 @@ export function useGameReferee(gameState, userNames = {}, userEmails = {}) {
     return newEntry;
   };
 
-  return { auditLog, addSnapshotEntry };
+  // Function to add error/warning/info entries to audit log
+  const addLogEntry = (eventType, message, data = {}) => {
+    const newEntry = {
+      id: logIdCounter.current++,
+      type: 'EVENT',
+      eventType: eventType, // 'ERROR', 'WARNING', 'INFO'
+      message: message,
+      timestamp: new Date(),
+      ...data
+    };
+    
+    setAuditLog((prev) => [newEntry, ...prev]);
+    return newEntry;
+  };
+
+  return { auditLog, addSnapshotEntry, addLogEntry };
 }
 

@@ -10,12 +10,13 @@ import { useParty } from '../hooks/useParty.js';
 import { useGameSounds } from '../hooks/useGameSounds.js';
 import { GiftGrid } from '../components/GiftGrid.jsx';
 import { Button } from '../components/ui/Button.jsx';
-import { GameAuditTrail } from '../components/GameAuditTrail.jsx';
-import { GameTicker } from '../components/GameTicker.jsx';
 import { GamePlayByPlay } from '../components/GamePlayByPlay.jsx';
 import { SimulationControls } from '../components/dev/SimulationControls.jsx';
 import { ReactionBar } from '../components/ReactionBar.jsx';
 import { ReactionOverlay } from '../components/ReactionOverlay.jsx';
+import { GiftToSendCard } from '../components/GiftToSendCard.jsx';
+import { GiftIcon } from '@heroicons/react/24/outline';
+import confetti from 'canvas-confetti';
 import { apiRequest } from '../utils/api.js';
 
 export function GameRoom({ partyId }) {
@@ -26,7 +27,16 @@ export function GameRoom({ partyId }) {
   const [userNames, setUserNames] = useState({});
   const [userEmails, setUserEmails] = useState({});
   const [revealingGiftId, setRevealingGiftId] = useState(null);
+  const [prizeImageError, setPrizeImageError] = useState(false);
   const prevIsMyTurnRef = useRef(false);
+
+  // Function to trigger confetti
+  const triggerConfetti = () => {
+    confetti({
+      spread: 70,
+      origin: { y: 0.6 }
+    });
+  };
 
   // Debug: Log socket and connection status
   useEffect(() => {
@@ -213,32 +223,6 @@ export function GameRoom({ partyId }) {
     return userNames[currentPlayerId] || userEmails[currentPlayerId] || `Player ${currentPlayerId?.slice(0, 8)}`;
   };
 
-  const handleEndGame = async () => {
-    if (!confirm('Are you sure you want to end the game? All current ownership will be final.')) {
-      return;
-    }
-
-    try {
-      const serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
-      const response = await fetch(`${serverUrl}/api/game/end`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${await user.getIdToken()}`,
-        },
-        body: JSON.stringify({ partyId }),
-      });
-
-      const data = await response.json();
-      if (!data.success) {
-        alert('Failed to end game: ' + (data.error || 'Unknown error'));
-      }
-    } catch (error) {
-      console.error('Error ending game:', error);
-      alert('Failed to end game: ' + error.message);
-    }
-  };
-
   // Loading state
   if (state.status === 'LOBBY' || !state.ui.isSocketConnected) {
     return (
@@ -262,30 +246,159 @@ export function GameRoom({ partyId }) {
 
   // Finished state - show ended screen
   if (state.status === 'FINISHED' || party?.status === 'ENDED') {
-    // This would need the ended game UI - for now, show a simple message
-    // The full ended game UI can be ported from GameBoard if needed
+    const getWinnerName = (ownerId) => {
+      if (!ownerId) return 'No Winner';
+      if (ownerId === user?.uid) return 'You';
+      return userNames[ownerId] || userEmails[ownerId] || `User ${ownerId?.slice(0, 8)}`;
+    };
+
+    // Get all gifts as array
+    const allGifts = Object.values(state.gifts || {});
+    
+    // Build a map to ensure each winner only gets ONE gift (first one encountered)
+    // Use winnerId from Firestore (gifts that have been persisted with winners)
+    const winnerGiftMap = new Map();
+    allGifts.forEach((gift) => {
+      if (gift.winnerId && !winnerGiftMap.has(gift.winnerId)) {
+        winnerGiftMap.set(gift.winnerId, gift);
+      }
+    });
+
+    // Also check unwrapped gifts from gameState if available (for games that just ended)
+    if (state.gameState?.unwrappedGifts) {
+      const unwrappedMap = new Map(
+        Array.isArray(state.gameState.unwrappedGifts)
+          ? state.gameState.unwrappedGifts
+          : []
+      );
+      
+      unwrappedMap.forEach((giftData, giftId) => {
+        if (giftData?.ownerId && !winnerGiftMap.has(giftData.ownerId)) {
+          const gift = allGifts.find(g => g.id === giftId);
+          if (gift) {
+            winnerGiftMap.set(giftData.ownerId, gift);
+          }
+        }
+      });
+    }
+
+    // Identify the user's prize and obligation
+    const myPrize = winnerGiftMap.get(user?.uid); // Gift where winnerId === user?.uid
+    const myObligation = allGifts.find((gift) => gift.submitterId === user?.uid); // Gift where submitterId === user?.uid
+    const isSelfWin = myPrize?.id === myObligation?.id; // Check if user won their own gift
+
     return (
       <>
         {/* Reaction Overlay - Full screen layer for flying emojis */}
         {socket && <ReactionOverlay socket={socket} />}
         
-        <div className="max-w-6xl mx-auto p-6 text-center">
-          <div className="text-7xl mb-4">🎉</div>
-          <h1 className="text-5xl font-bold mb-3 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-            Game Over!
-          </h1>
-          <p className="text-xl text-slate-300">Check the audit trail below to see the full game history.</p>
-          <GameAuditTrail
-            history={state.activities}
-            gifts={Object.values(state.gifts)}
-            userNames={userNames}
-            userEmails={userEmails}
-          />
+        <div className="max-w-6xl mx-auto p-6 pt-24">
+          {/* Celebration Header */}
+          <div className="text-center mb-12">
+            <div 
+              className="text-7xl mb-4 cursor-pointer hover:scale-110 transition-transform"
+              onClick={triggerConfetti}
+            >
+              🎉
+            </div>
+            <h1 className="text-5xl font-bold mb-3 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+              Game Over!
+            </h1>
+            <p className="text-xl text-slate-300">Time to see what you won and send your gifts!</p>
+          </div>
+
+          {/* What You Won Section */}
+          {myPrize && (
+            <div className="mb-12">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="bg-yellow-500/20 text-yellow-300 ring-1 ring-yellow-500/50 p-3 rounded-full">
+                  <svg className="w-8 h-8 text-yellow-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                  </svg>
+                </div>
+                <h2 className="text-2xl font-bold text-white mb-6">What You Won</h2>
+              </div>
+              <div className="space-y-6">
+                <div
+                  key={myPrize.id}
+                  className="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-[0_0_30px_-10px_rgba(234,179,8,0.3)] hover:border-white/20 transition-all"
+                >
+                  <div className="flex gap-6">
+                    <div className="relative w-32 h-32 rounded-lg overflow-hidden bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex-shrink-0">
+                      {myPrize.image && !prizeImageError ? (
+                        <img
+                          src={myPrize.image}
+                          alt={myPrize.title || 'Gift'}
+                          className="w-full h-full object-cover"
+                          onError={() => setPrizeImageError(true)}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <GiftIcon className="w-12 h-12 text-white opacity-50" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-white text-3xl font-bold mb-2">{myPrize.title || 'Gift'}</h3>
+                      {myPrize.url && (
+                        <a
+                          href={myPrize.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-indigo-300 hover:text-white underline underline-offset-4 text-sm mb-4 inline-block"
+                        >
+                          View Gift Link ↗
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* What You Need to Send Section */}
+          {myObligation && (
+            <div className="mb-12">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="bg-blue-500/20 text-blue-300 ring-1 ring-blue-500/50 p-3 rounded-full">
+                  <svg className="w-8 h-8 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                  </svg>
+                </div>
+                <h2 className="text-2xl font-bold text-white mb-6">What You Need to Send</h2>
+              </div>
+              <div className="space-y-6">
+                <GiftToSendCard
+                  key={myObligation.id}
+                  gift={myObligation}
+                  winnerId={myObligation.winnerId || (state.gameState?.unwrappedGifts 
+                    ? new Map(Array.isArray(state.gameState.unwrappedGifts) ? state.gameState.unwrappedGifts : []).get(myObligation.id)?.ownerId
+                    : null)}
+                  winnerName={getWinnerName(myObligation.winnerId || (state.gameState?.unwrappedGifts 
+                    ? new Map(Array.isArray(state.gameState.unwrappedGifts) ? state.gameState.unwrappedGifts : []).get(myObligation.id)?.ownerId
+                    : null))}
+                  userNames={userNames}
+                  userEmails={userEmails}
+                  isSelfWin={isSelfWin}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* No gifts message */}
+          {!myPrize && !myObligation && (
+            <div className="text-center py-12">
+              <p className="text-slate-400 text-lg">No gifts assigned to you this game.</p>
+            </div>
+          )}
+
+          {/* Developer Simulation Controls (includes Audit Trail & Reset) - Only visible when ?sim=true */}
+          <SimulationControls socket={socket} partyId={partyId} gameState={state.gameState} />
         </div>
 
         {/* Reaction Bar - Fixed at bottom for sending reactions */}
-        {/* FORCE RENDER FOR DEBUGGING - Remove conditional check */}
-        <ReactionBar onReaction={emitReaction} />
+        {socket && state.ui.isSocketConnected && <ReactionBar onReaction={emitReaction} />}
       </>
     );
   }
@@ -303,251 +416,167 @@ export function GameRoom({ partyId }) {
       {/* Reaction Overlay - Full screen layer for flying emojis */}
       {socket && <ReactionOverlay socket={socket} />}
       
-      {/* FORCE PLAY-BY-PLAY AT TOP - UNCONDITIONAL */}
-      <div className="w-full bg-red-600 border-8 border-yellow-400 p-8 mb-4 z-50">
-        <h1 className="text-4xl font-bold text-white mb-4">🎬 PLAY-BY-PLAY FEED (FORCED TO TOP)</h1>
-        <GamePlayByPlay
-          state={state}
-          userNames={userNames}
-          userEmails={userEmails}
-        />
-      </div>
-      
-      {/* Developer Simulation Controls (includes Audit Trail) - Only visible when ?sim=true */}
-      <SimulationControls socket={socket} partyId={partyId} gameState={state.gameState} />
-      
-      <div className="max-w-6xl mx-auto p-6">
-        {/* Connection Health Toast */}
-        {!state.ui.isSocketConnected && (
-          <div className="fixed bottom-4 right-4 bg-amber-500/10 text-amber-300 border border-amber-500/20 rounded-lg px-4 py-2 text-sm z-50">
-            Reconnecting...
-          </div>
-        )}
+      {/* Connection Health Toast */}
+      {!state.ui.isSocketConnected && (
+        <div className="fixed bottom-4 right-4 bg-amber-500/10 text-amber-300 border border-amber-500/20 rounded-lg px-4 py-2 text-sm z-50">
+          Reconnecting...
+        </div>
+      )}
 
       {/* Error Toast */}
       {state.ui.lastError && (
         <div className="fixed top-4 right-4 bg-red-500/10 text-red-300 border border-red-500/20 rounded-lg px-4 py-2 text-sm z-50 animate-fade-in max-w-md">
           <div className="flex items-start justify-between gap-2">
             <span>{state.ui.lastError}</span>
-            <Link
-              to={`/contact?type=bug&message=${encodeURIComponent(`Error: ${state.ui.lastError}\n\nPage: ${window.location.href}\n\nTimestamp: ${new Date().toISOString()}`)}`}
+            <a
+              href={`/contact?type=bug&message=${encodeURIComponent(`Error: ${state.ui.lastError}\n\nPage: ${window.location.href}\n\nTimestamp: ${new Date().toISOString()}`)}`}
               className="text-blue-400 hover:text-blue-300 underline text-xs whitespace-nowrap ml-2"
             >
               Report
-            </Link>
+            </a>
           </div>
         </div>
       )}
 
-      <div className="mb-6 text-center">
-        <h1 className="text-3xl font-bold mb-4 text-white">White Elephant Game</h1>
-        
-        {/* Rounds Remaining */}
-        {state.status === 'PLAYING' && (
-          <div className="mb-4">
-            <div className="inline-block bg-slate-800/50 border border-white/10 rounded-full px-5 py-2">
-              <span className="text-sm font-semibold text-slate-300">
-                {roundsInfo.roundsRemaining} turn{roundsInfo.roundsRemaining !== 1 ? 's' : ''} remaining
-                {state.gameState?.isBoomerangPhase && ' (Boomerang)'}
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* Turn Indicator (HUD) */}
-        <div className="mb-4">
-          <p className={`text-5xl font-extrabold mb-2 ${
-            derived.isMyTurn
-              ? 'text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400 drop-shadow-[0_0_15px_rgba(168,85,247,0.5)] animate-pulse'
-              : 'text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400 drop-shadow-[0_0_15px_rgba(168,85,247,0.5)]'
-          }`}>
-            {getCurrentPlayerName()}
-          </p>
-          <p className="text-slate-300 text-lg mt-2 font-medium">Current Turn</p>
-        </div>
-        
-        {/* Boomerang Badges */}
-        {party?.config?.returnToStart && (
-          <div className="mb-4 flex justify-center">
-            <div className="bg-amber-500/10 text-amber-300 border border-amber-500/20 rounded-full px-4 py-1 text-sm">
-              🔄 Boomerang Rule Active: After the last player, turns go back in reverse order!
-            </div>
-          </div>
-        )}
-        
-        {state.gameState?.isBoomerangPhase && (
-          <div className="mb-4 flex justify-center">
-            <div className="bg-amber-500/10 text-amber-300 border border-amber-500/20 rounded-full px-4 py-1 text-sm">
-              🔄 Boomerang Round!
-            </div>
-          </div>
-        )}
-        
-        {/* Player Queue */}
-        {state.participants.length > 0 && (
-          <div className="mb-6">
-            <div className="flex overflow-x-auto justify-center gap-2 pb-2">
-              {state.participants.map((participant, index) => {
-                // Use activePlayerId to determine if this participant is currently active
-                const isCurrent = participant.id === state.activePlayerId;
-                const playerName = participant.id === user?.uid 
-                  ? 'You' 
-                  : (userNames[participant.id] || userEmails[participant.id] || `Player ${participant.id.slice(0, 8)}`);
-                // For past/future indication, use turnQueue index if available, otherwise fall back to participant index
-                const participantTurnIndex = state.turnQueue?.indexOf(participant.id) ?? index;
-                const isPast = state.gameState?.isBoomerangPhase 
-                  ? participantTurnIndex > state.currentTurnIndex
-                  : participantTurnIndex < state.currentTurnIndex;
-                
-                return (
-                  <div
-                    key={participant.id}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                      isCurrent
-                        ? 'bg-indigo-600 text-white border border-indigo-400 shadow-[0_0_20px_rgba(99,102,241,0.4)] scale-110'
-                        : isPast
-                        ? 'bg-slate-800/30 border border-white/5 text-slate-500'
-                        : 'bg-slate-800/50 border border-white/10 text-slate-400'
-                    }`}
-                  >
-                    <span className="font-bold mr-1">{index + 1}.</span>
-                    {playerName}
-                    {isCurrent && <span className="ml-2">👈</span>}
+      {/* Developer Simulation Controls (includes Audit Trail) - Only visible when ?sim=true */}
+      <SimulationControls socket={socket} partyId={partyId} gameState={state.gameState} />
+      
+      {/* Main Dashboard Grid Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 h-[calc(100vh-96px)] overflow-hidden">
+        {/* Left Column: Game Board (3 columns on large screens) */}
+        <div className="lg:col-span-3 flex flex-col h-full overflow-hidden relative">
+          {/* Turn Bar - Sticky at top with transparent/glass effect */}
+          <div className="sticky top-0 z-10 bg-transparent backdrop-blur-sm pt-4 pb-4 border-b border-white/5">
+            {/* Unified HUD Container */}
+            <div className="w-full max-w-5xl mx-auto px-4 p-4 rounded-2xl bg-slate-900/20 backdrop-blur-xl border border-white/10 grid grid-cols-1 md:grid-cols-[auto_minmax(0,1fr)_350px] gap-6 items-center">
+              {/* Left Section: Game Status */}
+              <div className="flex flex-col gap-2 items-start flex-shrink-0 min-w-[200px]">
+                {/* Rounds Remaining */}
+                {state.status === 'PLAYING' && (
+                  <div className="bg-slate-700/50 text-slate-300 border border-white/10 px-3 py-1 rounded-full text-xs font-mono mb-2 inline-block">
+                    {roundsInfo.roundsRemaining} turn{roundsInfo.roundsRemaining !== 1 ? 's' : ''} remaining
                   </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
+                )}
+                {/* Boomerang Badge */}
+                {(party?.config?.returnToStart || state.gameState?.isBoomerangPhase) && (
+                  <div className="bg-indigo-500/20 text-indigo-300 text-[10px] uppercase tracking-wider px-2 py-1 rounded-full border border-indigo-500/30">
+                    {state.gameState?.isBoomerangPhase ? '🔄 Boomerang Round!' : '🔄 Boomerang Rule Active'}
+                  </div>
+                )}
+              </div>
 
-        {/* End Game Button - Admin only */}
-        {state.status === 'PLAYING' && isAdmin && (
-          <div className="mt-4">
-            {allGiftsFrozen && (
-              <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-4 mb-4">
-                <p className="text-sm font-semibold text-orange-300 mb-2">
-                  🎉 All gifts are frozen! The game is ready to end.
-                </p>
+              {/* Center Section: Turn Indicator */}
+              <div className="text-center min-w-0">
+                {derived.isMyTurn ? (
+                  <>
+                    <p className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-white to-purple-300 drop-shadow-[0_0_10px_rgba(255,255,255,0.5)] animate-pulse">
+                      Your Turn!
+                    </p>
+                    {/* Action Buttons */}
+                    {state.gameState?.turnAction && state.gameState.turnAction.some(([id]) => id === currentPlayerId) ? (
+                      <div className="mt-4">
+                        <Button onClick={actions.endTurn} variant="primary" className="px-8">
+                          End Turn
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="mt-4">
+                        <Button 
+                          onClick={actions.endTurn} 
+                          variant="secondary" 
+                          className="px-6"
+                        >
+                          Skip Turn
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-xl text-slate-300 animate-pulse whitespace-nowrap truncate">
+                    Waiting for <span className="text-white font-semibold truncate">{getCurrentPlayerName()}</span>...
+                  </p>
+                )}
+              </div>
+
+              {/* Right Section: Player Queue */}
+              {state.participants.length > 0 && (
+                <div className="flex overflow-x-auto gap-2 py-4 max-w-full md:max-w-none [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] [mask-image:linear-gradient(to_right,transparent_0px,black_40px,black_calc(100%_-_40px),transparent_100%)]">
+                  <div className="flex gap-2 px-12 items-center">
+                    {state.participants.map((participant, index) => {
+                      const isCurrent = participant.id === state.activePlayerId;
+                      const playerName = participant.id === user?.uid 
+                        ? 'You' 
+                        : (userNames[participant.id] || userEmails[participant.id] || `Player ${participant.id.slice(0, 8)}`);
+                      const participantTurnIndex = state.turnQueue?.indexOf(participant.id) ?? index;
+                      const isPast = state.gameState?.isBoomerangPhase 
+                        ? participantTurnIndex > state.currentTurnIndex
+                        : participantTurnIndex < state.currentTurnIndex;
+                      
+                      return (
+                        <div
+                          key={participant.id}
+                          className={`px-3 py-2 rounded-lg text-sm font-medium transition-all flex-shrink-0 whitespace-nowrap ${
+                            isCurrent
+                              ? 'bg-indigo-600 text-white border border-indigo-400 shadow-[0_0_20px_rgba(99,102,241,0.4)] scale-125'
+                              : isPast
+                              ? 'bg-slate-800/30 border border-white/5 text-slate-500'
+                              : 'bg-slate-800/50 border border-white/10 text-slate-400'
+                          }`}
+                        >
+                          <span className="font-bold mr-1">{index + 1}.</span>
+                          {playerName}
+                          {isCurrent && <span className="ml-2">👈</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Show message to non-admins when all gifts are frozen */}
+            {state.status === 'PLAYING' && !isAdmin && allGiftsFrozen && (
+              <div className="mt-4 px-4">
+                <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-4">
+                  <p className="text-sm font-semibold text-orange-300 mb-2">
+                    🎉 All gifts are frozen! Waiting for admin to end the game.
+                  </p>
+                </div>
               </div>
             )}
-            <div>
-              <Button
-                onClick={handleEndGame}
-                variant={allGiftsFrozen ? "primary" : "secondary"}
-                className="px-8 py-3 text-lg"
-              >
-                {allGiftsFrozen ? 'End Game Now' : 'End Game Manually'}
-              </Button>
-              <p className="text-xs text-slate-400 mt-2">
-                {allGiftsFrozen 
-                  ? 'All gifts are frozen. Click to finalize winners and end the game.'
-                  : 'As admin, you can manually end the game at any time'}
-              </p>
-            </div>
           </div>
-        )}
 
-        {/* Show message to non-admins when all gifts are frozen */}
-        {state.status === 'PLAYING' && !isAdmin && allGiftsFrozen && (
-          <div className="mt-4">
-            <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-4">
-              <p className="text-sm font-semibold text-orange-300 mb-2">
-                🎉 All gifts are frozen! Waiting for admin to end the game.
-              </p>
-            </div>
+          {/* Scrollable Gift Container */}
+          <div className="flex-1 overflow-y-auto p-6">
+            <GiftGrid
+              gifts={state.gifts}
+              isMyTurn={derived.isMyTurn}
+              canSteal={derived.canSteal}
+              getStealBlockReason={derived.getStealBlockReason}
+              actions={actions}
+              currentPlayerId={currentPlayerId}
+              userId={user?.uid}
+              userNames={userNames}
+              userEmails={userEmails}
+              revealingGiftId={revealingGiftId}
+            />
           </div>
-        )}
-      </div>
+        </div>
 
-      {/* Debug info - always show */}
-      <div className="w-full max-w-4xl mx-auto mb-2 p-2 bg-yellow-500/20 border border-yellow-500/50 rounded text-xs text-yellow-200 font-mono">
-        🔍 TICKER DEBUG: status="{state.status}", activities={state.activities?.length || 0}, phase={state.gameState?.phase || 'N/A'}
-      </div>
-
-      {/* FORCE TEST: This should ALWAYS be visible */}
-      <div className="w-full max-w-4xl mx-auto mb-4 p-4 bg-red-500 border-4 border-red-600 rounded text-white font-bold text-lg">
-        🚨 TEST: If you see this, the render is working. Looking for GamePlayByPlay below...
-      </div>
-
-      {/* Live Activity Ticker */}
-      {state.status === 'PLAYING' ? (
-        <div className="w-full max-w-4xl mx-auto mb-6">
-          {state.activities.length > 0 ? (
-            <GameTicker
-              activities={state.activities}
-              gifts={Object.values(state.gifts)}
+        {/* Right Column: Live Feed (1 column on large screens) */}
+        {state.status === 'PLAYING' && (
+          <div className="lg:col-span-1 border-l border-white/10 h-full flex flex-col bg-slate-900/20 overflow-y-auto">
+            <GamePlayByPlay
+              state={state}
               userNames={userNames}
               userEmails={userEmails}
             />
-          ) : (
-            <div className="p-4 bg-slate-800/40 border border-white/5 rounded-xl text-center text-slate-400 text-sm">
-              📋 Activity feed will appear here after the first move...
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="w-full max-w-4xl mx-auto mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-center text-red-300 text-sm">
-          ⚠️ Ticker hidden: status is "{state.status}" (needs "PLAYING")
-        </div>
-      )}
-
-      {/* Play-by-Play Feed - FORCE RENDER FOR TESTING */}
-      <div className="w-full max-w-4xl mx-auto mb-4 p-4 bg-purple-500 border-4 border-purple-600 rounded text-white font-bold">
-        🟣 BEFORE GamePlayByPlay Component
+          </div>
+        )}
       </div>
-      <GamePlayByPlay
-        state={state}
-        userNames={userNames}
-        userEmails={userEmails}
-      />
-      <div className="w-full max-w-4xl mx-auto mb-4 p-4 bg-purple-500 border-4 border-purple-600 rounded text-white font-bold">
-        🟣 AFTER GamePlayByPlay Component
-      </div>
-
-      {/* Gift Grid */}
-      <GiftGrid
-        gifts={state.gifts}
-        isMyTurn={derived.isMyTurn}
-        canSteal={derived.canSteal}
-        actions={actions}
-        currentPlayerId={currentPlayerId}
-        userId={user?.uid}
-        userNames={userNames}
-        userEmails={userEmails}
-        revealingGiftId={revealingGiftId}
-      />
-
-      {/* End Turn Button */}
-      {state.gameState?.turnAction && state.gameState.turnAction.some(([id]) => id === currentPlayerId) && (
-        <div className="mt-6 text-center">
-          <Button onClick={actions.endTurn} variant="primary" className="px-8">
-            End Turn
-          </Button>
-        </div>
-      )}
-
-      {/* Game Audit Trail */}
-      {state.activities.length > 0 && (
-        <GameAuditTrail
-          history={state.activities}
-          gifts={Object.values(state.gifts)}
-          userNames={userNames}
-          userEmails={userEmails}
-        />
-      )}
 
       {/* Reaction Bar - Fixed at bottom for sending reactions */}
-      {/* FORCE RENDER FOR DEBUGGING - Remove conditional check */}
-      <ReactionBar onReaction={emitReaction} />
-      
-      {/* Debug: Test if fixed positioning works */}
-      <div 
-        className="fixed bottom-4 right-4 bg-red-500 text-white p-4 z-[200] rounded-lg"
-        style={{ zIndex: 200 }}
-      >
-        DEBUG: If you see this, fixed positioning works
-      </div>
-    </div>
+      {socket && state.ui.isSocketConnected && <ReactionBar onReaction={emitReaction} />}
     </>
   );
 }

@@ -11,13 +11,18 @@ import { apiRequest } from '../../utils/api.js';
 import { validateGameHistory } from '../../utils/gameValidator.js';
 
 export function SimulationControls({ socket, partyId, gameState }) {
-  // Check if simulation mode is enabled via URL query parameter
-  const isSimMode = new URLSearchParams(window.location.search).get('sim') === 'true';
+  // #region agent log
+  fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:RENDER',message:'SimulationControls render',data:{hasSocket:!!socket,hasPartyId:!!partyId,hasGameState:!!gameState},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C'})}).catch(()=>{});
+  // #endregion
   
-  // Don't render if not in sim mode
-  if (!isSimMode) {
-    return null;
-  }
+  try {
+    // Check if simulation mode is enabled via URL query parameter
+    const isSimMode = new URLSearchParams(window.location.search).get('sim') === 'true';
+    
+    // Don't render if not in sim mode
+    if (!isSimMode) {
+      return null;
+    }
 
   const { participants, party } = useParty(partyId);
   const [botCount, setBotCount] = useState(10);
@@ -101,7 +106,7 @@ export function SimulationControls({ socket, partyId, gameState }) {
   
   // Always call the hook (React hooks must be called unconditionally)
   // Pass null if no game state available - the hook handles null gracefully
-  const { auditLog, addSnapshotEntry } = useGameReferee(lastGameState, userNames, userEmails);
+  const { auditLog, addSnapshotEntry, addLogEntry } = useGameReferee(lastGameState, userNames, userEmails);
 
   // Listen for bot addition success, autoplay updates, and errors
   useEffect(() => {
@@ -134,19 +139,42 @@ export function SimulationControls({ socket, partyId, gameState }) {
       setFeedbackMessage({ type: 'success', text: 'Game reset successfully' });
     };
 
-    const handleBotMoveForced = ({ success, result }) => {
+    const handleBotMoveForced = ({ success, result, error }) => {
       if (success) {
         console.log(`✅ Bot move forced:`, result);
         setFeedbackMessage({ 
           type: 'success', 
           text: `Bot moved: ${result.action || 'endTurn'}` 
         });
+      } else if (error) {
+        const errorMessage = `Bot move failed: ${error}`;
+        setFeedbackMessage({ type: 'error', text: errorMessage });
+        // Add to audit trail
+        if (addLogEntry) {
+          addLogEntry('ERROR', errorMessage);
+        }
       }
     };
 
     const handleError = ({ message, code }) => {
+      // #region agent log
+      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:socket:error',message:'Socket error received',data:{message,code},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
       console.error('❌ Socket error:', message, { code });
       setFeedbackMessage({ type: 'error', text: `Error: ${message}` });
+      // Add to audit trail
+      if (addLogEntry) {
+        addLogEntry('ERROR', `Socket Error: ${message}`, { code });
+      }
+    };
+    
+    // Handle unhandled errors from bot actions
+    const handleBotActionError = (error) => {
+      // #region agent log
+      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:socket:botActionError',message:'Bot action error',data:{error:error?.message || String(error),hasStack:!!error?.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+      console.error('❌ Bot action error:', error);
+      setFeedbackMessage({ type: 'error', text: `Bot action failed: ${error?.message || 'Unknown error'}` });
     };
 
     socket.on('bots-added', handleBotsAdded);
@@ -155,6 +183,18 @@ export function SimulationControls({ socket, partyId, gameState }) {
     socket.on('game-reset', handleGameReset);
     socket.on('bot-move-forced', handleBotMoveForced);
     socket.on('error', handleError);
+    
+    // Wrap socket handlers in try-catch to prevent crashes
+    const safeEmit = (event, data) => {
+      try {
+        socket.emit(event, data);
+      } catch (error) {
+        handleBotActionError(error);
+      }
+    };
+    
+    // Store safeEmit for use in handlers
+    window.__safeSocketEmit = safeEmit;
 
     return () => {
       socket.off('bots-added', handleBotsAdded);
@@ -276,114 +316,164 @@ export function SimulationControls({ socket, partyId, gameState }) {
 
   // Handle force bot move
   const handleForceBotMove = () => {
-    if (!socket || !socket.connected) {
-      console.warn('⚠️ Cannot force bot move - socket not connected');
-      setFeedbackMessage({ type: 'error', text: 'Socket not connected' });
-      return;
-    }
-
-    if (!lastGameState || lastGameState.phase !== 'ACTIVE') {
-      setFeedbackMessage({ type: 'error', text: 'Game is not active' });
-      return;
-    }
-
-    const currentPlayerId = lastGameState.currentPlayerId;
-    if (!currentPlayerId || !currentPlayerId.startsWith('bot_')) {
-      setFeedbackMessage({ type: 'error', text: 'Current player is not a bot' });
-      return;
-    }
-
+    // #region agent log
+    fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:handleForceBotMove:ENTRY',message:'handleForceBotMove called',data:{hasSocket:!!socket,isConnected:socket?.connected,hasGameState:!!lastGameState,partyId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     try {
+      if (!socket || !socket.connected) {
+        console.warn('⚠️ Cannot force bot move - socket not connected');
+        setFeedbackMessage({ type: 'error', text: 'Socket not connected' });
+        return;
+      }
+
+      if (!lastGameState || lastGameState.phase !== 'ACTIVE') {
+        setFeedbackMessage({ type: 'error', text: 'Game is not active' });
+        return;
+      }
+
+      const currentPlayerId = lastGameState.currentPlayerId;
+      // #region agent log
+      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:handleForceBotMove:BEFORE_EMIT',message:'Before emitting bot move',data:{currentPlayerId,isBot:currentPlayerId?.startsWith('bot_')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      if (!currentPlayerId || !currentPlayerId.startsWith('bot_')) {
+        setFeedbackMessage({ type: 'error', text: 'Current player is not a bot' });
+        return;
+      }
+
       socket.emit('admin_force_bot_move', { partyId });
       console.log(`🤖 Forcing bot move for party ${partyId}`);
       setFeedbackMessage({ type: 'success', text: 'Forcing bot move...' });
+      // #region agent log
+      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:handleForceBotMove:AFTER_EMIT',message:'After emitting bot move',data:{partyId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
     } catch (error) {
+      // #region agent log
+      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:handleForceBotMove:ERROR',message:'Error in handleForceBotMove',data:{error:error.message,stack:error.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       console.error('Error forcing bot move:', error);
-      setFeedbackMessage({ type: 'error', text: `Failed to force bot move: ${error.message}` });
+      const errorMessage = `Failed to force bot move: ${error.message}`;
+      setFeedbackMessage({ type: 'error', text: errorMessage });
+      // Add to audit trail
+      if (addLogEntry) {
+        addLogEntry('ERROR', errorMessage);
+      }
     }
   };
 
   const handleForceBotSteal = () => {
-    if (!socket || !socket.connected) {
-      console.warn('⚠️ Cannot force bot steal - socket not connected');
-      setFeedbackMessage({ type: 'error', text: 'Socket not connected' });
-      return;
-    }
-
-    if (!lastGameState || lastGameState.phase !== 'ACTIVE') {
-      setFeedbackMessage({ type: 'error', text: 'Game is not active' });
-      return;
-    }
-
-    const currentPlayerId = lastGameState.currentPlayerId;
-    if (!currentPlayerId || !currentPlayerId.startsWith('bot_')) {
-      setFeedbackMessage({ type: 'error', text: 'Current player is not a bot' });
-      return;
-    }
-
+    // #region agent log
+    fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:handleForceBotSteal:ENTRY',message:'handleForceBotSteal called',data:{hasSocket:!!socket,isConnected:socket?.connected,hasGameState:!!lastGameState,partyId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     try {
+      if (!socket || !socket.connected) {
+        console.warn('⚠️ Cannot force bot steal - socket not connected');
+        setFeedbackMessage({ type: 'error', text: 'Socket not connected' });
+        return;
+      }
+
+      if (!lastGameState || lastGameState.phase !== 'ACTIVE') {
+        setFeedbackMessage({ type: 'error', text: 'Game is not active' });
+        return;
+      }
+
+      const currentPlayerId = lastGameState.currentPlayerId;
+      if (!currentPlayerId || !currentPlayerId.startsWith('bot_')) {
+        setFeedbackMessage({ type: 'error', text: 'Current player is not a bot' });
+        return;
+      }
+
       socket.emit('admin_force_bot_steal', { partyId });
       console.log(`🤖 Forcing bot steal for party ${partyId}`);
       setFeedbackMessage({ type: 'success', text: 'Forcing bot to steal...' });
     } catch (error) {
+      // #region agent log
+      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:handleForceBotSteal:ERROR',message:'Error in handleForceBotSteal',data:{error:error.message,stack:error.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       console.error('Error forcing bot steal:', error);
-      setFeedbackMessage({ type: 'error', text: `Failed to force bot steal: ${error.message}` });
+      const errorMessage = `Failed to force bot steal: ${error.message}`;
+      setFeedbackMessage({ type: 'error', text: errorMessage });
+      // Add to audit trail
+      if (addLogEntry) {
+        addLogEntry('ERROR', errorMessage);
+      }
     }
   };
 
   const handleForceBotPick = () => {
-    if (!socket || !socket.connected) {
-      console.warn('⚠️ Cannot force bot pick - socket not connected');
-      setFeedbackMessage({ type: 'error', text: 'Socket not connected' });
-      return;
-    }
-
-    if (!lastGameState || lastGameState.phase !== 'ACTIVE') {
-      setFeedbackMessage({ type: 'error', text: 'Game is not active' });
-      return;
-    }
-
-    const currentPlayerId = lastGameState.currentPlayerId;
-    if (!currentPlayerId || !currentPlayerId.startsWith('bot_')) {
-      setFeedbackMessage({ type: 'error', text: 'Current player is not a bot' });
-      return;
-    }
-
+    // #region agent log
+    fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:handleForceBotPick:ENTRY',message:'handleForceBotPick called',data:{hasSocket:!!socket,isConnected:socket?.connected,hasGameState:!!lastGameState,partyId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     try {
+      if (!socket || !socket.connected) {
+        console.warn('⚠️ Cannot force bot pick - socket not connected');
+        setFeedbackMessage({ type: 'error', text: 'Socket not connected' });
+        return;
+      }
+
+      if (!lastGameState || lastGameState.phase !== 'ACTIVE') {
+        setFeedbackMessage({ type: 'error', text: 'Game is not active' });
+        return;
+      }
+
+      const currentPlayerId = lastGameState.currentPlayerId;
+      if (!currentPlayerId || !currentPlayerId.startsWith('bot_')) {
+        setFeedbackMessage({ type: 'error', text: 'Current player is not a bot' });
+        return;
+      }
+
       socket.emit('admin_force_bot_pick', { partyId });
       console.log(`🤖 Forcing bot pick for party ${partyId}`);
       setFeedbackMessage({ type: 'success', text: 'Forcing bot to pick...' });
     } catch (error) {
+      // #region agent log
+      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:handleForceBotPick:ERROR',message:'Error in handleForceBotPick',data:{error:error.message,stack:error.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       console.error('Error forcing bot pick:', error);
-      setFeedbackMessage({ type: 'error', text: `Failed to force bot pick: ${error.message}` });
+      const errorMessage = `Failed to force bot pick: ${error.message}`;
+      setFeedbackMessage({ type: 'error', text: errorMessage });
+      // Add to audit trail
+      if (addLogEntry) {
+        addLogEntry('ERROR', errorMessage);
+      }
     }
   };
 
   const handleForceBotSkip = () => {
-    if (!socket || !socket.connected) {
-      console.warn('⚠️ Cannot force bot skip - socket not connected');
-      setFeedbackMessage({ type: 'error', text: 'Socket not connected' });
-      return;
-    }
-
-    if (!lastGameState || lastGameState.phase !== 'ACTIVE') {
-      setFeedbackMessage({ type: 'error', text: 'Game is not active' });
-      return;
-    }
-
-    const currentPlayerId = lastGameState.currentPlayerId;
-    if (!currentPlayerId || !currentPlayerId.startsWith('bot_')) {
-      setFeedbackMessage({ type: 'error', text: 'Current player is not a bot' });
-      return;
-    }
-
+    // #region agent log
+    fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:handleForceBotSkip:ENTRY',message:'handleForceBotSkip called',data:{hasSocket:!!socket,isConnected:socket?.connected,hasGameState:!!lastGameState,partyId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     try {
+      if (!socket || !socket.connected) {
+        console.warn('⚠️ Cannot force bot skip - socket not connected');
+        setFeedbackMessage({ type: 'error', text: 'Socket not connected' });
+        return;
+      }
+
+      if (!lastGameState || lastGameState.phase !== 'ACTIVE') {
+        setFeedbackMessage({ type: 'error', text: 'Game is not active' });
+        return;
+      }
+
+      const currentPlayerId = lastGameState.currentPlayerId;
+      if (!currentPlayerId || !currentPlayerId.startsWith('bot_')) {
+        setFeedbackMessage({ type: 'error', text: 'Current player is not a bot' });
+        return;
+      }
+
       socket.emit('admin_force_bot_skip', { partyId });
       console.log(`🤖 Forcing bot skip for party ${partyId}`);
       setFeedbackMessage({ type: 'success', text: 'Forcing bot to skip...' });
     } catch (error) {
+      // #region agent log
+      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:handleForceBotSkip:ERROR',message:'Error in handleForceBotSkip',data:{error:error.message,stack:error.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       console.error('Error forcing bot skip:', error);
-      setFeedbackMessage({ type: 'error', text: `Failed to force bot skip: ${error.message}` });
+      const errorMessage = `Failed to force bot skip: ${error.message}`;
+      setFeedbackMessage({ type: 'error', text: errorMessage });
+      // Add to audit trail
+      if (addLogEntry) {
+        addLogEntry('ERROR', errorMessage);
+      }
     }
   };
 
@@ -438,17 +528,24 @@ export function SimulationControls({ socket, partyId, gameState }) {
 
   // Auto-scroll audit log to top (newest entries) when new entries are added
   useEffect(() => {
-    if (auditLogContainerRef.current && auditLog.length > 0 && showAuditTrail) {
+    if (auditLogContainerRef.current && auditLog && auditLog.length > 0 && showAuditTrail) {
       auditLogContainerRef.current.scrollTop = 0;
     }
-  }, [auditLog.length, showAuditTrail]);
+  }, [auditLog?.length, showAuditTrail]);
 
   const formatTimestamp = (date) => {
-    const hours = date.getHours().toString().padStart(2, '0');
-    const minutes = date.getMinutes().toString().padStart(2, '0');
-    const seconds = date.getSeconds().toString().padStart(2, '0');
-    const milliseconds = date.getMilliseconds().toString().padStart(3, '0');
-    return `${hours}:${minutes}:${seconds}.${milliseconds}`;
+    try {
+      if (!date) return 'N/A';
+      const d = date instanceof Date ? date : new Date(date);
+      if (isNaN(d.getTime())) return 'Invalid Date';
+      const hours = d.getHours().toString().padStart(2, '0');
+      const minutes = d.getMinutes().toString().padStart(2, '0');
+      const seconds = d.getSeconds().toString().padStart(2, '0');
+      const milliseconds = d.getMilliseconds().toString().padStart(3, '0');
+      return `${hours}:${minutes}:${seconds}.${milliseconds}`;
+    } catch (error) {
+      return 'N/A';
+    }
   };
 
   const getEntryColor = (entry) => {
@@ -492,7 +589,7 @@ export function SimulationControls({ socket, partyId, gameState }) {
   // Check socket readiness - also check if socket exists and is in a valid state
   const isSocketReady = socket && (socket.connected || socket.io?.readyState === 'open');
 
-  return (
+    return (
     <div className="fixed bottom-4 left-4 z-[9999]">
       <div className={`bg-slate-950/90 border border-red-500/30 rounded-lg shadow-2xl backdrop-blur-md flex flex-col ${
         minimalMode ? 'p-2' : 'p-4 w-80 max-h-[85vh]'
@@ -687,7 +784,7 @@ export function SimulationControls({ socket, partyId, gameState }) {
               >
                 <div className="flex items-center gap-2">
                   <span>📋 Audit Trail</span>
-                  {auditLog.length > 0 && (
+                  {auditLog && auditLog.length > 0 && (
                     <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">
                       {auditLog.length}
                     </span>
@@ -700,42 +797,75 @@ export function SimulationControls({ socket, partyId, gameState }) {
                 )}
               </button>
               <div className="flex items-center gap-2">
-                {auditLog.length > 0 && (
+                {auditLog && auditLog.length > 0 && (
                   <button
                     onClick={() => {
-                      const logText = auditLog
-                        .map((entry) => {
-                          const timestamp = formatTimestamp(entry.timestamp);
-                          const typeLabel = entry.type === 'SNAPSHOT' ? 'SNAPSHOT' : entry.eventType || entry.type;
-                          let line = `[${typeLabel}] ${timestamp} - ${entry.message}`;
-                          if (entry.type === 'SNAPSHOT' && entry.snapshot) {
-                            line += `\n\n--- SNAPSHOT DATA ---\n`;
-                            line += `Description: ${entry.snapshot.userDescription}\n`;
-                            if (entry.snapshot.browserInfo) {
-                              line += `Browser: ${entry.snapshot.browserInfo.userAgent}\n`;
-                              line += `URL: ${entry.snapshot.browserInfo.url}\n`;
-                              line += `Viewport: ${entry.snapshot.browserInfo.viewport.width}x${entry.snapshot.browserInfo.viewport.height}\n`;
+                      // #region agent log
+                      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:CopyButton:ENTRY',message:'Copy button clicked',data:{auditLogLength:auditLog?.length,hasAuditLog:!!auditLog},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+                      // #endregion
+                      try {
+                        if (!auditLog || !Array.isArray(auditLog)) {
+                          // #region agent log
+                          fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:CopyButton:ERROR',message:'auditLog is invalid',data:{auditLog,type:typeof auditLog,isArray:Array.isArray(auditLog)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+                          // #endregion
+                          setFeedbackMessage({ type: 'error', text: 'Audit log not available' });
+                          return;
+                        }
+                        const logText = auditLog
+                          .map((entry) => {
+                            // #region agent log
+                            fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:CopyButton:MAP_ENTRY',message:'Processing audit log entry',data:{hasEntry:!!entry,hasTimestamp:!!entry?.timestamp,hasType:!!entry?.type,hasMessage:!!entry?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+                            // #endregion
+                            if (!entry) return '';
+                            const timestamp = entry.timestamp ? formatTimestamp(entry.timestamp) : 'N/A';
+                            const typeLabel = entry.type === 'SNAPSHOT' ? 'SNAPSHOT' : (entry.eventType || entry.type || 'UNKNOWN');
+                            let line = `[${typeLabel}] ${timestamp} - ${entry.message || 'No message'}`;
+                            if (entry.type === 'SNAPSHOT' && entry.snapshot) {
+                              line += `\n\n--- SNAPSHOT DATA ---\n`;
+                              line += `Description: ${entry.snapshot.userDescription || 'N/A'}\n`;
+                              if (entry.snapshot.browserInfo) {
+                                line += `Browser: ${entry.snapshot.browserInfo.userAgent || 'N/A'}\n`;
+                                line += `URL: ${entry.snapshot.browserInfo.url || 'N/A'}\n`;
+                                if (entry.snapshot.browserInfo.viewport) {
+                                  line += `Viewport: ${entry.snapshot.browserInfo.viewport.width || 'N/A'}x${entry.snapshot.browserInfo.viewport.height || 'N/A'}\n`;
+                                }
+                              }
+                              try {
+                                line += `\nGame State:\n${JSON.stringify(entry.snapshot.gameState || {}, null, 2)}\n`;
+                              } catch (e) {
+                                line += `\nGame State: [Error serializing]\n`;
+                              }
+                              if (entry.snapshot.auditLogContext && Array.isArray(entry.snapshot.auditLogContext) && entry.snapshot.auditLogContext.length > 0) {
+                                line += `\nRecent Audit Context (${entry.snapshot.auditLogContext.length} entries):\n`;
+                                entry.snapshot.auditLogContext.forEach((ctxEntry) => {
+                                  if (!ctxEntry) return;
+                                  const ctxTimestamp = ctxEntry.timestamp ? formatTimestamp(ctxEntry.timestamp) : 'N/A';
+                                  const ctxTypeLabel = ctxEntry.type === 'SNAPSHOT' ? 'SNAPSHOT' : (ctxEntry.eventType || ctxEntry.type || 'UNKNOWN');
+                                  line += `  [${ctxTypeLabel}] ${ctxTimestamp} - ${ctxEntry.message || 'No message'}\n`;
+                                });
+                              }
+                              line += `\n--- END SNAPSHOT ---\n`;
                             }
-                            line += `\nGame State:\n${JSON.stringify(entry.snapshot.gameState, null, 2)}\n`;
-                            if (entry.snapshot.auditLogContext && entry.snapshot.auditLogContext.length > 0) {
-                              line += `\nRecent Audit Context (${entry.snapshot.auditLogContext.length} entries):\n`;
-                              entry.snapshot.auditLogContext.forEach((ctxEntry) => {
-                                const ctxTimestamp = formatTimestamp(ctxEntry.timestamp);
-                                const ctxTypeLabel = ctxEntry.type === 'SNAPSHOT' ? 'SNAPSHOT' : ctxEntry.eventType || ctxEntry.type;
-                                line += `  [${ctxTypeLabel}] ${ctxTimestamp} - ${ctxEntry.message}\n`;
-                              });
-                            }
-                            line += `\n--- END SNAPSHOT ---\n`;
-                          }
-                          return line;
-                        })
-                        .join('\n');
-                      navigator.clipboard.writeText(logText).then(() => {
-                        setFeedbackMessage({ type: 'success', text: 'Audit trail copied to clipboard!' });
-                      }).catch((err) => {
-                        console.error('Failed to copy:', err);
-                        setFeedbackMessage({ type: 'error', text: 'Failed to copy to clipboard' });
-                      });
+                            return line;
+                          })
+                          .filter(Boolean)
+                          .join('\n');
+                        navigator.clipboard.writeText(logText).then(() => {
+                          setFeedbackMessage({ type: 'success', text: 'Audit trail copied to clipboard!' });
+                        }).catch((err) => {
+                          // #region agent log
+                          fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:CopyButton:CLIPBOARD_ERROR',message:'Clipboard write failed',data:{error:err.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+                          // #endregion
+                          console.error('Failed to copy:', err);
+                          setFeedbackMessage({ type: 'error', text: 'Failed to copy to clipboard' });
+                        });
+                      } catch (error) {
+                        // #region agent log
+                        fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:CopyButton:ERROR',message:'Error in copy handler',data:{error:error.message,stack:error.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+                        // #endregion
+                        console.error('Error copying audit log:', error);
+                        setFeedbackMessage({ type: 'error', text: `Error: ${error.message}` });
+                      }
                     }}
                     className="text-slate-400 hover:text-white text-xs px-2 py-1 border border-slate-600 hover:border-slate-500 rounded transition-colors"
                     title="Copy audit trail to clipboard"
@@ -759,13 +889,14 @@ export function SimulationControls({ socket, partyId, gameState }) {
                 className="mt-2 overflow-y-auto max-h-[400px] space-y-1 pr-1"
                 style={{ scrollbarWidth: 'thin' }}
               >
-                {auditLog.length === 0 ? (
+                {!auditLog || auditLog.length === 0 ? (
                   <div className="text-slate-500 text-xs text-center py-4">
                     No events yet. Waiting for game activity...
                   </div>
                 ) : (
-                  auditLog.map((entry) => {
-                    const eventType = entry.type === 'SNAPSHOT' ? 'SNAPSHOT' : (entry.eventType || entry.type);
+                  auditLog.map((entry, index) => {
+                    if (!entry) return null;
+                    const eventType = entry.type === 'SNAPSHOT' ? 'SNAPSHOT' : (entry.eventType || entry.type || 'UNKNOWN');
                     const borderColor = entry.type === 'SNAPSHOT'
                       ? 'border-purple-500 bg-purple-500/10 border-dashed'
                       : eventType === 'ERROR'
@@ -780,7 +911,7 @@ export function SimulationControls({ socket, partyId, gameState }) {
                     
                     return (
                       <div
-                        key={entry.id}
+                        key={entry.id || `entry-${index}`}
                         className={`p-2 rounded border-l-2 text-xs ${borderColor}`}
                       >
                         <div className="flex items-start gap-2">
@@ -791,10 +922,10 @@ export function SimulationControls({ socket, partyId, gameState }) {
                                 [{eventType}]
                               </span>
                               <span className="text-slate-400 text-[10px]">
-                                {formatTimestamp(entry.timestamp)}
+                                {entry.timestamp ? formatTimestamp(entry.timestamp) : 'N/A'}
                               </span>
                             </div>
-                            <div className="text-slate-200 break-words text-[11px]">{entry.message}</div>
+                            <div className="text-slate-200 break-words text-[11px]">{entry.message || 'No message'}</div>
                             
                             {/* Snapshot Details */}
                             {entry.type === 'SNAPSHOT' && entry.snapshot && (
@@ -808,7 +939,13 @@ export function SimulationControls({ socket, partyId, gameState }) {
                                     View Game State
                                   </summary>
                                   <pre className="mt-2 p-2 bg-black/50 rounded overflow-auto text-[10px] text-slate-300 max-h-48">
-                                    {JSON.stringify(entry.snapshot.gameState, null, 2)}
+                                    {(() => {
+                                      try {
+                                        return JSON.stringify(entry.snapshot.gameState || {}, null, 2);
+                                      } catch (e) {
+                                        return '[Error serializing game state]';
+                                      }
+                                    })()}
                                   </pre>
                                 </details>
                                 
@@ -832,10 +969,11 @@ export function SimulationControls({ socket, partyId, gameState }) {
                                     </summary>
                                     <div className="mt-2 space-y-1 max-h-48 overflow-y-auto">
                                       {entry.snapshot.auditLogContext.map((ctxEntry, idx) => {
-                                        const ctxEventType = ctxEntry.type === 'SNAPSHOT' ? 'SNAPSHOT' : (ctxEntry.eventType || ctxEntry.type);
+                                        if (!ctxEntry) return null;
+                                        const ctxEventType = ctxEntry.type === 'SNAPSHOT' ? 'SNAPSHOT' : (ctxEntry.eventType || ctxEntry.type || 'UNKNOWN');
                                         return (
                                           <div key={idx} className="p-1.5 bg-black/30 rounded text-[10px] text-slate-400">
-                                            <span className="text-purple-400">[{ctxEventType}]</span> {formatTimestamp(ctxEntry.timestamp)} - {ctxEntry.message}
+                                            <span className="text-purple-400">[{ctxEventType}]</span> {ctxEntry.timestamp ? formatTimestamp(ctxEntry.timestamp) : 'N/A'} - {ctxEntry.message || 'No message'}
                                           </div>
                                         );
                                       })}
@@ -892,5 +1030,23 @@ export function SimulationControls({ socket, partyId, gameState }) {
       )}
     </div>
   );
+  } catch (error) {
+    // #region agent log
+    fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SimulationControls.jsx:CATCH',message:'Error in SimulationControls render',data:{error:error.message,stack:error.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C'})}).catch(()=>{});
+    // #endregion
+    console.error('❌ Error in SimulationControls:', error);
+    return (
+      <div className="fixed bottom-4 left-4 z-[9999] bg-red-900/90 border border-red-500 rounded-lg p-4 text-red-200 text-xs">
+        <div className="font-bold mb-2">⚠️ Simulation Controls Error</div>
+        <div>{error.message}</div>
+        <button 
+          onClick={() => window.location.reload()} 
+          className="mt-2 text-white underline"
+        >
+          Reload Page
+        </button>
+      </div>
+    );
+  }
 }
 

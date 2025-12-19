@@ -18,6 +18,7 @@ export const GiftCard = memo(function GiftCard({
   onEndTurn,
   canPick,
   canSteal,
+  stealBlockReason,
   ownerName,
   darkMode = false,
   compact = false,
@@ -204,21 +205,27 @@ export const GiftCard = memo(function GiftCard({
               View Gift Link ↗
             </a>
           )}
-          {isCurrentPlayer && canSteal && !isFrozen && !isOwned && (
-            <Button
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('[GiftCard] 🔘 Steal button clicked!', { giftId: gift.id, canSteal, isFrozen, isOwned });
-                console.log('[DEBUG]',{location:'GiftCard.jsx:onClick',message:'Steal button clicked',data:{giftId:gift.id,canSteal,isFrozen,isOwned},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'});
-                onSteal(gift.id);
-              }}
-              className="w-full mt-auto"
-              variant="secondary"
-              disabled={false}
-            >
-              Steal Gift
-            </Button>
+          {isCurrentPlayer && !isOwned && (
+            canSteal && !isFrozen ? (
+              <Button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  console.log('[GiftCard] 🔘 Steal button clicked!', { giftId: gift.id, canSteal, isFrozen, isOwned });
+                  console.log('[DEBUG]',{location:'GiftCard.jsx:onClick',message:'Steal button clicked',data:{giftId:gift.id,canSteal,isFrozen,isOwned},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'});
+                  onSteal(gift.id);
+                }}
+                className="w-full mt-auto"
+                variant="secondary"
+                disabled={false}
+              >
+                Steal Gift
+              </Button>
+            ) : stealBlockReason ? (
+              <div className="w-full mt-auto px-3 py-2 text-center text-sm text-slate-400 bg-slate-800/50 border border-slate-700 rounded-lg">
+                {stealBlockReason}
+              </div>
+            ) : null
           )}
           {isCurrentPlayer && isOwned && onEndTurn && (
             <Button
