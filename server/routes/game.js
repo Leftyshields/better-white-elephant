@@ -321,6 +321,8 @@ router.post('/scrape', async (req, res) => {
     }
     
     const { url } = req.body;
+    console.log('[Scrape API] Received scrape request for URL:', url);
+    console.log('[Scrape API] APIFY_API_TOKEN configured:', !!process.env.APIFY_API_TOKEN);
 
     if (!url || typeof url !== 'string') {
       return res.status(400).json({ error: 'Valid URL is required' });
@@ -337,10 +339,11 @@ router.post('/scrape', async (req, res) => {
     }
 
     const metadata = await scrapeGiftMetadata(url);
+    console.log('[Scrape API] Returning metadata:', JSON.stringify(metadata, null, 2));
 
     res.json(metadata);
   } catch (error) {
-    console.error('Error scraping gift URL:', error);
+    console.error('[Scrape API] Error scraping gift URL:', error.message, error.stack);
     res.status(500).json({ error: 'Failed to scrape URL', message: error.message });
   }
 });

@@ -39,12 +39,16 @@ function extractAmazonASIN(url) {
  * @returns {Promise<{title: string, image: string, price: string|null}>}
  */
 async function scrapeAmazonWithApify(url) {
+  console.log('[Apify] Attempting to scrape Amazon URL:', url);
+  console.log('[Apify] API Token present:', !!APIFY_API_TOKEN);
+  
   if (!APIFY_API_TOKEN) {
-    console.warn('APIFY_API_TOKEN not set, falling back to cheerio scraper for Amazon');
+    console.warn('[Apify] APIFY_API_TOKEN not set, falling back to cheerio scraper for Amazon');
     return null;
   }
 
   try {
+    console.log('[Apify] Starting actor run...');
     // Start Apify actor run
     const startRunResponse = await fetch(`${APIFY_API_BASE}/acts/${APIFY_ACTOR_ID}/runs`, {
       method: 'POST',
@@ -61,12 +65,13 @@ async function scrapeAmazonWithApify(url) {
 
     if (!startRunResponse.ok) {
       const errorText = await startRunResponse.text();
-      console.error('Apify start run failed:', errorText);
+      console.error('[Apify] Start run failed:', startRunResponse.status, errorText);
       return null;
     }
 
     const runData = await startRunResponse.json();
     const runId = runData.data.id;
+    console.log('[Apify] Run started with ID:', runId);
 
     // Poll for run completion (max 60 seconds)
     let completed = false;
@@ -90,17 +95,19 @@ async function scrapeAmazonWithApify(url) {
 
       const statusData = await statusResponse.json();
       const status = statusData.data.status;
+      console.log(`[Apify] Run status (attempt ${attempts}):`, status);
 
       if (status === 'SUCCEEDED') {
         completed = true;
+        console.log('[Apify] Run succeeded!');
       } else if (status === 'FAILED' || status === 'ABORTED' || status === 'TIMED-OUT') {
-        console.error(`Apify run ${status.toLowerCase()}`);
+        console.error(`[Apify] Run ${status.toLowerCase()}`);
         return null;
       }
     }
 
     if (!completed) {
-      console.error('Apify run timed out');
+      console.error('[Apify] Run timed out after', maxAttempts, 'attempts');
       return null;
     }
 
@@ -117,15 +124,20 @@ async function scrapeAmazonWithApify(url) {
     }
 
     const items = await datasetResponse.json();
+    console.log('[Apify] Received', items?.length || 0, 'items from dataset');
+    
     if (!items || items.length === 0) {
-      console.error('No items returned from Apify');
+      console.error('[Apify] No items returned from dataset');
       return null;
     }
 
     const product = items[0];
+    console.log('[Apify] Product title:', product.title);
+    console.log('[Apify] Product price:', product.price);
+    console.log('[Apify] Product image:', product.thumbnailImage);
 
     // Map Apify response to our format
-    return {
+    const result = {
       title: product.title || 'Amazon Product',
       image: product.thumbnailImage || null,
       price: product.price ? `${product.price.currency || '$'}${product.price.value}` : null,
@@ -135,8 +147,11 @@ async function scrapeAmazonWithApify(url) {
       stars: product.stars || null,
       reviewsCount: product.reviewsCount || null
     };
+    
+    console.log('[Apify] Returning result:', JSON.stringify(result, null, 2));
+    return result;
   } catch (error) {
-    console.error('Apify scraping error:', error);
+    console.error('[Apify] Scraping error:', error.message, error.stack);
     return null; // Fall back to cheerio
   }
 }
@@ -148,6 +163,8 @@ async function scrapeAmazonWithApify(url) {
  */
 export async function scrapeGiftMetadata(url) {
   try {
+    console.log('[Scraper] Starting scrape for URL:', url);
+    
     // Validate URL
     if (!url || typeof url !== 'string') {
       throw new Error('Invalid URL provided');
@@ -155,6 +172,7 @@ export async function scrapeGiftMetadata(url) {
 
     // Ensure URL has protocol
     const fullUrl = url.startsWith('http') ? url : `https://${url}`;
+    console.log('[Scraper] Normalized URL:', fullUrl);
     const urlObj = new URL(fullUrl);
     
     // SSRF Protection: Only allow http and https protocols
@@ -164,6 +182,9 @@ export async function scrapeGiftMetadata(url) {
     
     // SSRF Protection: Block private/internal IP addresses
     const hostname = urlObj.hostname;
+    console.log('[Scraper] Hostname:', hostname);
+    console.log('[Scraper] Is Amazon URL?', isAmazonUrl(hostname));
+    
     const isPrivateIP = /^(127\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|169\.254\.|::1|fc00:|fe80:)/i.test(hostname);
     if (isPrivateIP) {
       throw new Error('Private/internal IP addresses are not allowed');
@@ -176,12 +197,16 @@ export async function scrapeGiftMetadata(url) {
 
     // Try Apify for Amazon URLs first
     if (isAmazonUrl(hostname)) {
+      console.log('[Scraper] Detected Amazon URL, attempting Apify scrape...');
       const apifyResult = await scrapeAmazonWithApify(fullUrl);
       if (apifyResult) {
+        console.log('[Scraper] Apify scrape successful');
         return apifyResult;
       }
       // Fall through to cheerio if Apify fails
-      console.log('Apify failed, falling back to cheerio for Amazon URL');
+      console.log('[Scraper] Apify failed, falling back to cheerio for Amazon URL');
+    } else {
+      console.log('[Scraper] Non-Amazon URL, using cheerio scraper');
     }
 
     // Use cheerio scraper (fallback or for non-Amazon URLs)
@@ -357,7 +382,7 @@ export async function scrapeGiftMetadata(url) {
       price: price || null,
     };
   } catch (error) {
-    console.error('Scraper error:', error);
+    console.error('[Scraper] Error:', error.message, error.stack);
     // Return fallback values but include error info
     return {
       title: 'Gift',
