@@ -1,6 +1,6 @@
 # Testing Guide
 
-This document describes the automated testing setup for Better White Elephant, which leverages simulation mode (`?sim=true`) for comprehensive frontend testing.
+This document describes the automated testing setup for Better White Elephant, which leverages simulation mode (`?sim=true`) for comprehensive frontend testing focused on **perfect gameplay outcomes** - ensuring games complete successfully with proper rule compliance and state integrity.
 
 ## Testing Stack
 
@@ -99,8 +99,16 @@ client/
 │       │   └── *.test.jsx
 │       └── e2e/                  # E2E tests
 │           ├── tests/            # Test specs
+│           │   ├── happy-path.spec.js          # Complete game flows
+│           │   ├── common-behaviors.spec.js    # Pick, steal, skip behaviors
+│           │   ├── rule-compliance.spec.js     # Rule validation
+│           │   ├── state-integrity.spec.js     # State consistency
+│           │   ├── edge-cases.spec.js          # Boundary conditions
+│           │   └── game-simulation.spec.js     # Basic sim mode tests
 │           └── utils/            # E2E helpers
-│               └── simModeHelpers.js
+│               ├── simModeHelpers.js   # Simulation mode utilities
+│               ├── gameHelpers.js      # Game setup and state helpers
+│               └── assertionHelpers.js # Perfect outcome assertions
 ```
 
 ## Writing Tests
@@ -123,21 +131,74 @@ describe('SimulationControls', () => {
 });
 ```
 
-### E2E Test Example
+### E2E Test Example - Perfect Gameplay Outcome
 
 ```javascript
 import { test, expect } from '@playwright/test';
-import { navigateToSimMode, addBots, waitForGameFinish } from '../utils/simModeHelpers';
+import { startGameWithBots, enableAutoPlay } from '../utils/gameHelpers';
+import {
+  assertGameCompleted,
+  assertAllGiftsOwned,
+  assertNoDuplicates,
+  assertNoErrors,
+  assertStateConsistent,
+} from '../utils/assertionHelpers';
 
-test('should play complete game with auto-play', async ({ page }) => {
-  await navigateToSimMode(page, 'test-party-id');
-  await addBots(page, 5);
+test('5-player game completes with perfect outcome', async ({ page }) => {
+  // Setup: Start game with bots
+  await startGameWithBots(page, partyId, 5);
   await enableAutoPlay(page);
-  await waitForGameFinish(page);
   
-  expect(await page.getByText(/game over/i)).toBeVisible();
+  // Wait: Game completes
+  await page.waitForSelector('text=/game over/i', { timeout: 120000 });
+  
+  // Validate: Perfect gameplay outcome
+  await assertGameCompleted(page);
+  await assertAllGiftsOwned(page);
+  await assertNoDuplicates(page);
+  await assertNoErrors(page);
+  await assertStateConsistent(page);
 });
 ```
+
+### Test Categories
+
+#### Happy Path Tests (`happy-path.spec.js`)
+- Complete games from start to finish
+- Various player counts (3, 5, 8, 11)
+- Standard and boomerang modes
+- Validate successful completion with no errors
+
+#### Common Behavior Tests (`common-behaviors.spec.js`)
+- Pick wrapped gift
+- Steal unwrapped gift
+- Skip turn (with gift)
+- Multiple steals on same gift (up to max)
+- Gift locking after max steals
+- Boomerang phase swapping
+
+#### Rule Compliance Tests (`rule-compliance.spec.js`)
+- U-turn rule (can't steal back immediately)
+- Max steals rule (gift locks after limit)
+- Double-dip prevention (can't steal if have gift in standard phase)
+- Boomerang swapping (can swap in boomerang)
+- Victim chain (victim becomes active after steal)
+
+#### State Integrity Tests (`state-integrity.spec.js`)
+- Gift ownership consistency throughout game
+- Turn order progression
+- Game state synchronization with UI
+- Audit trail accuracy
+- No duplicate ownership at any point
+
+#### Edge Case Tests (`edge-cases.spec.js`)
+- Minimum players (3)
+- Maximum players (11)
+- All players skip
+- Rapid consecutive actions
+- Game reset during play
+- Socket reconnection scenarios
+- Concurrent state updates
 
 ## CI/CD Integration
 
@@ -155,14 +216,48 @@ Add to `.github/workflows/ci.yml`:
     npx playwright test
 ```
 
+## Perfect Gameplay Validation
+
+Every E2E test should validate these outcomes:
+
+1. **Game Completion**: Game reaches ENDED state successfully
+2. **All Gifts Owned**: Every gift has exactly one owner
+3. **No Duplicates**: No player owns multiple gifts
+4. **No Errors**: Audit trail contains no ERROR entries
+5. **Rules Followed**: All game rules enforced correctly
+6. **State Consistent**: Game state remains valid throughout
+
+### Using Assertion Helpers
+
+```javascript
+import {
+  assertGameCompleted,
+  assertAllGiftsOwned,
+  assertNoDuplicates,
+  assertNoErrors,
+  assertStateConsistent,
+  assertRulesFollowed,
+} from '../utils/assertionHelpers';
+
+// After game completes, validate perfect outcome
+await assertGameCompleted(page);
+await assertAllGiftsOwned(page);
+await assertNoDuplicates(page);
+await assertNoErrors(page);
+await assertStateConsistent(page);
+await assertRulesFollowed(page, { maxSteals: 3 });
+```
+
 ## Best Practices
 
 1. **Use Sim Mode for E2E**: Always use `?sim=true` for automated game testing
-2. **Isolate Tests**: Each test should be independent
-3. **Mock External Services**: Mock Firebase, Socket.io for unit tests
-4. **Use Helpers**: Leverage `simModeHelpers` for common operations
-5. **Validate State**: Use audit trail to verify game state correctness
-6. **Clean Up**: Reset game state between tests
+2. **Validate Perfect Outcomes**: Always check for completion, ownership, no duplicates, no errors
+3. **Isolate Tests**: Each test should be independent
+4. **Mock External Services**: Mock Firebase, Socket.io for unit tests
+5. **Use Helpers**: Leverage helper utilities for common operations
+6. **Validate State Continuously**: Check state integrity at multiple points during long-running tests
+7. **Use Audit Trail**: Analyze audit trail for rule compliance and errors
+8. **Clean Up**: Reset game state between tests
 
 ## Debugging Tests
 

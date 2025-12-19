@@ -136,8 +136,68 @@ export async function waitForGameFinish(page) {
  */
 export async function getGameState(page) {
   return await page.evaluate(() => {
-    return window.__GAME_STATE__ || null;
+    if (window.__GAME_STATE__) {
+      return window.__GAME_STATE__.gameState || window.__GAME_STATE__;
+    }
+    return null;
   });
+}
+
+/**
+ * Wait for specific audit trail entry
+ */
+export async function waitForAuditEntry(page, expectedText, timeout = 10000) {
+  await page.waitForSelector(`text=${expectedText}`, { timeout });
+}
+
+/**
+ * Get gift ownership from page
+ */
+export async function getGiftOwnership(page) {
+  return await page.evaluate(() => {
+    const ownership = new Map();
+    
+    // Get from game state if available
+    if (window.__GAME_STATE__ && window.__GAME_STATE__.gameState) {
+      const gameState = window.__GAME_STATE__.gameState;
+      const unwrappedGifts = gameState.unwrappedGifts;
+      
+      if (unwrappedGifts) {
+        const giftsMap = unwrappedGifts instanceof Map 
+          ? unwrappedGifts 
+          : new Map(unwrappedGifts);
+        
+        giftsMap.forEach((giftData, giftId) => {
+          if (giftData.ownerId && !giftData.isWrapped) {
+            ownership.set(giftId, giftData.ownerId);
+          }
+        });
+      }
+    }
+    
+    return Object.fromEntries(ownership);
+  });
+}
+
+/**
+ * Check if game is in boomerang phase
+ */
+export async function isBoomerangPhase(page) {
+  const gameState = await getGameState(page);
+  if (!gameState) return false;
+  
+  const turnOrderLength = gameState.turnOrder?.length || 0;
+  const currentTurnIndex = gameState.currentTurnIndex || 0;
+  
+  return currentTurnIndex >= turnOrderLength;
+}
+
+/**
+ * Get current player ID
+ */
+export async function getCurrentPlayer(page) {
+  const gameState = await getGameState(page);
+  return gameState?.currentPlayerId || null;
 }
 
 /**
