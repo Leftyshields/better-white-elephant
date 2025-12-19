@@ -53,7 +53,19 @@ npm run test:e2e:ui
 npm run test:e2e:debug
 ```
 
-**Note for Headless Servers**: The `test:e2e:ui` and `test:e2e:debug` commands automatically use `xvfb-run` to provide a virtual display. If you encounter display-related errors, ensure `xvfb` is installed (`sudo apt-get install xvfb` on Ubuntu/Debian).
+**Note for Headless Servers**: The `test:e2e:ui` and `test:e2e:debug` commands automatically use `xvfb-run` to provide a virtual display and bind to `0.0.0.0:9323` to allow remote access.
+
+On headless servers:
+- **Recommended**: Use `npm run test:e2e` for regular headless testing (no display needed)
+- **For UI Mode**: Playwright UI mode starts a web server on port 9323. To access it:
+  1. Run `npm run test:e2e:ui` - wait for it to show "View test UI at http://localhost:9323" in the terminal
+  2. Set up SSH port forwarding from your local machine: `ssh -L 9323:localhost:9323 user@your-server`
+  3. Open `http://localhost:9323` in your local browser
+
+**Troubleshooting UI Mode**:
+- If you see `ERR_EMPTY_RESPONSE`: The UI server may still be starting. Wait 10-30 seconds after running the command and check the terminal output for the actual URL.
+- If the server doesn't start: Check that `xvfb` is installed (`sudo apt-get install xvfb` on Ubuntu/Debian)
+- For direct server access: The UI binds to `0.0.0.0`, so you can access it at `http://your-server-ip:9323` if ports are open (not recommended for security)
 
 ## Simulation Mode Testing
 
