@@ -57,15 +57,18 @@ npm run test:e2e:debug
 
 On headless servers:
 - **Recommended**: Use `npm run test:e2e` for regular headless testing (no display needed)
-- **For UI Mode**: Playwright UI mode starts a web server on port 9323. To access it:
+- **For UI Mode**: Playwright UI mode starts a web server on port 9323, bound to `0.0.0.0` for network access. To access it:
   1. Run `npm run test:e2e:ui` - wait for it to show "View test UI at http://localhost:9323" in the terminal
-  2. Set up SSH port forwarding from your local machine: `ssh -L 9323:localhost:9323 user@your-server`
-  3. Open `http://localhost:9323` in your local browser
+  2. Access the UI from your local machine via one of these methods:
+     - **Same network (recommended)**: Open `http://sandbox-mac-mini.local:9323` in your browser
+     - **SSH port forwarding**: `ssh -L 9323:localhost:9323 user@your-server`, then open `http://localhost:9323`
+     - **Direct IP**: `http://your-server-ip:9323` (if ports are open)
 
 **Troubleshooting UI Mode**:
-- If you see `ERR_EMPTY_RESPONSE`: The UI server may still be starting. Wait 10-30 seconds after running the command and check the terminal output for the actual URL.
+- If you see `ERR_EMPTY_RESPONSE`: The UI server may still be starting. Wait 10-30 seconds after running the command and check the terminal output for the actual URL. Make sure you're accessing the correct hostname/port.
 - If the server doesn't start: Check that `xvfb` is installed (`sudo apt-get install xvfb` on Ubuntu/Debian)
-- For direct server access: The UI binds to `0.0.0.0`, so you can access it at `http://your-server-ip:9323` if ports are open (not recommended for security)
+- Server not accessible: The UI is configured to bind to `0.0.0.0:9323` in `playwright.config.js`. Ensure your firewall allows connections on port 9323
+- Change port/host: Set environment variables `PLAYWRIGHT_UI_HOST` and `PLAYWRIGHT_UI_PORT`, or modify the `ui` section in `playwright.config.js`
 
 ## Simulation Mode Testing
 
