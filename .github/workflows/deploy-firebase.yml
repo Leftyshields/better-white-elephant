@@ -6,11 +6,14 @@ on:
       - main
   workflow_dispatch:  # Allows manual triggering
 
+permissions:
+  contents: read
+
 jobs:
   deploy:
     name: Deploy to Firebase Hosting
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -42,7 +45,7 @@ jobs:
           npm run build
       
       - name: Deploy to Firebase Hosting
-        uses: FirebaseExtended/action-hosting-deploy@v0
+        uses: FirebaseExtended/action-hosting-deploy@500ac625ca2dd40cbd15f7659af953801858032a # v0
         with:
           repoToken: '${{ secrets.GITHUB_TOKEN }}'
           firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}'
