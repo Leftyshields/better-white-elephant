@@ -55,11 +55,14 @@ server/.env.local
 coverage/
 
 # Playwright test results and traces (may contain sensitive data)
+test-results/
 client/test-results/
 **/test-results/
 **/*trace.zip
 **/*.trace.zip
 playwright-report/
+client/playwright-report/
+**/playwright-report/
 playwright/.cache/
 
 # Redis
