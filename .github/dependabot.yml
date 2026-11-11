@@ -5,32 +5,68 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+      day: "monday"
+      time: "08:00"
+      timezone: "America/Los_Angeles"
+    open-pull-requests-limit: 2
+    groups:
+      npm-root:
+        patterns:
+          - "*"
     
   # Client dependencies
   - package-ecosystem: "npm"
     directory: "/client"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+      day: "monday"
+      time: "08:00"
+      timezone: "America/Los_Angeles"
+    open-pull-requests-limit: 2
+    groups:
+      npm-client:
+        patterns:
+          - "*"
     
   # Server dependencies
   - package-ecosystem: "npm"
     directory: "/server"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+      day: "monday"
+      time: "08:00"
+      timezone: "America/Los_Angeles"
+    open-pull-requests-limit: 2
+    groups:
+      npm-server:
+        patterns:
+          - "*"
     
   # Functions dependencies
   - package-ecosystem: "npm"
     directory: "/functions"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+      day: "monday"
+      time: "08:00"
+      timezone: "America/Los_Angeles"
+    open-pull-requests-limit: 2
+    groups:
+      npm-functions:
+        patterns:
+          - "*"
     
   # GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "America/Los_Angeles"
+    open-pull-requests-limit: 2
+    groups:
+      github-actions:
+        patterns:
+          - "*"
 
