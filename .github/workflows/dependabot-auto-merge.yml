@@ -1,9 +1,10 @@
 name: Dependabot Auto-merge
 
-# Squash auto-merge for Dependabot pull requests. Auto-merge waits for required
-# status checks only once those checks are configured on the default branch.
-# The main branch ruleset still requires an approving review unless Dependabot
-# has a ruleset bypass for that approval rule.
+# Squash auto-merge for Dependabot pull requests. Uses a per-repo fine-grained PAT
+# (Contents, Pull requests, Workflows read/write) stored as the Dependabot secret
+# DEPENDABOT_AUTOMERGE_TOKEN so the merge push can trigger deploy workflows.
+# Auto-merge waits for required status checks once those checks are configured
+# on the default branch; the main ruleset is moving to zero required approvals.
 
 on:
   pull_request:
@@ -13,13 +14,13 @@ jobs:
   auto-merge:
     runs-on: ubuntu-latest
     if: github.event.pull_request.user.login == 'dependabot[bot]' && github.actor == 'dependabot[bot]'
-    permissions:
-      contents: write
-      pull-requests: write
+    permissions: {}
 
     steps:
       - name: Enable auto-merge for Dependabot PRs
-        run: gh pr merge --auto --squash "$PR_URL"
+        run: |
+          if [ -z "$GH_TOKEN" ]; then echo "::error::DEPENDABOT_AUTOMERGE_TOKEN Dependabot secret is not set"; exit 1; fi
+          gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.DEPENDABOT_AUTOMERGE_TOKEN }}
