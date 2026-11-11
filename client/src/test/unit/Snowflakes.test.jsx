@@ -54,6 +54,31 @@ describe('Snowflakes', () => {
     });
   });
 
+  it('rebuilds flakes when variant changes on the same parent', () => {
+    function VariantSwitcher() {
+      const [variant, setVariant] = useState('landing');
+      return (
+        <>
+          <button type="button" onClick={() => setVariant('signedIn')}>
+            Sign in
+          </button>
+          <Snowflakes variant={variant} />
+        </>
+      );
+    }
+
+    render(<VariantSwitcher />);
+    expect(screen.getAllByText('❄')).toHaveLength(120);
+
+    fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
+
+    const flakes = screen.getAllByText('❄');
+    expect(flakes).toHaveLength(40);
+    flakes.forEach((node) => {
+      expect(node.className).toContain('animate-float');
+    });
+  });
+
   it('keeps landing snowflake inline styles when an ancestor re-renders', () => {
     render(<SnowWithRerenderTrigger variant="landing" />);
 

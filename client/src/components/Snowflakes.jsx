@@ -115,4 +115,8 @@ export function SnowflakesInner({ variant = 'landing' }) {
   );
 }
 
-export const Snowflakes = memo(SnowflakesInner);
+function SnowflakesOuter({ variant = 'landing' }) {
+  return <SnowflakesInner key={variant} variant={variant} />;
+}
+
+export const Snowflakes = memo(SnowflakesOuter);
