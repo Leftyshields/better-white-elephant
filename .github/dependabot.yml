@@ -9,6 +9,8 @@ updates:
       time: "08:00"
       timezone: "America/Los_Angeles"
     open-pull-requests-limit: 2
+    cooldown:
+      default-days: 3
     groups:
       npm-root:
         patterns:
@@ -23,6 +25,8 @@ updates:
       time: "08:00"
       timezone: "America/Los_Angeles"
     open-pull-requests-limit: 2
+    cooldown:
+      default-days: 3
     groups:
       npm-client:
         patterns:
@@ -37,6 +41,8 @@ updates:
       time: "08:00"
       timezone: "America/Los_Angeles"
     open-pull-requests-limit: 2
+    cooldown:
+      default-days: 3
     groups:
       npm-server:
         patterns:
@@ -51,6 +57,8 @@ updates:
       time: "08:00"
       timezone: "America/Los_Angeles"
     open-pull-requests-limit: 2
+    cooldown:
+      default-days: 3
     groups:
       npm-functions:
         patterns:
@@ -65,6 +73,8 @@ updates:
       time: "08:00"
       timezone: "America/Los_Angeles"
     open-pull-requests-limit: 2
+    cooldown:
+      default-days: 3
     groups:
       github-actions:
         patterns:
