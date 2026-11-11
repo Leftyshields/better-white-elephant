@@ -2,7 +2,13 @@ node_modules
 npm-debug.log
 .env
 .env.*
+.env.example
 .git
 .gitignore
 *.md
+scripts/
+tests/
+test/
 test-redis.js
+**/*.test.js
+**/*.spec.js

@@ -5,6 +5,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 env:
   GCP_PROJECT_ID: better-white-elephant
@@ -12,20 +13,24 @@ env:
   ARTIFACT_REGISTRY_REPO: game-server
   CLOUD_RUN_SERVICE: stealorreveal-game-server
   IMAGE_NAME: stealorreveal-game-server
+  GAME_SERVER_RUNTIME_SERVICE_ACCOUNT: game-server-runtime@better-white-elephant.iam.gserviceaccount.com
 
 jobs:
   deploy:
     name: Build and deploy to Cloud Run
+    if: github.ref == 'refs/heads/main'
+    environment: game-server
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Authenticate to Google Cloud
+      - name: Authenticate to Google Cloud (Workload Identity Federation)
         uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2.1.13
         with:
-          credentials_json: ${{ secrets.GCP_DEPLOY_SA_KEY }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2.2.1
@@ -59,13 +64,15 @@ jobs:
             --no-cpu-throttling
             --session-affinity
             --timeout=3600
+            --service-account=${{ env.GAME_SERVER_RUNTIME_SERVICE_ACCOUNT }}
           env_vars: |
             NODE_ENV=production
-            ALLOWED_ORIGINS=${{ secrets.ALLOWED_ORIGINS }}
-            REDIS_URL=${{ secrets.REDIS_URL }}
-            FIREBASE_PROJECT_ID=${{ secrets.FIREBASE_PROJECT_ID }}
-            FIREBASE_CLIENT_EMAIL=${{ secrets.FIREBASE_CLIENT_EMAIL }}
-            FIREBASE_PRIVATE_KEY=${{ secrets.FIREBASE_PRIVATE_KEY }}
+            ALLOWED_ORIGINS=https://stealorreveal.com,https://www.stealorreveal.com
+          secrets: |
+            REDIS_URL=game-server-redis-url:latest
+            FIREBASE_PROJECT_ID=game-server-firebase-project-id:latest
+            FIREBASE_CLIENT_EMAIL=game-server-firebase-client-email:latest
+            FIREBASE_PRIVATE_KEY=game-server-firebase-private-key:latest
 
       - name: Show service URL
         run: |

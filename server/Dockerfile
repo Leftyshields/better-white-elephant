@@ -1,12 +1,13 @@
 # Production image for the game API (Express + Socket.io) on Cloud Run.
-FROM node:20-bookworm-slim AS deps
+# Digests resolved from registry-1.docker.io on 2026-11-11.
+FROM node:20-bookworm-slim@sha256:3d0f05455dea2c82e2f76e7e2543964c30f6b7d673fc1a83286736d44fe4c41c AS deps
 
 WORKDIR /app
 
-COPY package.json ./
-RUN npm install --omit=dev && npm cache clean --force
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
 
-FROM node:20-bookworm-slim
+FROM node:20-bookworm-slim@sha256:3d0f05455dea2c82e2f76e7e2543964c30f6b7d673fc1a83286736d44fe4c41c
 
 WORKDIR /app
 

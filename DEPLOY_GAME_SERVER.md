@@ -1,31 +1,51 @@
 # Deploy the game server to Google Cloud Run
 
-This guide is for operators (Brian). It wires the existing `server/` Node.js + Socket.io API into **Google Cloud Run** in GCP/Firebase project **`better-white-elephant`**. The live React app stays on Firebase Hosting; this PR does not change `VITE_SERVER_URL` or redeploy the client.
+Operator guide for project **`better-white-elephant`**. Packages the existing `server/` API (Node.js + Socket.io). Firebase Hosting and the client are unchanged until you update `VITE_SERVER_URL` after a successful deploy.
 
-## What you are deploying
+## Architecture
 
-- **Container:** `server/Dockerfile` (Node 20, production dependencies only)
-- **Service name (default in workflow):** `stealorreveal-game-server`
-- **Region (default):** `us-central1`
-- **Artifact Registry repo (default):** `game-server`
+- **Image:** `server/Dockerfile` — Node 20 (digest-pinned), `npm ci --omit=dev`, `server/package-lock.json` for reproducible builds
+- **Cloud Run service (workflow default):** `stealorreveal-game-server` in `us-central1`
+- **Artifact Registry repo:** `game-server`
+- **Runtime identity:** dedicated SA `game-server-runtime@better-white-elephant.iam.gserviceaccount.com` (not the default compute SA)
 
-Socket.io runs on a **single** Cloud Run instance (`min-instances=1`, `max-instances=1`) with **session affinity** and **CPU always allocated** (`--no-cpu-throttling`). There is **no** Socket.io Redis adapter in this repo—only the `redis` npm client for game state and autoplay keys. Multi-instance scaling would need an adapter later.
+Socket.io uses **one** instance (`min-instances=1`, `max-instances=1`), **session affinity**, **CPU always allocated** (`--no-cpu-throttling`), **3600s** request timeout. There is **no** Socket.io Redis adapter—only the `redis` npm client for application state. Scaling beyond one instance needs an adapter later.
+
+## GitHub: `game-server` environment (required)
+
+The deploy workflow runs only on **`main`** and targets environment **`game-server`**.
+
+1. Repo → **Settings** → **Environments** → **New environment** → name: `game-server`
+2. **Required reviewers** → add **Leftyshields** (Brian)
+3. Save
+
+Until this exists, workflow_dispatch from `main` will fail the environment gate.
+
+## GitHub: repository secrets (deploy auth only)
+
+**Settings** → **Secrets and variables** → **Actions**:
+
+| Secret name | Purpose |
+|-------------|---------|
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | Full WIF provider resource name (`projects/.../locations/global/workloadIdentityPools/.../providers/...`) |
+| `GCP_DEPLOY_SERVICE_ACCOUNT` | Deploy SA email (e.g. `github-game-server-deploy@better-white-elephant.iam.gserviceaccount.com`) |
+
+Do **not** store `REDIS_URL` or `FIREBASE_*` in GitHub for runtime. Those live in **Google Secret Manager** (below).
+
+Non-secret CORS origins are set in the workflow as `ALLOWED_ORIGINS` (`https://stealorreveal.com,https://www.stealorreveal.com`). Change the workflow `env_vars` block if domains change.
 
 ## 1. Enable APIs
 
-In [Google Cloud Console](https://console.cloud.google.com/) (project `better-white-elephant`):
-
-1. **Cloud Run API** (`run.googleapis.com`)
-2. **Artifact Registry API** (`artifactregistry.googleapis.com`)
-
 ```bash
-gcloud services enable run.googleapis.com artifactregistry.googleapis.com \
+gcloud services enable \
+  run.googleapis.com \
+  artifactregistry.googleapis.com \
+  secretmanager.googleapis.com \
+  iamcredentials.googleapis.com \
   --project=better-white-elephant
 ```
 
-## 2. Artifact Registry repository
-
-Create a Docker repository (once):
+## 2. Artifact Registry
 
 ```bash
 gcloud artifacts repositories create game-server \
@@ -34,86 +54,153 @@ gcloud artifacts repositories create game-server \
   --project=better-white-elephant
 ```
 
-## 3. Redis
+## 3. Secret Manager (runtime credentials)
 
-The server requires **`REDIS_URL`** at runtime (game state cache, bot autoplay). Use an existing instance or create one:
+Create secrets (**names only**—store real values in GCP Console or `gcloud`, never in git):
 
-- **Upstash** (simple TLS URL), or  
-- **Google Cloud Memorystore for Redis** (VPC; more setup on Cloud Run)
+| Secret Manager name | Becomes container env var |
+|---------------------|---------------------------|
+| `game-server-redis-url` | `REDIS_URL` |
+| `game-server-firebase-project-id` | `FIREBASE_PROJECT_ID` |
+| `game-server-firebase-client-email` | `FIREBASE_CLIENT_EMAIL` |
+| `game-server-firebase-private-key` | `FIREBASE_PRIVATE_KEY` |
 
-Confirm connectivity from Cloud Run after deploy (check Cloud Run logs for `✅ Redis connected`).
+Example (run locally; paste values when prompted):
 
-## 4. Firebase Admin credentials
+```bash
+gcloud secrets create game-server-redis-url --replication-policy=automatic --project=better-white-elephant
+gcloud secrets versions add game-server-redis-url --data-file=-
 
-The server expects these environment variables (see `server/config/firebase-admin.js`):
+# Repeat for the three Firebase secrets.
+```
 
-- `FIREBASE_PROJECT_ID`
-- `FIREBASE_CLIENT_EMAIL`
-- `FIREBASE_PRIVATE_KEY` — store in GitHub as a **single line** with `\n` where line breaks belong (the server unwraps them). Do not commit the key.
+For `game-server-firebase-private-key`, prefer storing the PEM with real newlines in Secret Manager (the server also accepts `\n`-escaped single-line values).
 
-You can copy fields from Firebase Console → Project settings → Service accounts, or use a dedicated service account for the game server.
+### Grant runtime SA access to secrets
 
-## 5. GitHub Actions repository secrets
+```bash
+RUNTIME_SA=game-server-runtime@better-white-elephant.iam.gserviceaccount.com
+for secret in game-server-redis-url game-server-firebase-project-id \
+  game-server-firebase-client-email game-server-firebase-private-key; do
+  gcloud secrets add-iam-policy-binding "$secret" \
+    --project=better-white-elephant \
+    --member="serviceAccount:${RUNTIME_SA}" \
+    --role="roles/secretmanager.secretAccessor"
+done
+```
 
-Repo → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**.
+## 4. Redis
 
-| Secret name | Purpose |
-|-------------|---------|
-| `GCP_DEPLOY_SA_KEY` | JSON key for a **deploy-only** Google service account (not `FIREBASE_SERVICE_ACCOUNT` used for Hosting). |
-| `REDIS_URL` | Redis connection URL for the running game server. |
-| `FIREBASE_PROJECT_ID` | Firebase/GCP project id (`better-white-elephant`). |
-| `FIREBASE_CLIENT_EMAIL` | Firebase Admin client email. |
-| `FIREBASE_PRIVATE_KEY` | Firebase Admin private key (escaped newlines as `\n`). |
-| `ALLOWED_ORIGINS` | `https://stealorreveal.com,https://www.stealorreveal.com` |
+Provision **Upstash**, **Memorystore**, or existing Redis. Put the connection URL in Secret Manager as `game-server-redis-url`. After deploy, confirm logs show `✅ Redis connected`.
 
-Optional: override defaults by editing `env:` at the top of `.github/workflows/deploy-game-server-cloud-run.yml` (`GCP_REGION`, `CLOUD_RUN_SERVICE`, etc.).
+## 5. Runtime service account
 
-## 6. Deploy service account IAM
+Create once:
 
-Create a service account (example name: `github-game-server-deploy`) and grant **least privilege** for CI deploy only:
+```bash
+gcloud iam service-accounts create game-server-runtime \
+  --display-name="Steal or Reveal game server (Cloud Run)" \
+  --project=better-white-elephant
+```
 
-| Role | Why |
-|------|-----|
-| `roles/run.admin` | Deploy and update the Cloud Run service |
-| `roles/artifactregistry.writer` | Push images |
-| `roles/iam.serviceAccountUser` | Act as the Cloud Run runtime service account (if required by your org policy) |
+Grant **only what the server needs**:
 
-Download a JSON key and save it as GitHub secret **`GCP_DEPLOY_SA_KEY`**.
+| Access | Role / binding |
+|--------|----------------|
+| Firestore (Firebase Admin SDK) | `roles/datastore.user` on project (or tighter custom role if your org requires it) |
+| Secret Manager (four secrets above) | `roles/secretmanager.secretAccessor` per secret (see §3) |
 
-The **runtime** Cloud Run service account (default compute SA or one you attach) still needs **Firebase/Firestore** access for Admin SDK calls (e.g. `roles/datastore.user` or a custom role). That is separate from the deploy SA.
+Redis over the public internet (Upstash) needs no extra GCP Redis IAM—only the secret URL.
+
+If the workflow `GAME_SERVER_RUNTIME_SERVICE_ACCOUNT` email differs, update `.github/workflows/deploy-game-server-cloud-run.yml` `env:` to match.
+
+## 6. Deploy service account + Workload Identity Federation
+
+Avoid a second long-lived JSON key for deploy. Hosting already uses `FIREBASE_SERVICE_ACCOUNT`; game-server deploy should use **WIF**.
+
+### 6a. Create deploy service account
+
+```bash
+gcloud iam service-accounts create github-game-server-deploy \
+  --display-name="GitHub Actions — game server deploy" \
+  --project=better-white-elephant
+```
+
+### 6b. Least-privilege deploy permissions (prefer custom role over `roles/run.admin`)
+
+`roles/run.admin` covers every Cloud Run service in the project—broader than deploying this one service.
+
+Create a custom role, e.g. `gameServerCloudRunDeployer`:
+
+```bash
+gcloud iam roles create gameServerCloudRunDeployer \
+  --project=better-white-elephant \
+  --title="Game server Cloud Run deploy (CI)" \
+  --permissions=run.services.create,run.services.update,run.services.get,run.services.delete,run.operations.get,artifactregistry.repositories.uploadArtifacts,artifactregistry.dockerimages.get,iam.serviceAccounts.actAs,secretmanager.versions.get,secretmanager.versions.access,secretmanager.secrets.get
+```
+
+Grant it to the deploy SA:
+
+```bash
+DEPLOY_SA=github-game-server-deploy@better-white-elephant.iam.gserviceaccount.com
+gcloud projects add-iam-policy-binding better-white-elephant \
+  --member="serviceAccount:${DEPLOY_SA}" \
+  --role="projects/better-white-elephant/roles/gameServerCloudRunDeployer"
+```
+
+Allow the deploy SA to **run as** the runtime SA only:
+
+```bash
+gcloud iam service-accounts add-iam-policy-binding game-server-runtime@better-white-elephant.iam.gserviceaccount.com \
+  --project=better-white-elephant \
+  --member="serviceAccount:${DEPLOY_SA}" \
+  --role="roles/iam.serviceAccountUser"
+```
+
+Tighten further with resource-level IAM on the single Cloud Run service and Artifact Registry repo if your security team requires it.
+
+### 6c. Workload Identity Federation (GitHub → GCP)
+
+Follow [Google’s GitHub Actions WIF guide](https://cloud.google.com/iam/docs/workload-identity-federation-with-deployment-pipelines#github-actions) for project `better-white-elephant`:
+
+1. Create a workload identity pool (e.g. `github-pool`) and OIDC provider for `https://token.actions.githubusercontent.com`
+2. Attribute condition limiting to this repo, e.g. `assertion.repository=='Leftyshields/better-white-elephant'`
+3. Bind `roles/iam.workloadIdentityUser` on `github-game-server-deploy@...` to:
+
+   `principalSet://iam.googleapis.com/projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github-pool/attribute.repository/Leftyshields/better-white-elephant`
+
+4. Add GitHub secrets `GCP_WORKLOAD_IDENTITY_PROVIDER` and `GCP_DEPLOY_SERVICE_ACCOUNT`
+
+No JSON key is required for the default workflow path.
 
 ## 7. Run the deploy workflow
 
-1. GitHub → **Actions** → **Deploy game server to Cloud Run**
-2. **Run workflow** on `main` (after this PR is merged)
-3. When it finishes, note the service URL from the workflow log (`status.url`)
-
-Smoke check:
+1. Merge deploy PR to `main`
+2. **Actions** → **Deploy game server to Cloud Run** → **Run workflow** → branch **`main`**
+3. Approve the **`game-server`** environment review if prompted
+4. Note the service URL from the job log
 
 ```bash
 curl -sS "https://YOUR-SERVICE-xxx.run.app/health"
 ```
 
-Expect JSON with `"status":"ok"`.
+Expect `"status":"ok"`.
 
 ## 8. Point the frontend (later)
 
-After a green deploy and a successful `/health` check:
+After `/health` is good:
 
-1. Set GitHub secret **`VITE_SERVER_URL`** to the Cloud Run URL (no trailing slash).
-2. Run **Deploy to Firebase Hosting** (or your normal Hosting workflow) so the client build picks up the new URL.
+1. Set GitHub secret **`VITE_SERVER_URL`** to the Cloud Run URL (no trailing slash)
+2. Run **Deploy to Firebase Hosting**
 
-Do **not** do this step until Cloud Run is stable; the live site currently still targets the old Railway URL baked into the last Hosting deploy.
-
-## Local Docker smoke (optional)
-
-Same check CI runs:
+## Local Docker smoke
 
 ```bash
-# Redis on localhost:6379 (or set REDIS_URL)
 bash server/scripts/ci-docker-health-smoke.sh
 ```
 
+Requires Docker and Redis reachable at `REDIS_URL` (default `redis://host.docker.internal:6379`).
+
 ## CI
 
-Pull requests run `server-docker-health` in `.github/workflows/ci.yml`: `docker build` + `curl` on `/health`.
+Pull requests run **Game server Docker health smoke** in `.github/workflows/ci.yml` (`docker build` + `GET /health`).
