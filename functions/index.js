@@ -15,7 +15,11 @@ import {
   partyStatusBlocksAddressDeletion,
   shouldRemoveShippingAddress,
 } from './dataRetentionLogic.js';
-import { commitOperationsInBatches } from './dataRetentionBatch.js';
+import {
+  commitOperationsInBatches,
+  dedupeOperationsByDocumentPath,
+  getAllDocumentsFromQuery,
+} from './dataRetentionBatch.js';
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -453,22 +457,20 @@ export const dataRetentionCleanup = onSchedule(
       const thirtyDaysAgo = new Date(now.toMillis() - (30 * 24 * 60 * 60 * 1000));
       const thirtyDaysAgoTimestamp = admin.firestore.Timestamp.fromDate(thirtyDaysAgo);
 
-      const allEndedPartiesForRetention = await db.collection('parties')
-        .where('status', '==', 'ENDED')
-        .limit(500)
-        .get();
+      const allEndedPartyDocs = await getAllDocumentsFromQuery(
+        db.collection('parties').where('status', '==', 'ENDED'),
+      );
 
       const partiesForAddressCleanup = collectEndedPartiesBeforeCutoff(
-        allEndedPartiesForRetention.docs,
+        allEndedPartyDocs,
         thirtyDaysAgoTimestamp,
       );
 
-      const nonEndedPartiesSnap = await db.collection('parties')
-        .where('status', 'in', ['LOBBY', 'ACTIVE', 'CANCELLED'])
-        .limit(500)
-        .get();
+      const allNonEndedPartyDocs = await getAllDocumentsFromQuery(
+        db.collection('parties').where('status', 'in', ['LOBBY', 'ACTIVE', 'CANCELLED']),
+      );
 
-      const lobbyAndActivePartyDocs = nonEndedPartiesSnap.docs.filter((partyDoc) => {
+      const lobbyAndActivePartyDocs = allNonEndedPartyDocs.filter((partyDoc) => {
         const status = partyDoc.data()?.status;
         return partyStatusBlocksAddressDeletion(status);
       });
@@ -482,8 +484,7 @@ export const dataRetentionCleanup = onSchedule(
         const participantsSnapshot = await db.collection('parties').doc(partyDoc.id).collection('participants').get();
 
         for (const participantDoc of participantsSnapshot.docs) {
-          const participant = participantDoc.data();
-          const userId = participant.id || participantDoc.id;
+          const userId = participantDoc.id;
 
           const userDoc = await db.collection('users').doc(userId).get();
           if (!userDoc.exists) continue;
@@ -508,13 +509,14 @@ export const dataRetentionCleanup = onSchedule(
                 shippingAddressAddedAt: admin.firestore.FieldValue.delete(),
               },
             });
-            stats.deletedShippingAddresses++;
           }
         }
       }
-      if (addressOperations.length > 0) {
-        await commitOperationsInBatches(db, addressOperations);
-        console.log(`✅ Deleted ${stats.deletedShippingAddresses} expired shipping addresses`);
+      const dedupedAddressOperations = dedupeOperationsByDocumentPath(addressOperations);
+      if (dedupedAddressOperations.length > 0) {
+        await commitOperationsInBatches(db, dedupedAddressOperations);
+        console.log(`✅ Deleted ${dedupedAddressOperations.length} expired shipping addresses`);
+        stats.deletedShippingAddresses = dedupedAddressOperations.length;
       }
 
       // 3. Delete gift links: 30 days after game ends
@@ -572,7 +574,8 @@ export const dataRetentionCleanup = onSchedule(
       }
 
       // 5. Delete abandoned non-ENDED parties after 30 days without activity
-      const staleAbandonedParties = nonEndedPartiesSnap.docs.filter((partyDoc) => {
+      // ACTIVE parties: server saveGameState bumps parties/{id}.updatedAt each persist — 30d inactivity = abandoned.
+      const staleAbandonedParties = allNonEndedPartyDocs.filter((partyDoc) => {
         const party = partyDoc.data();
         return isAbandonedPartyPastRetention(party, thirtyDaysAgoTimestamp);
       });

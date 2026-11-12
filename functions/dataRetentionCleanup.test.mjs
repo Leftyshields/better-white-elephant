@@ -3,6 +3,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { dedupeOperationsByDocumentPath } from './dataRetentionBatch.js';
 import {
   MS_PER_DAY,
   collectEndedPartiesBeforeCutoff,
@@ -38,6 +39,18 @@ test('partiesForAddressCleanupIterable walks a plain array', () => {
   const parties = [{ id: 'a' }, { id: 'b' }];
   const walked = partiesForAddressCleanupIterable(parties);
   assert.deepEqual(walked.map((p) => p.id), ['a', 'b']);
+});
+
+test('dedupeOperationsByDocumentPath: one update per users/{uid} when two ended parties match', () => {
+  const userRef = { path: 'users/same-uid' };
+  const operations = [
+    { type: 'update', ref: userRef, data: { shippingAddress: 'delete-1' } },
+    { type: 'update', ref: userRef, data: { shippingAddress: 'delete-2' } },
+  ];
+  const deduped = dedupeOperationsByDocumentPath(operations);
+  assert.equal(deduped.length, 1);
+  assert.equal(deduped[0].ref.path, 'users/same-uid');
+  assert.equal(operations.length, 2, 'pre-dedupe loop can enqueue duplicates from two source parties');
 });
 
 test('shipping address: removed 30+ days after game end without fulfillment fields', () => {

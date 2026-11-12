@@ -72,6 +72,10 @@ jobs:
           node --check index.js || echo "Syntax check completed"
         continue-on-error: true
 
+      - name: Run functions unit tests
+        working-directory: ./functions
+        run: npm test
+
   build:
     name: Build
     runs-on: ubuntu-latest
