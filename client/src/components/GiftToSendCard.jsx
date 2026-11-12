@@ -7,6 +7,7 @@ import { ClipboardDocumentIcon } from '@heroicons/react/24/outline';
 import { CheckIcon } from '@heroicons/react/24/solid';
 import { CheckBadgeIcon } from '@heroicons/react/24/solid';
 import { fetchWinnerShippingAddress } from '../utils/api.js';
+import { SHIPPING_ADDRESS_WINNER_NOT_SHARED_GIFT_TO_SEND } from '../utils/shippingAddressCopy.js';
 
 export function GiftToSendCard({ gift, winnerId, winnerName, userNames, userEmails, isSelfWin = false }) {
   const [address, setAddress] = useState(null);
@@ -160,7 +161,7 @@ export function GiftToSendCard({ gift, winnerId, winnerName, userNames, userEmai
               ) : (
                 <p className="text-sm text-orange-400 italic font-mono">
                   {addressUnavailable
-                    ? 'The winner has not shared a shipping address yet (missing address or consent).'
+                    ? SHIPPING_ADDRESS_WINNER_NOT_SHARED_GIFT_TO_SEND
                     : "The winner hasn't added a shipping address yet."}
                 </p>
               )}

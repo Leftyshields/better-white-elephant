@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import { Modal } from './ui/Modal.jsx';
 import { Button } from './ui/Button.jsx';
 import { fetchWinnerShippingAddress } from '../utils/api.js';
+import { SHIPPING_ADDRESS_WINNER_NOT_SHARED_VIEW_MODAL } from '../utils/shippingAddressCopy.js';
 
 export function ShippingAddressViewModal({ isOpen, onClose, partyId, giftId, winnerName, giftTitle }) {
   const [address, setAddress] = useState(null);
@@ -66,7 +67,7 @@ export function ShippingAddressViewModal({ isOpen, onClose, partyId, giftId, win
         ) : (
           <p className="text-gray-500 italic">
             {unavailable
-              ? 'Winner has not shared a shipping address yet (missing address or consent).'
+              ? SHIPPING_ADDRESS_WINNER_NOT_SHARED_VIEW_MODAL
               : 'Winner has not provided their shipping address yet.'}
           </p>
         )}

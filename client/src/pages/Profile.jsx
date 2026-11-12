@@ -6,7 +6,10 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth.js';
 import { useNavigate } from 'react-router-dom';
 import { doc, getDoc, setDoc, updateDoc, deleteField } from 'firebase/firestore';
-import { SHIPPING_ADDRESS_SENDER_SHARE_CONSENT_LABEL } from '../utils/shippingAddressCopy.js';
+import {
+  SHIPPING_ADDRESS_CONSENT_REQUIRED_PROFILE,
+  SHIPPING_ADDRESS_SENDER_SHARE_CONSENT_LABEL,
+} from '../utils/shippingAddressCopy.js';
 import { updateProfile } from 'firebase/auth';
 import { auth, db } from '../utils/firebase.js';
 import { Button } from '../components/ui/Button.jsx';
@@ -85,7 +88,7 @@ export function Profile() {
       address.country?.trim();
 
     if (hasShippingFields && !shareConsent) {
-      alert('You must agree to share your shipping address with the person who may mail your gift.');
+      alert(SHIPPING_ADDRESS_CONSENT_REQUIRED_PROFILE);
       return;
     }
 

@@ -27,4 +27,22 @@ describe('winner shipping address client access', () => {
     expect(addressModal).toContain('SHIPPING_ADDRESS_SENDER_SHARE_CONSENT_LABEL');
     expect(profile).toContain('SHIPPING_ADDRESS_SENDER_SHARE_CONSENT_LABEL');
   });
+
+  it('sender address UI uses Copywriter placeholder constants for new strings', () => {
+    const giftToSend = readFileSync(join(clientSrc, 'components/GiftToSendCard.jsx'), 'utf8');
+    const viewModal = readFileSync(join(clientSrc, 'components/ShippingAddressViewModal.jsx'), 'utf8');
+    const addressModal = readFileSync(join(clientSrc, 'components/AddressModal.jsx'), 'utf8');
+    const profile = readFileSync(join(clientSrc, 'pages/Profile.jsx'), 'utf8');
+    const copyModule = readFileSync(join(clientSrc, 'utils/shippingAddressCopy.js'), 'utf8');
+
+    expect(giftToSend).toContain('SHIPPING_ADDRESS_WINNER_NOT_SHARED_GIFT_TO_SEND');
+    expect(viewModal).toContain('SHIPPING_ADDRESS_WINNER_NOT_SHARED_VIEW_MODAL');
+    expect(addressModal).toContain('SHIPPING_ADDRESS_CONSENT_REQUIRED_ADDRESS_MODAL');
+    expect(profile).toContain('SHIPPING_ADDRESS_CONSENT_REQUIRED_PROFILE');
+
+    expect(giftToSend).not.toContain('missing address or consent');
+    expect(viewModal).not.toContain('missing address or consent');
+    expect(copyModule).toContain('SHIPPING_ADDRESS_WINNER_NOT_SHARED_GIFT_TO_SEND');
+    expect(copyModule).toContain('TODO(Copywriter)');
+  });
 });

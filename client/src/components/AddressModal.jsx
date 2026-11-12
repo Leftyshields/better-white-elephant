@@ -8,7 +8,10 @@ import { Button } from './ui/Button.jsx';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../utils/firebase.js';
 import { useAuth } from '../hooks/useAuth.js';
-import { SHIPPING_ADDRESS_SENDER_SHARE_CONSENT_LABEL } from '../utils/shippingAddressCopy.js';
+import {
+  SHIPPING_ADDRESS_CONSENT_REQUIRED_ADDRESS_MODAL,
+  SHIPPING_ADDRESS_SENDER_SHARE_CONSENT_LABEL,
+} from '../utils/shippingAddressCopy.js';
 
 export function AddressModal({ isOpen, onClose, giftTitle }) {
   const { user } = useAuth();
@@ -56,7 +59,7 @@ export function AddressModal({ isOpen, onClose, giftTitle }) {
     if (!user) return;
 
     if (!shareConsent) {
-      alert('You must agree to share your shipping address with the person mailing your gift.');
+      alert(SHIPPING_ADDRESS_CONSENT_REQUIRED_ADDRESS_MODAL);
       return;
     }
 
