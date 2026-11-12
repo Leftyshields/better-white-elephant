@@ -534,7 +534,9 @@ io.on('connection', (socket) => {
 
         // Re-save after party is ENDED so Redis TTL is 30 days (not the pre-end 2-year save)
         const { redisTtlSecondsForPartyStatus } = await import('./utils/game-state-persistence.js');
-        await saveGameState(partyId, finalState, redisTtlSecondsForPartyStatus('ENDED'));
+        finalState.state.config = config;
+        finalState.state.partyId = partyId;
+        await saveGameState(partyId, finalState.state, redisTtlSecondsForPartyStatus('ENDED'));
         
         io.to(`party:${partyId}`).emit('game-ended', finalState);
       }

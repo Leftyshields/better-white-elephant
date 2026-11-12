@@ -137,7 +137,9 @@ export function legacyAddressCleanupIterator(partiesForAddressCleanup) {
  * @param {object|null|undefined} party — party data, null if doc missing, undefined if not loaded
  */
 export function shouldDeleteGiftForRetention(gift, cutoff, party) {
-  if (gift?.partyEndedAt && toMillis(gift.partyEndedAt) <= toMillis(cutoff)) {
+  const partyEndedMs =
+    gift?.partyEndedAt != null ? toMillis(gift.partyEndedAt) : null;
+  if (partyEndedMs != null && partyEndedMs <= toMillis(cutoff)) {
     return true;
   }
   if (party === null) {

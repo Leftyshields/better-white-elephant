@@ -179,6 +179,17 @@ test('gift: full delete when partyEndedAt is past 30-day cutoff', () => {
   );
 });
 
+test('gift: invalid partyEndedAt is not treated as expired', () => {
+  assert.equal(
+    shouldDeleteGiftForRetention(
+      { partyEndedAt: { seconds: 'not-a-number' }, partyId: 'p' },
+      THIRTY_DAYS_AGO,
+      { status: 'ACTIVE', updatedAt: TWENTY_DAYS_AGO },
+    ),
+    false,
+  );
+});
+
 test('gift: not deleted when partyEndedAt is within 30 days', () => {
   assert.equal(
     shouldDeleteGiftForRetention(
