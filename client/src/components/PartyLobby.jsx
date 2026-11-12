@@ -263,7 +263,7 @@ export function PartyLobby({ partyId, onStartGame }) {
           const limit = parseFloat(partyPriceLimit);
           if (giftPrice > limit) {
             const proceed = confirm(
-              `Warning: This gift's price (${price}) exceeds the party's price limit of $${limit.toFixed(2)}. Do you want to submit it anyway?`
+              `This gift is priced at $${price}, which is over the party's $${limit.toFixed(2)} limit. Submit it anyway?`
             );
             if (!proceed) {
               setScraping(false);
@@ -361,7 +361,7 @@ export function PartyLobby({ partyId, onStartGame }) {
     if (!currentParticipant.ready) {
       // Only check when marking as ready (not when unmarking)
       if (!userShippingAddress || !userShippingAddress.street || !userShippingAddress.city) {
-        alert('Please add your shipping address to your profile before marking yourself as ready. You can update it in your Profile page.');
+        alert('Add a shipping address in Profile before you mark yourself ready. The person who owes you a gift will need it.');
         return;
       }
     }
@@ -405,7 +405,7 @@ export function PartyLobby({ partyId, onStartGame }) {
     const allReady = goingParticipants.length > 0 && goingParticipants.every((p) => p.ready === true);
     
     if (!allReady) {
-      alert('All participants must be ready before starting the game!');
+      alert('Everyone needs to be marked ready before you can start.');
       return;
     }
 
@@ -497,7 +497,7 @@ export function PartyLobby({ partyId, onStartGame }) {
       }
     } catch (error) {
       console.error('Error sending invite:', error);
-      alert('Failed to send invite. Make sure Firebase Functions are running or deployed. Error: ' + error.message);
+      alert("We couldn't send that invite. Share the party link instead, or try the email again in a few minutes.");
     }
   };
 
@@ -1133,7 +1133,7 @@ export function PartyLobby({ partyId, onStartGame }) {
                       </div>
                       
                       {participants.length === 0 && pendingInvites.filter(inv => inv.status !== 'ACCEPTED').length === 0 && (
-                        <p className="text-slate-400 text-center py-4">No participants yet. Add someone above or use the Share Link button to invite people!</p>
+                        <p className="text-slate-400 text-center py-4">No one has joined yet. Send the share link, or add someone by email.</p>
                       )}
                     </div>
                   );
@@ -1321,7 +1321,7 @@ export function PartyLobby({ partyId, onStartGame }) {
                                           const limit = parseFloat(partyPriceLimit);
                                           if (giftPrice > limit) {
                                             const proceed = confirm(
-                                              `Warning: This gift's price (${manualPrice}) exceeds the party's price limit of $${limit.toFixed(2)}. Do you want to submit it anyway?`
+                                              `This gift is priced at $${manualPrice}, which is over the party's $${limit.toFixed(2)} limit. Submit it anyway?`
                                             );
                                             if (!proceed) {
                                               setScraping(false);
@@ -1696,7 +1696,7 @@ export function PartyLobby({ partyId, onStartGame }) {
                     
                     {canStart && (
                       <div className="bg-green-500/10 border-2 border-green-500/30 rounded-lg p-4 mb-4">
-                        <p className="text-green-400 font-semibold mb-1">🎉 All set! You're ready to start the game!</p>
+                        <p className="text-green-400 font-semibold mb-1">You&apos;re ready to start.</p>
                         <p className="text-sm text-slate-300">All participants are ready and all requirements are met.</p>
                       </div>
                     )}
@@ -1787,7 +1787,7 @@ export function PartyLobby({ partyId, onStartGame }) {
                       
                       {canBeReady && currentParticipant.ready && (
                         <div className="bg-green-500/10 border-2 border-green-500/30 rounded-lg p-4 mb-4">
-                          <p className="text-green-400 font-semibold">✓ You're all set! Waiting for the host to start the game.</p>
+                          <p className="text-green-400 font-semibold">You&apos;re ready. Waiting for the host to start the game.</p>
                         </div>
                       )}
                       

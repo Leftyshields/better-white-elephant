@@ -186,7 +186,12 @@ export function useGameEngine(partyId) {
           
           // Map technical error messages to user-friendly ones
           if (message.includes('Game is not active')) {
-            userFriendlyMessage = 'The game is not currently active.';
+            userFriendlyMessage = "The game hasn't started, or it has already ended.";
+          } else if (
+            message.includes('Cannot steal back') ||
+            message.includes('same turn')
+          ) {
+            userFriendlyMessage = "You can't steal that gift back on the same turn.";
           } else if (message.includes('Socket not connected')) {
             userFriendlyMessage = 'Connection lost. Please refresh the page.';
           }
@@ -345,7 +350,7 @@ export function useGameEngine(partyId) {
       return null; // Not shown - gift doesn't exist or wrapped
     }
     if (gift.isFrozen) {
-      return "This gift is locked (3 steals)";
+      return "This gift is frozen (3 steals). It can't be stolen again.";
     }
     if (gift.ownerId === user?.uid) {
       return null; // Not shown - own gift
@@ -375,7 +380,7 @@ export function useGameEngine(partyId) {
       const isPlayer1FinalTurn = isLastIndex && isPlayer1;
       
       if (!isBoomerangPhase && !isPlayer1FinalTurn) {
-        return "You already have a gift - you can only swap in boomerang phase";
+        return 'You already have a gift. You can swap once the boomerang round starts.';
       }
     }
     

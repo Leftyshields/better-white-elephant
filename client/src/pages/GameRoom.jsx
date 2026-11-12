@@ -3,7 +3,7 @@
  * 
  * Uses the new reducer-based state management with optimistic updates
  */
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useGameEngine } from '../hooks/useGameEngine.js';
 import { useAuth } from '../hooks/useAuth.js';
 import { useParty } from '../hooks/useParty.js';
@@ -65,6 +65,25 @@ export function GameRoom({ partyId }) {
   const [revealingGiftId, setRevealingGiftId] = useState(null);
   const [prizeImageError, setPrizeImageError] = useState(false);
   const prevIsMyTurnRef = useRef(false);
+  const [gameLoadTimedOut, setGameLoadTimedOut] = useState(false);
+
+  const isWaitingForLiveGame = useMemo(() => {
+    if (party?.status !== 'ACTIVE') {
+      return false;
+    }
+    return state.status === 'LOBBY' || !state.ui.isSocketConnected || !state.gameState;
+  }, [party?.status, state.gameState, state.status, state.ui.isSocketConnected]);
+
+  useEffect(() => {
+    if (!isWaitingForLiveGame) {
+      setGameLoadTimedOut(false);
+      return;
+    }
+    const timeoutId = window.setTimeout(() => {
+      setGameLoadTimedOut(true);
+    }, 5000);
+    return () => window.clearTimeout(timeoutId);
+  }, [isWaitingForLiveGame]);
 
   // Function to trigger confetti
   const triggerConfetti = () => {
@@ -261,6 +280,23 @@ export function GameRoom({ partyId }) {
 
   // Loading state
   if (state.status === 'LOBBY' || !state.ui.isSocketConnected) {
+    if (gameLoadTimedOut && isWaitingForLiveGame) {
+      return (
+        <>
+          <ReactionBar onReaction={emitReaction} />
+          <div className="min-h-[50vh] flex items-center justify-center p-6">
+            <div className="max-w-md w-full bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-8 text-center">
+              <h2 className="text-2xl font-bold mb-4 text-red-400">Couldn&apos;t load the game</h2>
+              <p className="text-slate-300 mb-6">Refresh the page and try again.</p>
+              <Button type="button" onClick={() => window.location.reload()} className="w-full">
+                Refresh
+              </Button>
+            </div>
+          </div>
+        </>
+      );
+    }
+
     return (
       <>
         {/* Force render ReactionBar even in loading state for debugging */}
@@ -340,7 +376,7 @@ export function GameRoom({ partyId }) {
             <h1 className="text-5xl font-bold mb-3 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
               Game Over!
             </h1>
-            <p className="text-xl text-slate-300">Time to see what you won and send your gifts!</p>
+            <p className="text-xl text-slate-300">Here&apos;s what you won, and what you need to ship.</p>
           </div>
 
           {/* What You Won Section */}
@@ -492,8 +528,15 @@ export function GameRoom({ partyId }) {
                 )}
                 {/* Boomerang Badge */}
                 {(party?.config?.returnToStart || state.gameState?.isBoomerangPhase) && (
-                  <div className="bg-indigo-500/20 text-indigo-300 text-[10px] uppercase tracking-wider px-2 py-1 rounded-full border border-indigo-500/30">
-                    {state.gameState?.isBoomerangPhase ? '🔄 Boomerang Round!' : '🔄 Boomerang Rule Active'}
+                  <div className="flex flex-col items-start gap-1">
+                    <div className="bg-indigo-500/20 text-indigo-300 text-xs font-semibold px-2 py-1 rounded-full border border-indigo-500/30">
+                      {state.gameState?.isBoomerangPhase ? 'Boomerang round' : 'Boomerang is on'}
+                    </div>
+                    {!state.gameState?.isBoomerangPhase && (
+                      <p className="text-xs text-indigo-200/90 leading-snug">
+                        You can swap even if you already have a gift.
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
@@ -572,7 +615,7 @@ export function GameRoom({ partyId }) {
               <div className="mt-4 px-4">
                 <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-4">
                   <p className="text-sm font-semibold text-orange-300 mb-2">
-                    🎉 All gifts are frozen! Waiting for admin to end the game.
+                    🎉 All gifts are frozen! Waiting for the host to end the game.
                   </p>
                 </div>
               </div>

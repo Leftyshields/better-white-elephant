@@ -1,8 +1,20 @@
 /**
  * Home Page
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../hooks/useAuth.js';
+import {
+  OPEN_CREATE_PARTY_AFTER_AUTH_KEY,
+  PENDING_HOST_CTA_KEY,
+  clearOpenCreatePartyAfterAuthUnlessGoogleSignInSucceeded,
+  focusHostHeroCta,
+  useHostFreeGame,
+} from '../hooks/useHostFreeGame.js';
+
+export {
+  OPEN_CREATE_PARTY_AFTER_AUTH_KEY,
+  clearOpenCreatePartyAfterAuthUnlessGoogleSignInSucceeded,
+} from '../hooks/useHostFreeGame.js';
 import { Button } from '../components/ui/Button.jsx';
 import { Input } from '../components/ui/Input.jsx';
 import { Modal } from '../components/ui/Modal.jsx';
@@ -16,9 +28,30 @@ import { usePartyModal } from '../contexts/PartyModalContext.jsx';
 import { Footer } from '../components/Footer.jsx';
 import { SEO } from '../components/SEO.jsx';
 import { Snowflakes } from '../components/Snowflakes.jsx';
+import {
+  FEATURE_CARDS,
+  HOME_SEO_TITLE,
+  LANDING_COPY,
+  SEO_DEFAULT_DESCRIPTION,
+  SIGNED_IN_COPY,
+} from '../utils/landingMarketingCopy.js';
+import {
+  formatPartyStatus,
+  partyEntryButtonLabel,
+  PARTIES_LOAD_ERROR,
+} from '../utils/partyUiCopy.js';
 
 export function Home() {
-  const { user, signInWithGoogle, signInWithEmailAndPassword, signUpWithEmailAndPassword } = useAuth();
+  const { user, signInWithEmailAndPassword, signUpWithEmailAndPassword } = useAuth();
+  const {
+    authLoading,
+    dismissHostSignInNotice,
+    handleHostFreeGame,
+    hostSignInNotice,
+  } = useHostFreeGame();
+  const hostHeroButtonRef = useRef(null);
+  const hostParamHandledRef = useRef(false);
+  const pendingHostCtaHandledRef = useRef(false);
   const [partyDate, setPartyDate] = useState('');
   const [partyTitle, setPartyTitle] = useState('');
   const [myParties, setMyParties] = useState([]);
@@ -61,9 +94,57 @@ export function Home() {
       if (redirectPath) {
         window.sessionStorage.removeItem('redirectAfterAuth');
         navigate(redirectPath);
+        return;
+      }
+      if (window.sessionStorage.getItem(OPEN_CREATE_PARTY_AFTER_AUTH_KEY)) {
+        window.sessionStorage.removeItem(OPEN_CREATE_PARTY_AFTER_AUTH_KEY);
+        setShowCreatePartyModal(true);
       }
     }
-  }, [user, navigate]);
+  }, [user, navigate, setShowCreatePartyModal]);
+
+  useEffect(() => {
+    const pending = window.sessionStorage.getItem(PENDING_HOST_CTA_KEY);
+    if (!pending) {
+      pendingHostCtaHandledRef.current = false;
+      return;
+    }
+    if (authLoading) {
+      return;
+    }
+    if (pendingHostCtaHandledRef.current) {
+      return;
+    }
+    pendingHostCtaHandledRef.current = true;
+    window.sessionStorage.removeItem(PENDING_HOST_CTA_KEY);
+    focusHostHeroCta(hostHeroButtonRef.current);
+    void handleHostFreeGame(pending);
+  }, [authLoading, handleHostFreeGame]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('host') !== '1') {
+      hostParamHandledRef.current = false;
+      return;
+    }
+    if (authLoading) {
+      return;
+    }
+    if (hostParamHandledRef.current) {
+      return;
+    }
+    hostParamHandledRef.current = true;
+
+    navigate('/', { replace: true });
+    window.scrollTo(0, 0);
+
+    if (user) {
+      setShowCreatePartyModal(true);
+      return;
+    }
+
+    focusHostHeroCta(hostHeroButtonRef.current);
+  }, [location.search, user, authLoading, navigate, setShowCreatePartyModal]);
 
   // Subscribe to parties where user is admin OR participant
   useEffect(() => {
@@ -321,7 +402,7 @@ export function Home() {
       action: "steal"
     },
     {
-      text: "The Gaming Pass is now FROZEN! ❄️🔒",
+      text: LANDING_COPY.demoToastFrozen,
       action: "lock"
     }
   ];
@@ -345,11 +426,7 @@ export function Home() {
   if (!user) {
     return (
       <>
-      <SEO 
-        title="Virtual White Elephant for Remote Teams"
-        description="Host seamless, real-time White Elephant gift exchanges for remote teams. Works with Zoom, Teams, or Meet. Zero-hassle setup, auto-pilot logistics."
-        url="/"
-      />
+      <SEO title={HOME_SEO_TITLE} description={SEO_DEFAULT_DESCRIPTION} url="/" />
       <Snowflakes variant="landing" />
       <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black relative overflow-hidden">
         {/* Hero Section */}
@@ -357,24 +434,50 @@ export function Home() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 md:pt-32 pb-16 relative z-10">
             <div className="text-center">
               <h1 className="text-4xl md:text-6xl font-bold text-white mb-6 tracking-tight">
-                The Most Fun Your Remote Team Will Have This Holiday.
+                {LANDING_COPY.heroHeadline}
               </h1>
               <p className="text-lg md:text-xl text-gray-100 mb-8 max-w-3xl mx-auto leading-relaxed">
-                Ditch the spreadsheets. Host a seamless, real-time White Elephant exchange that syncs perfectly with Zoom. No logistics, just laughter.
+                {LANDING_COPY.heroSubhead}
               </p>
               
               {/* CTAs */}
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
+              {hostSignInNotice ? (
+                <p
+                  role="alert"
+                  className="text-amber-200 bg-amber-500/10 border border-amber-400/30 rounded-lg px-4 py-3 mb-4 max-w-xl mx-auto text-sm"
+                >
+                  {hostSignInNotice}{' '}
+                  <button
+                    type="button"
+                    className="underline text-amber-100"
+                    onClick={dismissHostSignInNotice}
+                  >
+                    Dismiss
+                  </button>
+                </p>
+              ) : null}
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-3">
                 <button
+                  ref={hostHeroButtonRef}
+                  id="host-free-game-cta"
+                  type="button"
+                  onClick={() => void handleHostFreeGame('hero')}
+                  className="px-8 py-4 text-lg font-semibold bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg hover:from-indigo-600 hover:to-purple-700 transition-all shadow-lg"
+                >
+                  {LANDING_COPY.primaryCta}
+                </button>
+                <button
+                  type="button"
                   onClick={() => {
-                    trackButtonClick('See How It Works', 'hero');
+                    trackButtonClick(LANDING_COPY.secondaryCta, 'hero');
                     scrollToFeatures();
                   }}
                   className="px-8 py-4 text-lg font-semibold bg-white/10 backdrop-blur-md text-gray-100 border border-white/25 rounded-lg hover:bg-white/10 transition-all"
                 >
-                  See How It Works
+                  {LANDING_COPY.secondaryCta}
                 </button>
               </div>
+              <p className="text-sm text-gray-300 mb-12">{LANDING_COPY.microline}</p>
 
               {/* Tilted UI Mockup Placeholder */}
               <div className="max-w-4xl mx-auto mt-16 relative">
@@ -512,96 +615,17 @@ export function Home() {
 
           {/* Features Section */}
           <div id="features-section" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-16">
-            {/* Mobile: Compact List Layout */}
-            <div className="flex flex-col md:hidden mt-16">
-              <div className="flex flex-row items-center gap-4 py-4 border-b border-white/5">
-                <div 
-                  className="text-3xl w-12 h-12 flex items-center justify-center flex-shrink-0"
-                  style={{ 
-                    textShadow: '0 0 20px rgba(234, 179, 8, 0.6)',
-                    filter: 'drop-shadow(0 0 8px rgba(250, 204, 21, 0.5))'
-                  }}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-16">
+              {FEATURE_CARDS.map((card) => (
+                <div
+                  key={card.title}
+                  className="text-center p-6 md:p-8 bg-white/5 backdrop-blur-sm rounded-2xl border border-white/10 shadow-lg hover:shadow-xl transition-all"
                 >
-                  ⚡
+                  <div className="text-4xl mb-4">{card.emoji}</div>
+                  <h3 className="text-lg md:text-xl font-bold text-white mb-3 tracking-tight">{card.title}</h3>
+                  <p className="text-sm text-gray-100">{card.body}</p>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-base font-bold text-white mb-1 tracking-tight">Live Reactions & Rivalries</h3>
-                  <p className="text-xs text-gray-100">Watch the action unfold instantly. Send live emoji reactions and taunts without unmuting your mic.</p>
-                </div>
-              </div>
-              <div className="flex flex-row items-center gap-4 py-4 border-b border-white/5">
-                <div 
-                  className="text-3xl w-12 h-12 flex items-center justify-center flex-shrink-0"
-                  style={{ 
-                    textShadow: '0 0 20px rgba(147, 197, 253, 0.6)',
-                    filter: 'drop-shadow(0 0 8px rgba(147, 197, 253, 0.5))'
-                  }}
-                >
-                  ✨
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-base font-bold text-white mb-1 tracking-tight">Zero-Hassle Setup</h3>
-                  <p className="text-xs text-gray-100">Guests simply paste a link from Amazon or Etsy. We'll try to auto-create a beautiful gift card, with manual entry as a fallback if scraping fails.</p>
-                </div>
-              </div>
-              <div className="flex flex-row items-center gap-4 py-4 border-b border-white/5">
-                <div 
-                  className="text-3xl w-12 h-12 flex items-center justify-center flex-shrink-0"
-                  style={{ 
-                    textShadow: '0 0 20px rgba(59, 130, 246, 0.6)',
-                    filter: 'drop-shadow(0 0 8px rgba(59, 130, 246, 0.5))'
-                  }}
-                >
-                  ✈️
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-base font-bold text-white mb-1 tracking-tight">Auto-Pilot Logistics</h3>
-                  <p className="text-xs text-gray-100">We track the turn order, the rules, and the shipping. When the game ends, we privately swap addresses so prizes get where they need to go.</p>
-                </div>
-              </div>
-            </div>
-            
-            {/* Desktop: Card Grid Layout */}
-            <div className="hidden md:grid md:grid-cols-3 gap-6 mt-16">
-              <div className="text-center p-8 bg-white/5 backdrop-blur-sm rounded-2xl border border-white/10 shadow-lg hover:shadow-xl transition-all">
-                <div 
-                  className="text-4xl mb-4"
-                  style={{ 
-                    textShadow: '0 0 20px rgba(234, 179, 8, 0.6)',
-                    filter: 'drop-shadow(0 0 8px rgba(250, 204, 21, 0.5))'
-                  }}
-                >
-                  ⚡
-                </div>
-                <h3 className="text-xl font-bold text-white mb-3 tracking-tight">Live Reactions & Rivalries</h3>
-                <p className="text-sm text-gray-100">Watch the action unfold instantly. Send live emoji reactions and taunts without unmuting your mic.</p>
-              </div>
-              <div className="text-center p-8 bg-white/5 backdrop-blur-sm rounded-2xl border border-white/10 shadow-lg hover:shadow-xl transition-all">
-                <div 
-                  className="text-4xl mb-4"
-                  style={{ 
-                    textShadow: '0 0 20px rgba(147, 197, 253, 0.6)',
-                    filter: 'drop-shadow(0 0 8px rgba(147, 197, 253, 0.5))'
-                  }}
-                >
-                  ✨
-                </div>
-                <h3 className="text-xl font-bold text-white mb-3 tracking-tight">Zero-Hassle Setup</h3>
-                <p className="text-sm text-gray-100">Guests simply paste a link from Amazon or Etsy. We'll try to auto-create a beautiful gift card, with manual entry as a fallback if scraping fails.</p>
-              </div>
-              <div className="text-center p-8 bg-white/5 backdrop-blur-sm rounded-2xl border border-white/10 shadow-lg hover:shadow-xl transition-all">
-                <div 
-                  className="text-4xl mb-4"
-                  style={{ 
-                    textShadow: '0 0 20px rgba(59, 130, 246, 0.6)',
-                    filter: 'drop-shadow(0 0 8px rgba(59, 130, 246, 0.5))'
-                  }}
-                >
-                  ✈️
-                </div>
-                <h3 className="text-xl font-bold text-white mb-3 tracking-tight">Auto-Pilot Logistics</h3>
-                <p className="text-sm text-gray-100">We track the turn order, the rules, and the shipping. When the game ends, we privately swap addresses so prizes get where they need to go.</p>
-              </div>
+              ))}
             </div>
           </div>
 
@@ -610,20 +634,20 @@ export function Home() {
             <div className="grid md:grid-cols-2 gap-12 items-center">
               <div>
                 <h2 className="text-3xl md:text-4xl font-bold text-white mb-6 tracking-tight">
-                  The Cure for 'You're on Mute'
+                  {LANDING_COPY.sectionHeading}
                 </h2>
                 <ul className="space-y-4">
                   <li className="flex items-start gap-3">
                     <span className="text-2xl">✅</span>
-                    <p className="text-gray-100 text-lg">Works alongside Zoom, Teams, or Meet.</p>
+                    <p className="text-gray-100 text-lg">{LANDING_COPY.calloutZoom}</p>
                   </li>
                   <li className="flex items-start gap-3">
                     <span className="text-2xl">🌍</span>
-                    <p className="text-gray-100 text-lg">Inclusive for distributed teams in any time zone.</p>
+                    <p className="text-gray-100 text-lg">{LANDING_COPY.calloutTimezone}</p>
                   </li>
                   <li className="flex items-start gap-3">
                     <span className="text-2xl">🛡️</span>
-                    <p className="text-gray-100 text-lg">HR-Friendly: You set the rules and price limits, we enforce them.</p>
+                    <p className="text-gray-100 text-lg">{LANDING_COPY.calloutHr}</p>
                   </li>
                 </ul>
               </div>
@@ -696,19 +720,15 @@ export function Home() {
 
   return (
     <>
-    <SEO 
-      title="Virtual White Elephant for Remote Teams"
-      description="Host seamless, real-time White Elephant gift exchanges for remote teams. Works with Zoom, Teams, or Meet. Zero-hassle setup, auto-pilot logistics."
-      url="/"
-    />
+    <SEO title={HOME_SEO_TITLE} description={SEO_DEFAULT_DESCRIPTION} url="/" />
     <Snowflakes variant="signedIn" />
     <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black relative flex flex-col">
       {/* My Parties Section */}
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 z-10 pt-4">
         <div className="mb-8">
           <div>
-            <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">My Parties</h2>
-            <p className="text-slate-400">Manage your gift exchanges and join ongoing games</p>
+            <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">{SIGNED_IN_COPY.heading}</h2>
+            <p className="text-slate-400">{SIGNED_IN_COPY.subheading}</p>
           </div>
         </div>
 
@@ -721,24 +741,7 @@ export function Home() {
 
         {partiesError && (
           <div className="bg-yellow-500/10 border-l-4 border-yellow-500/50 rounded-lg p-4 mb-6">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <p className="text-sm text-yellow-300">
-                  <strong>Note:</strong> {partiesError}
-                  {partiesError.includes('index') && (
-                    <span className="block mt-2 text-slate-300">
-                      The Firestore index is being created. This may take a few minutes. 
-                      You can deploy it manually with: <code className="bg-slate-800/50 px-2 py-1 rounded text-xs">firebase deploy --only firestore:indexes</code>
-                    </span>
-                  )}
-                </p>
-              </div>
-            </div>
+            <p className="text-sm text-yellow-300">{PARTIES_LOAD_ERROR}</p>
           </div>
         )}
 
@@ -748,8 +751,8 @@ export function Home() {
             className="text-center py-16 bg-white/5 backdrop-blur-sm rounded-xl border-2 border-dashed border-white/10 hover:border-white/20 cursor-pointer transition-all max-w-2xl mx-auto"
           >
             <GiftIcon className="w-12 h-12 text-white/20 mb-4 mx-auto" />
-            <h3 className="text-white font-medium mb-2">Create Your First Party</h3>
-            <p className="text-slate-400">Click here to host a White Elephant gift exchange</p>
+            <h3 className="text-white font-medium mb-2">{SIGNED_IN_COPY.emptyTitle}</h3>
+            <p className="text-slate-400">{SIGNED_IN_COPY.emptyBody}</p>
           </div>
         )}
 
@@ -803,7 +806,7 @@ export function Home() {
                               : 'bg-slate-700/40 text-slate-400 border border-slate-600/50'
                           }`}
                         >
-                          {party.status}
+                          {formatPartyStatus(party.status)}
                         </span>
                         {canDelete && (
                           <Menu as="div" className="relative">
@@ -845,7 +848,7 @@ export function Home() {
                         to={`/party/${party.id}`}
                         className="block w-full px-4 py-2 text-sm font-medium bg-transparent border border-white/20 text-white hover:bg-purple-500/20 hover:border-purple-400/50 rounded-lg transition-all duration-200 text-center"
                       >
-                        Enter Lobby
+                        {partyEntryButtonLabel(party.status)}
                       </Link>
                     </div>
                   </div>
@@ -863,7 +866,7 @@ export function Home() {
             setPartyTitle('');
             setPartyDate('');
           }}
-          title="Host New Party"
+          title={SIGNED_IN_COPY.createModalTitle}
           className="max-w-lg"
         >
           <div className="space-y-4">
@@ -873,7 +876,7 @@ export function Home() {
               </label>
               <input
                 type="text"
-                placeholder="e.g., Family Christmas Exchange 2025"
+                placeholder={SIGNED_IN_COPY.partyPlaceholder}
                 value={partyTitle}
                 onChange={(e) => setPartyTitle(e.target.value)}
                 className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 text-white placeholder:text-slate-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
@@ -907,7 +910,7 @@ export function Home() {
                 disabled={!partyDate}
                 className="px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-indigo-500 to-purple-600 rounded-lg hover:from-indigo-600 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Create Party
+                {SIGNED_IN_COPY.createSubmit}
               </button>
             </div>
           </div>
@@ -917,8 +920,15 @@ export function Home() {
       {/* Micro Footer */}
       <div className="text-slate-600 text-xs py-8 border-t border-white/5 mt-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between">
-          <span>© 2024 StealOrReveal</span>
-          <span>Privacy • Support</span>
+          <span>© {new Date().getFullYear()} StealOrReveal</span>
+          <span className="flex gap-3">
+            <Link to="/privacy" className="hover:text-slate-400 transition-colors">
+              Privacy
+            </Link>
+            <Link to="/contact" className="hover:text-slate-400 transition-colors">
+              Support
+            </Link>
+          </span>
         </div>
       </div>
       </div>

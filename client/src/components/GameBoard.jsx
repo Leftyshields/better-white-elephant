@@ -349,7 +349,7 @@ export function GameBoard({ partyId, onEndTurn }) {
             <h1 className="text-5xl font-bold mb-3 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
               Game Over!
             </h1>
-            <p className="text-xl text-slate-300">Time to see what you won and send your gifts!</p>
+            <p className="text-xl text-slate-300">Here&apos;s what you won, and what you need to ship.</p>
           </div>
 
           {/* What You Won Section */}
@@ -626,13 +626,11 @@ export function GameBoard({ partyId, onEndTurn }) {
       return (
         <div className="min-h-screen flex items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black py-12">
           <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
-            <h2 className="text-2xl font-bold mb-4 text-red-600">Game State Missing</h2>
-            <p className="text-gray-600 mb-4">
-              The game state could not be loaded. This usually happens when the server was restarted or there was a data synchronization issue. Active games are persisted for 2 years, and ended games are retained for 1 year per our privacy policy.
-            </p>
+            <h2 className="text-2xl font-bold mb-4 text-red-600">Couldn&apos;t load the game</h2>
+            <p className="text-gray-600 mb-4">Refresh the page and try again.</p>
             {isAdmin && (
               <p className="text-sm text-gray-500 mb-6">
-                As the party admin, you can reset the party status back to Lobby to start a new game.
+                As the host, you can reset the party status back to Lobby to start a new game.
               </p>
             )}
             <div className="flex flex-col gap-3">
@@ -831,7 +829,7 @@ export function GameBoard({ partyId, onEndTurn }) {
   };
 
   const handleEndGame = async () => {
-    if (!confirm('Are you sure you want to end the game? All current ownership will be final.')) {
+    if (!confirm("End the game now? The gifts people hold will be final, and leftover wrapped gifts will be assigned.")) {
       return;
     }
 
@@ -902,7 +900,7 @@ export function GameBoard({ partyId, onEndTurn }) {
           <h1 className="text-5xl font-bold mb-3 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
             Game Over!
           </h1>
-          <p className="text-xl text-slate-300">Time to see what you won and send your gifts!</p>
+          <p className="text-xl text-slate-300">Here&apos;s what you won, and what you need to ship.</p>
         </div>
 
         {/* What You Won Section */}
@@ -1233,8 +1231,15 @@ export function GameBoard({ partyId, onEndTurn }) {
                 )}
                 {/* Boomerang Badge */}
                 {(party?.config?.returnToStart || gameState.isBoomerangPhase) && (
-                  <div className="bg-indigo-500/20 text-indigo-300 text-[10px] uppercase tracking-wider px-2 py-1 rounded-full border border-indigo-500/30">
-                    {gameState.isBoomerangPhase ? '🔄 Boomerang Round!' : '🔄 Boomerang Rule Active'}
+                  <div className="flex flex-col items-start gap-1">
+                    <div className="bg-indigo-500/20 text-indigo-300 text-xs font-semibold px-2 py-1 rounded-full border border-indigo-500/30">
+                      {gameState.isBoomerangPhase ? 'Boomerang round' : 'Boomerang is on'}
+                    </div>
+                    {!gameState.isBoomerangPhase && (
+                      <p className="text-xs text-indigo-200/90 leading-snug">
+                        You can swap even if you already have a gift.
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
@@ -1318,7 +1323,7 @@ export function GameBoard({ partyId, onEndTurn }) {
               <div className="mt-4 px-4">
                 <div className="bg-orange-50 border-2 border-orange-300 rounded-lg p-4">
                   <p className="text-sm font-semibold text-orange-800 mb-2">
-                    🎉 All gifts are frozen! Waiting for admin to end the game.
+                    🎉 All gifts are frozen! Waiting for the host to end the game.
                   </p>
                 </div>
               </div>

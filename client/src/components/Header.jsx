@@ -8,6 +8,8 @@ import { useAuth } from '../hooks/useAuth.js';
 import { usePartyModal } from '../contexts/PartyModalContext.jsx';
 import { useSound } from '../contexts/SoundContext.jsx';
 import { useParty } from '../hooks/useParty.js';
+import { LANDING_COPY } from '../utils/landingMarketingCopy.js';
+import { GAME_USER_COPY } from '../utils/gameUserCopy.js';
 
 export function Header() {
   const { user, signOut, signInWithGoogle } = useAuth();
@@ -54,7 +56,7 @@ export function Header() {
   const handleEndGame = async () => {
     if (!partyId || !isAdmin) return;
     
-    if (!confirm('Are you sure you want to end the game? All current ownership will be final.')) {
+    if (!confirm(GAME_USER_COPY.endGameConfirm)) {
       return;
     }
 
@@ -96,7 +98,7 @@ export function Header() {
                 <span className="md:hidden">StealOrReveal</span>
                 <span className="hidden md:inline">StealOrReveal.com</span>
               </h1>
-              <p className="hidden md:block text-xs text-gray-200">A Better White Elephant Gift Exchange</p>
+              <p className="hidden md:block text-xs text-gray-200">{LANDING_COPY.headerTagline}</p>
             </div>
           </Link>
 
@@ -104,7 +106,7 @@ export function Header() {
           <div className="flex items-center gap-3">
             {/* Rules Link */}
             <Link
-              to="/rules"
+              to="/how-to-play"
               className="hidden sm:block px-4 py-2 text-slate-300 hover:text-white font-medium transition-colors"
             >
               How to Play
@@ -116,7 +118,7 @@ export function Header() {
                 onClick={() => setShowModal(true)}
                 className="hidden md:block px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold rounded-lg hover:from-indigo-600 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl"
               >
-                Host New Party
+                {LANDING_COPY.primaryCta}
               </button>
             )}
             
@@ -212,7 +214,7 @@ export function Header() {
                   onClick={signInWithGoogle}
                   className="text-sm text-slate-300 font-medium hover:text-white transition-colors md:flex md:items-center md:gap-2 md:px-4 md:py-2 md:bg-white/10 md:backdrop-blur-md md:text-white md:border md:border-white/20 md:rounded-md md:hover:bg-white/20"
                 >
-                  <span className="md:hidden">Log In</span>
+                  <span className="md:hidden">Sign in</span>
                   <span className="hidden md:inline">Sign in</span>
                 </button>
               )}

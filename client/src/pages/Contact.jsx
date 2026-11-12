@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { EnvelopeIcon, ShieldCheckIcon, UserIcon, ChatBubbleLeftRightIcon, BugAntIcon } from '@heroicons/react/24/outline';
+import { SEO } from '../components/SEO.jsx';
 
 export function Contact() {
   const [searchParams] = useSearchParams();
@@ -135,7 +136,7 @@ ${timestamp}
         
         // Special handling for Resend testing mode
         if (data.testingMode || data.message?.includes('testing mode') || data.message?.includes('verified email')) {
-          errorMsg = 'Email service is in testing mode. Your message may not be delivered. Please try again later or contact us via GitHub Issues.';
+          errorMsg = "We couldn't send that just now. Try again in a few minutes, or use a different email address.";
         }
         
         setErrorMessage(errorMsg);
@@ -159,6 +160,12 @@ ${timestamp}
   };
 
   return (
+    <>
+    <SEO
+      title="Contact"
+      description="Questions, bug reports, or account help for StealOrReveal, the virtual White Elephant for remote teams."
+      url="/contact"
+    />
     <div className="min-h-screen bg-slate-950">
       <div className="max-w-4xl mx-auto pt-24 pb-16 px-4">
         {/* Header Section */}
@@ -170,7 +177,7 @@ ${timestamp}
             </h1>
           </div>
           <p className="text-xl text-slate-300 max-w-2xl mx-auto">
-            Have a question or need support? We're here to help.
+            Questions, bugs, or account help. Send a message and we&apos;ll get back to you.
           </p>
         </div>
 
@@ -295,7 +302,7 @@ ${timestamp}
                 <div className="flex items-start gap-2">
                   <ShieldCheckIcon className="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0" />
                   <div>
-                    <p className="text-red-300 font-semibold mb-1">Security Issue Reported</p>
+                    <p className="text-red-300 font-semibold mb-1">Reporting a security issue</p>
                     <p className="text-sm text-slate-300">
                       If you're reporting unauthorized access to your account, please include:
                     </p>
@@ -304,9 +311,7 @@ ${timestamp}
                       <li>What actions were taken on your account</li>
                       <li>Any suspicious activity you've observed</li>
                     </ul>
-                    <p className="text-sm text-slate-300 mt-2">
-                      We will respond to security issues immediately.
-                    </p>
+                    <p className="text-sm text-slate-300 mt-2">Security reports go first.</p>
                   </div>
                 </div>
               </div>
@@ -322,11 +327,7 @@ ${timestamp}
             {/* Success Message */}
             {submitStatus === 'success' && (
               <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
-                <p className="text-green-300 font-semibold">Message sent successfully!</p>
-                <p className="text-sm text-slate-300 mt-1">
-                  We've received your message and will get back to you as soon as possible. 
-                  {formData.type === 'security' && ' Security issues are handled with priority.'}
-                </p>
+                <p className="text-green-300 font-semibold">We got your message and will reply by email.</p>
               </div>
             )}
 
@@ -346,20 +347,19 @@ ${timestamp}
           <h2 className="text-2xl font-bold text-white mb-4">Other Ways to Reach Us</h2>
           <div className="space-y-4 text-slate-300">
             <p>
-              <strong className="text-white">GitHub Issues:</strong> For bug reports and feature requests, please use our{' '}
-              <a 
-                href="https://github.com/Leftyshields/better-white-elephant/issues" 
-                target="_blank" 
+              <strong className="text-white">GitHub Issues:</strong> For public bug reports and feature requests, use our{' '}
+              <a
+                href="https://github.com/Leftyshields/better-white-elephant/issues"
+                target="_blank"
                 rel="noopener noreferrer"
                 className="text-purple-300 hover:text-purple-200 underline"
               >
                 GitHub Issues page
               </a>
-              .
+              . Account or privacy requests should use the form above, not a public issue.
             </p>
             <p>
-              <strong className="text-white">Response Time:</strong> We typically respond within 24-48 hours. 
-              Security issues are handled with priority and may receive a response within a few hours.
+              <strong className="text-white">Response:</strong> We will reply by email. Security reports go first.
             </p>
             <p>
               <strong className="text-white">Privacy:</strong> Your contact information and message are kept confidential 
@@ -380,6 +380,7 @@ ${timestamp}
         </div>
       </div>
     </div>
+    </>
   );
 }
 

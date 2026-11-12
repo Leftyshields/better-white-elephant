@@ -13,6 +13,7 @@ import { doc, setDoc, getDoc, collection, query, where, getDocs, updateDoc, dele
 import { db } from '../utils/firebase.js';
 import { trackParticipantJoin, trackError } from '../utils/analytics.js';
 import { SEO } from '../components/SEO.jsx';
+import { INVITE_SEO } from '../utils/landingMarketingCopy.js';
 
 export function Party() {
   const { partyId } = useParams();
@@ -20,13 +21,11 @@ export function Party() {
   const { user, loading: authLoading } = useAuth();
   const [gameStarted, setGameStarted] = useState(false);
 
-  // SEO for party page
+  const inviteSeoTitle = party?.title
+    ? `You're invited to ${party.title}`
+    : INVITE_SEO.fallbackTitle;
   const seoElement = (
-    <SEO 
-      title="Join the Party"
-      description="Join a White Elephant gift exchange party. Add your gift, invite friends, and start playing!"
-      url={`/party/${partyId}`}
-    />
+    <SEO title={inviteSeoTitle} description={INVITE_SEO.description} url={`/party/${partyId}`} />
   );
 
   // Show loading state while fetching auth (but not party - we'll show invite landing)
