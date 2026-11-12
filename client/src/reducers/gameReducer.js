@@ -422,8 +422,11 @@ export function gameReducer(state = initialState, action) {
       
       // Check if player can act
       const turnOrder = state.gameState?.turnOrder || [];
-      const isBoomerangPhase = state.gameState?.isBoomerangPhase || 
-        (state.currentTurnIndex >= (turnOrder.length || 0));
+      const returnToStart = state.gameState?.config?.returnToStart || false;
+      const isBoomerangPhase = returnToStart && (
+        state.gameState?.isBoomerangPhase ||
+        (state.currentTurnIndex >= (turnOrder.length || 0))
+      );
       const playerHasGift = Object.values(state.gifts).some(g => g.ownerId === userId);
       
       if (!canPlayerAct(userId, state.turnQueue, state.currentTurnIndex, turnOrder, isBoomerangPhase, playerHasGift)) {
@@ -490,8 +493,11 @@ export function gameReducer(state = initialState, action) {
       
       // Check if player can act
       const turnOrder = state.gameState?.turnOrder || [];
-      const isBoomerangPhase = state.gameState?.isBoomerangPhase || 
-        (state.currentTurnIndex >= (turnOrder.length || 0));
+      const returnToStart = state.gameState?.config?.returnToStart || false;
+      const isBoomerangPhase = returnToStart && (
+        state.gameState?.isBoomerangPhase ||
+        (state.currentTurnIndex >= (turnOrder.length || 0))
+      );
       const playerHasGift = Object.values(state.gifts).some(g => g.ownerId === userId);
       
       if (!canPlayerAct(userId, state.turnQueue, state.currentTurnIndex, turnOrder, isBoomerangPhase, playerHasGift)) {

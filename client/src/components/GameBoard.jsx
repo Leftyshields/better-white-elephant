@@ -1230,12 +1230,12 @@ export function GameBoard({ partyId, onEndTurn }) {
                   </div>
                 )}
                 {/* Boomerang Badge */}
-                {(party?.config?.returnToStart || gameState.isBoomerangPhase) && (
+                {returnToStart && (
                   <div className="flex flex-col items-start gap-1">
                     <div className="bg-indigo-500/20 text-indigo-300 text-xs font-semibold px-2 py-1 rounded-full border border-indigo-500/30">
-                      {gameState.isBoomerangPhase ? 'Boomerang round' : 'Boomerang is on'}
+                      {isBoomerangPhase ? 'Boomerang round' : 'Boomerang is on'}
                     </div>
-                    {!gameState.isBoomerangPhase && (
+                    {!isBoomerangPhase && (
                       <p className="text-xs text-indigo-200/90 leading-snug">
                         You can swap even if you already have a gift.
                       </p>
@@ -1291,7 +1291,7 @@ export function GameBoard({ partyId, onEndTurn }) {
                       ? 'You' 
                       : (userNames[playerId] || userEmails[playerId] || (playerId ? `Player ${playerId.slice(0, 8)}` : 'Unknown'));
                     const currentPlayerIndex = currentPlayerId ? gameState.turnOrder.indexOf(currentPlayerId) : -1;
-                    const isPast = gameState.isBoomerangPhase 
+                    const isPast = isBoomerangPhase 
                       ? index > currentPlayerIndex
                       : index < currentPlayerIndex;
                     

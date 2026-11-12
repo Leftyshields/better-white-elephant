@@ -236,7 +236,12 @@ export function GameRoom({ partyId }) {
       return { roundsRemaining: 0, totalRounds: 0, currentRound: 0 };
     }
     
-    const { turnQueue, currentTurnIndex, stealStack, isBoomerangPhase, config } = state.gameState;
+    const { turnQueue, currentTurnIndex, stealStack, isBoomerangPhase: serverBoomerangPhase, config } = state.gameState;
+    const returnToStart = config?.returnToStart ?? false;
+    const isBoomerangPhase = returnToStart && (
+      serverBoomerangPhase ||
+      (currentTurnIndex >= (state.gameState?.turnOrder?.length || 0))
+    );
     
     if (!turnQueue || turnQueue.length === 0) {
       return { roundsRemaining: 0, totalRounds: 0, currentRound: 0 };
@@ -268,6 +273,12 @@ export function GameRoom({ partyId }) {
   };
 
   const roundsInfo = calculateRoundsRemaining();
+  const returnToStartEnabled =
+    party?.config?.returnToStart ?? state.gameState?.config?.returnToStart ?? false;
+  const isBoomerangPhaseForUi =
+    returnToStartEnabled &&
+    (state.gameState?.isBoomerangPhase ||
+      (state.gameState?.currentTurnIndex >= (state.gameState?.turnOrder?.length || 0)));
   const isAdmin = party?.adminId === user?.uid;
   // Use activePlayerId from state machine (accounts for pendingVictimId)
   const currentPlayerId = state.activePlayerId;
@@ -527,12 +538,12 @@ export function GameRoom({ partyId }) {
                   </div>
                 )}
                 {/* Boomerang Badge */}
-                {(party?.config?.returnToStart || state.gameState?.isBoomerangPhase) && (
+                {returnToStartEnabled && (
                   <div className="flex flex-col items-start gap-1">
                     <div className="bg-indigo-500/20 text-indigo-300 text-xs font-semibold px-2 py-1 rounded-full border border-indigo-500/30">
-                      {state.gameState?.isBoomerangPhase ? 'Boomerang round' : 'Boomerang is on'}
+                      {isBoomerangPhaseForUi ? 'Boomerang round' : 'Boomerang is on'}
                     </div>
-                    {!state.gameState?.isBoomerangPhase && (
+                    {!isBoomerangPhaseForUi && (
                       <p className="text-xs text-indigo-200/90 leading-snug">
                         You can swap even if you already have a gift.
                       </p>
@@ -584,7 +595,7 @@ export function GameRoom({ partyId }) {
                         ? 'You' 
                         : (userNames[participant.id] || userEmails[participant.id] || `Player ${participant.id.slice(0, 8)}`);
                       const participantTurnIndex = state.turnQueue?.indexOf(participant.id) ?? index;
-                      const isPast = state.gameState?.isBoomerangPhase 
+                      const isPast = isBoomerangPhaseForUi 
                         ? participantTurnIndex > state.currentTurnIndex
                         : participantTurnIndex < state.currentTurnIndex;
                       
