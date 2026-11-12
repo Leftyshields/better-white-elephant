@@ -21,10 +21,11 @@ export function Header() {
   const location = useLocation();
   const params = useParams();
   const partyId = params.partyId;
-  const { party } = useParty(partyId || '');
-  const isAdmin = party?.adminId === user?.uid;
   const isPartyPage = location.pathname.startsWith('/party/');
   const isLandingPage = location.pathname === '/';
+  const { party, loading: partyLoading } = useParty(partyId || '');
+  const isAdmin = !!user && !!party && party.adminId === user.uid;
+  const showHostGameControls = isPartyPage && isAdmin && !partyLoading;
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -138,8 +139,8 @@ export function Header() {
               </button>
             )}
 
-            {/* Admin Manage Button - Only show on party pages when user is admin */}
-            {isPartyPage && isAdmin && (
+            {/* Admin Manage Button - Only show when party is loaded and user is host */}
+            {showHostGameControls && (
               <button
                 onClick={handleEndGame}
                 className="p-2 rounded-full hover:bg-white/20 transition-colors text-slate-400 hover:text-white"
