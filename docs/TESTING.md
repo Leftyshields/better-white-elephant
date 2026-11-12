@@ -1,6 +1,6 @@
 # Testing Guide
 
-This document describes the automated testing setup for Better White Elephant, which leverages simulation mode (`?sim=true`) for comprehensive frontend testing focused on **perfect gameplay outcomes** - ensuring games complete successfully with proper rule compliance and state integrity.
+This document describes the automated testing setup for StealOrReveal, which uses simulation mode (`?sim=true`) to check that games finish with the right rules and state.
 
 ## Testing Stack
 

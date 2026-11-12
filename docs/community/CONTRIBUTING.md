@@ -1,4 +1,4 @@
-# Contributing to Better White Elephant
+# Contributing to StealOrReveal
 
 Thank you for your interest in contributing! 🎉
 
@@ -22,10 +22,10 @@ Feature suggestions are welcome! Open an issue with:
 ### Pull Requests
 
 1. **Fork the repository**
-2. **Create a feature branch**: `git checkout -b feature/amazing-feature`
+2. **Create a feature branch**: `git checkout -b feature/short-name`
 3. **Make your changes**
 4. **Test thoroughly**
-5. **Commit your changes**: `git commit -m 'Add amazing feature'`
+5. **Commit your changes**: `git commit -m 'Add a short description'`
 6. **Push to your fork**: `git push origin feature/amazing-feature`
 7. **Open a Pull Request**
 
@@ -42,5 +42,5 @@ See the [README.md](../../README.md) for setup instructions.
 
 ### Questions?
 
-Feel free to open an issue for any questions or discussions!
+Open an issue if you have a question.
 

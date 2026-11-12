@@ -12,7 +12,7 @@ Your current token needs the `public_repo` scope (or `repo` for private repos) t
 
 1. Go to GitHub Settings → Developer settings → Personal access tokens → Tokens (classic)
    - Direct link: https://github.com/settings/tokens
-2. Find your existing token (the one starting with `github_pat_11AAIVWAI0...`)
+2. Find the token already saved in your MCP config.
 3. Click "Edit" or regenerate with these scopes:
    - ✅ **repo** (Full control of private repositories)
      - Includes: `repo:status`, `repo_deployment`, `public_repo`, `repo:invite`, `security_events`
@@ -45,21 +45,20 @@ Or use your preferred editor. Update the `GITHUB_PERSONAL_ACCESS_TOKEN` value wi
 {
   "mcpServers": {
     "gh": {
-      "command": "/home/brian/.nvm/versions/node/v20.18.1/bin/npx",
+      "command": "npx",
       "args": [
         "-y",
         "@modelcontextprotocol/server-github"
       ],
       "env": {
-        "GITHUB_PERSONAL_ACCESS_TOKEN": "YOUR_NEW_TOKEN_HERE",
-        "PATH": "/home/brian/.nvm/versions/node/v20.18.1/bin:/usr/local/bin:/usr/bin:/bin"
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "YOUR_NEW_TOKEN_HERE"
       }
     }
   }
 }
 ```
 
-**Note**: Replace `YOUR_NEW_TOKEN_HERE` with your actual token.
+**Note**: Replace `YOUR_NEW_TOKEN_HERE` with your actual token. Use the `npx` on your machine if it is not on your default PATH.
 
 ## Step 3: Restart Cursor
 
@@ -90,14 +89,13 @@ If you prefer, you can also set the token as an environment variable:
    {
      "mcpServers": {
        "gh": {
-         "command": "/home/brian/.nvm/versions/node/v20.18.1/bin/npx",
+         "command": "npx",
          "args": [
            "-y",
            "@modelcontextprotocol/server-github"
          ],
          "env": {
-           "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}",
-           "PATH": "/home/brian/.nvm/versions/node/v20.18.1/bin:/usr/local/bin:/usr/bin:/bin"
+           "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"
          }
        }
      }
@@ -116,20 +114,14 @@ If you still get "Permission Denied":
 
 ### Test Token Permissions
 
-You can test your token manually:
+You can test read access with curl (replace `YOUR_TOKEN`):
+
 ```bash
 curl -H "Authorization: token YOUR_TOKEN" \
-     https://api.github.com/repos/Leftyshields/better-white-elephant/issues/36
+     https://api.github.com/repos/Leftyshields/better-white-elephant/issues/1
 ```
 
-If this returns issue data, your token has read permissions. To test write permissions, try:
-```bash
-curl -X PATCH \
-     -H "Authorization: token YOUR_TOKEN" \
-     -H "Accept: application/vnd.github.v3+json" \
-     -d '{"state":"closed"}' \
-     https://api.github.com/repos/Leftyshields/better-white-elephant/issues/36
-```
+If this returns issue JSON, your token can read issues. To test write access without changing real issues, post a comment on a throwaway test issue in a fork or sandbox repo.
 
 ## Security Best Practices
 
@@ -141,12 +133,4 @@ curl -X PATCH \
 
 ## Next Steps
 
-After setting up, I'll be able to:
-- ✅ Close GitHub issues directly
-- ✅ Add comments to issues
-- ✅ Update issue labels and assignees
-- ✅ Create and manage pull requests
-- ✅ And more GitHub operations
-
-Let me know once you've updated the token and restarted Cursor, and I can help close issue #36!
-
+After this is set up, Cursor can read and update issues and pull requests in this repo.

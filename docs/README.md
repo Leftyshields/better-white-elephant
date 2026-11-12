@@ -1,5 +1,7 @@
 # Documentation
 
+Guides and specs for StealOrReveal, a live White Elephant gift exchange for remote teams. Start with the root [README](../README.md) for setup.
+
 | Topic | Document |
 |-------|----------|
 | Game rules (source of truth) | [GAME_RULES.md](./GAME_RULES.md) |
@@ -12,5 +14,3 @@
 | Deploy email service | [deploy/DEPLOY_EMAIL_SERVICE.md](./deploy/DEPLOY_EMAIL_SERVICE.md) |
 | Contributing | [community/CONTRIBUTING.md](./community/CONTRIBUTING.md) |
 | Code of conduct | [community/CODE_OF_CONDUCT.md](./community/CODE_OF_CONDUCT.md) |
-
-Project setup and hosting overview: [../README.md](../README.md).

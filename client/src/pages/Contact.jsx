@@ -147,7 +147,7 @@ ${timestamp}
       // Provide helpful error messages
       let errorMsg = 'Failed to send message. ';
       if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-        errorMsg += 'The email service is not available. The function may not be deployed. See docs/deploy/DEPLOY_FUNCTIONS.md for deployment instructions.';
+        errorMsg = 'The email service is not available right now. Try again in a few minutes.';
       } else {
         errorMsg += error.message;
       }

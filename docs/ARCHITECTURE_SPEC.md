@@ -1,7 +1,7 @@
 # Frontend Architecture Specification
 
 ## Overview
-This document maps the complete frontend architecture, component hierarchy, routing, and state management for the White Elephant game application.
+This document maps the frontend architecture, component hierarchy, routing, and state management for StealOrReveal.
 
 ## Routing Structure
 
@@ -15,13 +15,21 @@ App
     └── Routes
         ├── / → Home.jsx
         ├── /party/:partyId → Party.jsx
-        └── /profile → Profile.jsx
+        ├── /profile → Profile.jsx
+        ├── /rules → Rules.jsx (How to Play)
+        ├── /terms → Terms.jsx
+        ├── /privacy → Privacy.jsx
+        └── /contact → Contact.jsx
 ```
 
 **Key Routes:**
 - `/` - Home page (party list, create party)
 - `/party/:partyId` - Party page (routes to lobby or game)
 - `/profile` - User profile page
+- `/rules` - How to Play (rules and strategies)
+- `/terms` - Terms of service
+- `/privacy` - Privacy policy
+- `/contact` - Contact form
 
 ## Component Hierarchy
 

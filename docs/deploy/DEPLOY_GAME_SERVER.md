@@ -5,15 +5,15 @@ Operator guide for GCP project **`better-white-elephant`**.
 - **Frontend:** Firebase Hosting (unchanged by this workflow). After deploy, set GitHub secret `VITE_SERVER_URL` and run the Firebase Hosting deploy workflow when you are ready.
 - **Game server:** Cloud Run service **`stealorreveal-game-server`** in **`us-central1`**
 - **Canonical service URL** (no trailing slash): `https://stealorreveal-game-server-jtlpqb4y3q-uc.a.run.app`
-- **Deploy workflow:** [`.github/workflows/deploy-game-server-cloud-run.yml`](../../.github/workflows/deploy-game-server-cloud-run.yml) — **`workflow_dispatch` only** (does not run on push to `main`)
+- **Deploy workflow:** [`.github/workflows/deploy-game-server-cloud-run.yml`](../../.github/workflows/deploy-game-server-cloud-run.yml). **`workflow_dispatch` only** (does not run on push to `main`)
 
 ## Architecture
 
-- **Image:** `server/Dockerfile` — Node 20 (digest-pinned), `npm ci --omit=dev`, `server/package-lock.json` for reproducible builds
+- **Image:** `server/Dockerfile`. Node 20 (digest-pinned), `npm ci --omit=dev`, `server/package-lock.json` for reproducible builds
 - **Artifact Registry repo:** `game-server` (`us-central1`)
 - **Runtime identity:** dedicated SA `game-server-runtime@better-white-elephant.iam.gserviceaccount.com` (not the default compute SA)
 
-Socket.io uses **one** instance (`min-instances=1`, `max-instances=1`), **session affinity**, **CPU always allocated** (`--no-cpu-throttling`), **3600s** request timeout. There is **no** Socket.io Redis adapter—only the `redis` npm client for application state. Scaling beyond one instance needs an adapter later.
+Socket.io uses **one** instance (`min-instances=1`, `max-instances=1`), **session affinity**, **CPU always allocated** (`--no-cpu-throttling`), **3600s** request timeout. There is **no** Socket.io Redis adapter, only the `redis` npm client for application state. Scaling beyond one instance needs an adapter later.
 
 ## GitHub: `game-server` environment (required)
 
@@ -69,7 +69,7 @@ gcloud artifacts repositories create game-server \
 
 ## 3. Secret Manager (runtime credentials)
 
-Create secrets (**names only**—store real values in GCP Console or `gcloud`, never in git):
+Create secrets (**names only**; store real values in GCP Console or `gcloud`, never in git):
 
 | Secret Manager name | Becomes container env var |
 |---------------------|---------------------------|
@@ -135,7 +135,7 @@ Avoid a second long-lived JSON key for deploy. Hosting uses `FIREBASE_SERVICE_AC
 
 ```bash
 gcloud iam service-accounts create github-game-server-deploy \
-  --display-name="GitHub Actions — game server deploy" \
+  --display-name="GitHub Actions - game server deploy" \
   --project=better-white-elephant
 ```
 

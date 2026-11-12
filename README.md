@@ -1,6 +1,6 @@
-# Better White Elephant 🎁
+# StealOrReveal
 
-A real-time White Elephant gift exchange platform built with React, Firebase, Node.js, Socket.io, and Redis.
+A live White Elephant gift exchange for remote teams, built with React, Firebase, Node.js, Socket.io, and Redis. This repository is `better-white-elephant`.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![CI](https://github.com/leftyshields/better-white-elephant/workflows/CI/badge.svg)](https://github.com/leftyshields/better-white-elephant/actions)
@@ -111,11 +111,11 @@ Canonical rules live in [docs/GAME_RULES.md](./docs/GAME_RULES.md). Summary:
    firebase deploy --only hosting
    ```
 
-Production hosting also runs via GitHub Actions — see [.github/workflows/README.md](./.github/workflows/README.md) (Deploy to Firebase Hosting).
+Production hosting also runs via GitHub Actions. See [.github/workflows/README.md](./.github/workflows/README.md) (Deploy to Firebase Hosting).
 
 ### Other services
 
-- **Game server (Cloud Run):** [docs/deploy/DEPLOY_GAME_SERVER.md](./docs/deploy/DEPLOY_GAME_SERVER.md) — manual `workflow_dispatch` only
+- **Game server (Cloud Run):** [docs/deploy/DEPLOY_GAME_SERVER.md](./docs/deploy/DEPLOY_GAME_SERVER.md) (manual `workflow_dispatch` only)
 - **Functions:** `firebase deploy --only functions` or [docs/deploy/DEPLOY_FUNCTIONS.md](./docs/deploy/DEPLOY_FUNCTIONS.md)
 - **Redis (production):** Upstash URL in Secret Manager (`game-server-redis-url`); see deploy guide
 - **Firestore rules:** `firebase deploy --only firestore:rules`

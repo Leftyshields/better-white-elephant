@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-You have a Resend API key: `re_6oswwCMh...` (from your Resend dashboard)
+You have a Resend API key from your Resend dashboard.
 
 ## Deploy Steps
 
@@ -11,7 +11,7 @@ You have a Resend API key: `re_6oswwCMh...` (from your Resend dashboard)
 ```bash
 # Set your Resend API key
 firebase functions:secrets:set RESEND_API_KEY
-# When prompted, paste: re_6oswwCMh... (your full API key)
+# When prompted, paste your full API key (it starts with re_)
 
 # Set your from email address
 firebase functions:secrets:set RESEND_FROM_EMAIL
@@ -21,8 +21,10 @@ firebase functions:secrets:set RESEND_FROM_EMAIL
 
 ### 2. Deploy Functions
 
+From the repo root:
+
 ```bash
-cd /home/brian/docker/better-white-elephant
+cd /path/to/better-white-elephant
 firebase deploy --only functions
 ```
 
@@ -36,7 +38,7 @@ Function URL: https://us-central1-better-white-elephant.cloudfunctions.net/sendC
 
 ### 4. Test It
 
-Go to your contact form at `/contact` and submit a test message. It should work!
+Open `/contact` on the site and send a test message.
 
 ## Troubleshooting
 
@@ -59,4 +61,3 @@ Or use the deploy script:
 ```bash
 ./functions/deploy.sh
 ```
-
