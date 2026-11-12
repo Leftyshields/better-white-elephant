@@ -7,6 +7,14 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { defineSecret } from 'firebase-functions/params';
 import { Resend } from 'resend';
 import admin from 'firebase-admin';
+import {
+  collectEndedPartiesBeforeCutoff,
+  isAbandonedPartyPastRetention,
+  isEndedPartyPastRetention,
+  partiesForAddressCleanupIterable,
+  shouldRemoveShippingAddress,
+} from './dataRetentionLogic.js';
+import { commitOperationsInBatches } from './dataRetentionBatch.js';
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -361,12 +369,45 @@ export const sendContactEmail = onRequest(
   }
 );
 
+/** True if user is in any non-ENDED party other than excludePartyId. */
+async function userParticipatesInNotEndedParty(userId, excludePartyId) {
+  const memberships = await db.collectionGroup('participants')
+    .where(admin.firestore.FieldPath.documentId(), '==', userId)
+    .get();
+
+  for (const memberDoc of memberships.docs) {
+    const partyRef = memberDoc.ref.parent?.parent;
+    if (!partyRef || partyRef.id === excludePartyId) continue;
+    const partySnap = await partyRef.get();
+    if (!partySnap.exists) continue;
+    const status = partySnap.data()?.status;
+    if (status && status !== 'ENDED') {
+      return true;
+    }
+  }
+  return false;
+}
+
+async function queuePartySubtreeDeletes(partyId, partyRef, operations) {
+  operations.push({ type: 'delete', ref: partyRef });
+
+  const participantsSnapshot = await db.collection('parties').doc(partyId).collection('participants').get();
+  participantsSnapshot.docs.forEach((doc) => {
+    operations.push({ type: 'delete', ref: doc.ref });
+  });
+
+  const invitesSnapshot = await db.collection('parties').doc(partyId).collection('pendingInvites').get();
+  invitesSnapshot.docs.forEach((doc) => {
+    operations.push({ type: 'delete', ref: doc.ref });
+  });
+}
+
 /**
  * Data Retention Cleanup - Runs daily to enforce retention policies
  * Per Privacy Policy Section 5:
  * - Account Information: 90 days after account deletion
- * - Game and Party Data: 1 year after game ends
- * - Fulfillment Information (Shipping Addresses): Immediately after fulfillment confirmed OR 30 days after game ends
+ * - Game and Party Data: 30 days after game ends
+ * - Fulfillment Information (Shipping Addresses): 30 days after game ends (unless user is in another active party)
  * - Gift Links: Duration of game + 30 days after game ends
  * - Analytics and Logs: 90 days
  * - Support Communications: 1 year after last communication
@@ -408,106 +449,60 @@ export const dataRetentionCleanup = onSchedule(
         console.log(`✅ Deleted ${stats.deletedAccounts} expired accounts`);
       }
 
-      // 2. Delete parties that ended more than 1 year ago
-      // Note: For backward compatibility, also check updatedAt if endedAt doesn't exist
-      const oneYearAgo = new Date(now.toMillis() - (365 * 24 * 60 * 60 * 1000));
-      const oneYearAgoTimestamp = admin.firestore.Timestamp.fromDate(oneYearAgo);
-
-      // Get all ended parties and filter by retention period
-      const allEndedParties = await db.collection('parties')
-        .where('status', '==', 'ENDED')
-        .limit(500)
-        .get();
-
-      const expiredParties = [];
-      for (const partyDoc of allEndedParties.docs) {
-        const party = partyDoc.data();
-        const endedAt = party.endedAt || party.updatedAt; // Fallback to updatedAt for backward compatibility
-        if (endedAt && endedAt <= oneYearAgoTimestamp) {
-          expiredParties.push(partyDoc);
-        }
-      }
-
-      const partyBatch = db.batch();
-      for (const partyDoc of expiredParties) {
-        const partyId = partyDoc.id;
-
-        // Delete party document
-        partyBatch.delete(partyDoc.ref);
-
-        // Delete subcollections (participants, pendingInvites, etc.)
-        // Note: Firestore doesn't support cascade delete, so we need to delete subcollections manually
-        const participantsSnapshot = await db.collection('parties').doc(partyId).collection('participants').get();
-        participantsSnapshot.docs.forEach((doc) => partyBatch.delete(doc.ref));
-
-        const invitesSnapshot = await db.collection('parties').doc(partyId).collection('pendingInvites').get();
-        invitesSnapshot.docs.forEach((doc) => partyBatch.delete(doc.ref));
-
-        stats.deletedParties++;
-      }
-      if (expiredParties.length > 0) {
-        await partyBatch.commit();
-        console.log(`✅ Deleted ${stats.deletedParties} expired parties`);
-      }
-
-      // 3. Delete shipping addresses: Immediately after fulfillment confirmed OR 30 days after game ends
       const thirtyDaysAgo = new Date(now.toMillis() - (30 * 24 * 60 * 60 * 1000));
       const thirtyDaysAgoTimestamp = admin.firestore.Timestamp.fromDate(thirtyDaysAgo);
 
-      // Find parties that ended more than 30 days ago (with backward compatibility)
-      const allEndedPartiesForAddress = await db.collection('parties')
+      const allEndedPartiesForRetention = await db.collection('parties')
         .where('status', '==', 'ENDED')
         .limit(500)
         .get();
 
-      const partiesForAddressCleanup = [];
-      for (const partyDoc of allEndedPartiesForAddress.docs) {
-        const party = partyDoc.data();
-        const endedAt = party.endedAt || party.updatedAt; // Fallback to updatedAt
-        if (endedAt && endedAt <= thirtyDaysAgoTimestamp) {
-          partiesForAddressCleanup.push(partyDoc);
-        }
-      }
+      const partiesForAddressCleanup = collectEndedPartiesBeforeCutoff(
+        allEndedPartiesForRetention.docs,
+        thirtyDaysAgoTimestamp,
+      );
 
-      const addressBatch = db.batch();
-      for (const partyDoc of partiesForAddressCleanup.docs) {
+      // 2. Delete shipping addresses 30 days after game ends (before party docs are removed)
+      const addressOperations = [];
+      for (const partyDoc of partiesForAddressCleanupIterable(partiesForAddressCleanup)) {
         const party = partyDoc.data();
+        const partyEndedBeforeCutoff = isEndedPartyPastRetention(party, thirtyDaysAgoTimestamp);
 
-        // Get all participants for this party
         const participantsSnapshot = await db.collection('parties').doc(partyDoc.id).collection('participants').get();
 
         for (const participantDoc of participantsSnapshot.docs) {
           const participant = participantDoc.data();
           const userId = participant.id || participantDoc.id;
 
-          // Check if user has shipping address and if fulfillment is confirmed
           const userDoc = await db.collection('users').doc(userId).get();
-          if (userDoc.exists) {
-            const userData = userDoc.data();
-            if (userData.shippingAddress) {
-              // Check if fulfillment is confirmed (gift shipped) OR 30 days have passed
-              const fulfillmentConfirmed = userData.fulfillmentConfirmed === true;
-              const addressAddedAt = userData.shippingAddressAddedAt?.toDate();
-              const thirtyDaysAfterAddress = addressAddedAt ? new Date(addressAddedAt.getTime() + (30 * 24 * 60 * 60 * 1000)) : null;
+          if (!userDoc.exists) continue;
+          const userData = userDoc.data();
+          if (!userData.shippingAddress) continue;
 
-              if (fulfillmentConfirmed || (thirtyDaysAfterAddress && now.toDate() >= thirtyDaysAfterAddress)) {
-                // Remove shipping address
-                addressBatch.update(userDoc.ref, {
-                  shippingAddress: admin.firestore.FieldValue.delete(),
-                  shippingAddressAddedAt: admin.firestore.FieldValue.delete(),
-                });
-                stats.deletedShippingAddresses++;
-              }
-            }
+          const userInNotEndedParty = await userParticipatesInNotEndedParty(userId, partyDoc.id);
+          if (shouldRemoveShippingAddress({
+            hasShippingAddress: true,
+            sourcePartyEndedBeforeCutoff: partyEndedBeforeCutoff,
+            userInNotEndedParty,
+          })) {
+            addressOperations.push({
+              type: 'update',
+              ref: userDoc.ref,
+              data: {
+                shippingAddress: admin.firestore.FieldValue.delete(),
+                shippingAddressAddedAt: admin.firestore.FieldValue.delete(),
+              },
+            });
+            stats.deletedShippingAddresses++;
           }
         }
       }
-      if (stats.deletedShippingAddresses > 0) {
-        await addressBatch.commit();
+      if (addressOperations.length > 0) {
+        await commitOperationsInBatches(db, addressOperations);
         console.log(`✅ Deleted ${stats.deletedShippingAddresses} expired shipping addresses`);
       }
 
-      // 4. Delete gift links: 30 days after game ends
+      // 3. Delete gift links: 30 days after game ends
       // Find gifts from parties that ended more than 30 days ago
       // Note: For backward compatibility, also check gifts without partyEndedAt by looking up party
       const allGiftsForCleanup = await db.collection('gifts')
@@ -550,7 +545,39 @@ export const dataRetentionCleanup = onSchedule(
         console.log(`✅ Deleted ${stats.deletedGiftLinks} expired gift links`);
       }
 
-      // 5. Delete analytics and logs older than 90 days
+      // 4. Delete ENDED parties 30 days after game ends (participants + pendingInvites)
+      const partyDeleteOperations = [];
+      for (const partyDoc of partiesForAddressCleanup) {
+        await queuePartySubtreeDeletes(partyDoc.id, partyDoc.ref, partyDeleteOperations);
+        stats.deletedParties++;
+      }
+      if (partyDeleteOperations.length > 0) {
+        await commitOperationsInBatches(db, partyDeleteOperations);
+        console.log(`✅ Deleted ${stats.deletedParties} ended parties past 30-day retention`);
+      }
+
+      // 5. Delete abandoned non-ENDED parties after 30 days without activity
+      const nonEndedPartiesSnap = await db.collection('parties')
+        .where('status', 'in', ['LOBBY', 'ACTIVE', 'CANCELLED'])
+        .limit(500)
+        .get();
+
+      const staleAbandonedParties = nonEndedPartiesSnap.docs.filter((partyDoc) => {
+        const party = partyDoc.data();
+        return isAbandonedPartyPastRetention(party, thirtyDaysAgoTimestamp);
+      });
+
+      const abandonedDeleteOperations = [];
+      for (const partyDoc of staleAbandonedParties) {
+        await queuePartySubtreeDeletes(partyDoc.id, partyDoc.ref, abandonedDeleteOperations);
+        stats.deletedParties++;
+      }
+      if (abandonedDeleteOperations.length > 0) {
+        await commitOperationsInBatches(db, abandonedDeleteOperations);
+        console.log(`✅ Deleted ${staleAbandonedParties.length} abandoned parties past 30-day retention`);
+      }
+
+      // 6. Delete analytics and logs older than 90 days
       // Note: This assumes analytics are stored in a collection with a timestamp field
       const analyticsQuery = await db.collection('analytics')
         .where('timestamp', '<=', admin.firestore.Timestamp.fromDate(ninetyDaysAgo))
@@ -567,7 +594,7 @@ export const dataRetentionCleanup = onSchedule(
         console.log(`✅ Deleted ${stats.deletedAnalytics} expired analytics records`);
       }
 
-      // 6. Delete support communications older than 1 year
+      // 7. Delete support communications older than 1 year
       const oneYearAgoForSupport = new Date(now.toMillis() - (365 * 24 * 60 * 60 * 1000));
       const supportCommQuery = await db.collection('support_communications')
         .where('lastUpdated', '<=', admin.firestore.Timestamp.fromDate(oneYearAgoForSupport))
