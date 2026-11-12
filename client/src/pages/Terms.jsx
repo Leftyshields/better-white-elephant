@@ -3,9 +3,17 @@
  */
 import { Link } from 'react-router-dom';
 import { DocumentTextIcon } from '@heroicons/react/24/outline';
+import { SEO } from '../components/SEO.jsx';
+import { LEGAL_LAST_UPDATED } from '../utils/landingMarketingCopy.js';
 
 export function Terms() {
   return (
+    <>
+    <SEO
+      title="Terms of Service"
+      description="Terms for hosting or joining a StealOrReveal virtual White Elephant game."
+      url="/terms"
+    />
     <div className="min-h-screen bg-slate-950">
       <div className="max-w-4xl mx-auto pt-24 pb-16 px-4">
         {/* Header Section */}
@@ -17,7 +25,7 @@ export function Terms() {
             </h1>
           </div>
           <p className="text-sm text-slate-400">
-            Last updated: {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+            Last updated: {LEGAL_LAST_UPDATED}
           </p>
         </div>
 
@@ -136,10 +144,10 @@ export function Terms() {
           <section>
             <h2 className="text-2xl font-bold text-white mb-4">12. Contact Information</h2>
             <p className="text-slate-300 leading-relaxed">
-              If you have any questions about these Terms of Service, please{' '}
-              <Link to="/contact" className="text-purple-300 hover:text-purple-200 underline">contact us</Link>
-              {' '}or reach out through our{' '}
-              <a href="https://github.com/Leftyshields/better-white-elephant/issues" target="_blank" rel="noopener noreferrer" className="text-purple-300 hover:text-purple-200 underline">GitHub Issues</a> page.
+              If you have any questions about these Terms of Service, please use the{' '}
+              <Link to="/contact" className="text-purple-300 hover:text-purple-200 underline">Contact form</Link>.
+              For public product bugs (not legal or privacy questions), you may also use{' '}
+              <a href="https://github.com/Leftyshields/better-white-elephant/issues" target="_blank" rel="noopener noreferrer" className="text-purple-300 hover:text-purple-200 underline">GitHub Issues</a>.
             </p>
           </section>
         </div>
@@ -152,6 +160,7 @@ export function Terms() {
         </div>
       </div>
     </div>
+    </>
   );
 }
 

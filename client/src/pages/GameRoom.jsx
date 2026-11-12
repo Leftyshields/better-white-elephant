@@ -340,7 +340,7 @@ export function GameRoom({ partyId }) {
             <h1 className="text-5xl font-bold mb-3 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
               Game Over!
             </h1>
-            <p className="text-xl text-slate-300">Time to see what you won and send your gifts!</p>
+            <p className="text-xl text-slate-300">Here&apos;s what you won, and what you need to ship.</p>
           </div>
 
           {/* What You Won Section */}
@@ -493,7 +493,9 @@ export function GameRoom({ partyId }) {
                 {/* Boomerang Badge */}
                 {(party?.config?.returnToStart || state.gameState?.isBoomerangPhase) && (
                   <div className="bg-indigo-500/20 text-indigo-300 text-[10px] uppercase tracking-wider px-2 py-1 rounded-full border border-indigo-500/30">
-                    {state.gameState?.isBoomerangPhase ? '🔄 Boomerang Round!' : '🔄 Boomerang Rule Active'}
+                    {state.gameState?.isBoomerangPhase
+                      ? 'Boomerang round'
+                      : 'Boomerang is on: you can swap even if you already have a gift.'}
                   </div>
                 )}
               </div>
@@ -572,7 +574,7 @@ export function GameRoom({ partyId }) {
               <div className="mt-4 px-4">
                 <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-4">
                   <p className="text-sm font-semibold text-orange-300 mb-2">
-                    🎉 All gifts are frozen! Waiting for admin to end the game.
+                    🎉 All gifts are frozen! Waiting for the host to end the game.
                   </p>
                 </div>
               </div>

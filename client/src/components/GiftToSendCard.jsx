@@ -118,8 +118,8 @@ export function GiftToSendCard({ gift, winnerId, winnerName, userNames, userEmai
           {isSelfWin ? (
             <div className="bg-emerald-500/10 border border-emerald-500/20 backdrop-blur-sm rounded-lg p-6 mt-4 text-center">
               <CheckBadgeIcon className="w-12 h-12 mx-auto mb-2 text-emerald-400" />
-              <p className="text-emerald-400 font-bold text-lg mb-2">You won your own gift!</p>
-              <p className="text-slate-400">No shipping required. You get to keep it!</p>
+              <p className="text-emerald-400 font-bold text-lg mb-2">You won your own gift.</p>
+              <p className="text-slate-400">No shipping needed. You keep it.</p>
             </div>
           ) : (
             /* Shipping Address */
@@ -155,7 +155,7 @@ export function GiftToSendCard({ gift, winnerId, winnerName, userNames, userEmai
                 </>
               ) : (
                 <p className="text-sm text-orange-400 italic font-mono">
-                  ⏳ Winner hasn't provided their shipping address yet. They'll add it soon!
+                  The winner hasn&apos;t added a shipping address yet.
                 </p>
               )}
             </div>

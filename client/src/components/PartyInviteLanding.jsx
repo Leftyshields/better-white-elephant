@@ -150,7 +150,7 @@ export function PartyInviteLanding({ partyId }) {
         <div className="max-w-md w-full bg-slate-900/60 backdrop-blur-xl border border-white/10 shadow-2xl rounded-2xl p-8 text-center">
           <h2 className="text-2xl font-bold mb-4 text-white">Party Not Found</h2>
           <p className="text-slate-400 mb-6">
-            The party you're looking for doesn't exist or may have been deleted.
+            This party isn&apos;t available. It may have been canceled or the link may be wrong.
           </p>
           <Button
             onClick={() => window.location.href = '/'}
@@ -196,10 +196,10 @@ export function PartyInviteLanding({ partyId }) {
 
           {/* Header */}
           <h1 className="text-3xl md:text-4xl font-bold mb-2 text-white relative z-10">
-            You're Invited!
+            You&apos;re invited
           </h1>
           <p className="text-slate-400 mb-8 relative z-10">
-            Join the White Elephant gift exchange
+            Join this virtual White Elephant gift exchange.
           </p>
 
           {/* Party Details */}
@@ -226,12 +226,12 @@ export function PartyInviteLanding({ partyId }) {
             disabled={joining}
             className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-purple-500/20 hover:scale-[1.02] transition-transform disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 text-lg py-3 font-semibold"
           >
-            {joining ? 'Joining...' : user ? 'RSVP Now' : 'Join the Fun'}
+            {joining ? 'Joining...' : 'Join this party'}
           </Button>
 
           {!user && (
             <p className="text-xs text-slate-500 mt-4 relative z-10">
-              You'll be able to choose which account to use
+              You&apos;ll sign in with Google, then you&apos;re in.
             </p>
           )}
         </div>

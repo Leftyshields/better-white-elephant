@@ -1,16 +1,4 @@
 User-agent: *
 Allow: /
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+Sitemap: https://stealorreveal.com/sitemap.xml
