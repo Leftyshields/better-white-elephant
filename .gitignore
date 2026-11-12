@@ -10,6 +10,10 @@ package-lock.json
 .env.local
 .env.*.local
 *.env
+client/.env.ux-preview
+client/.env.ux-preview.local
+scripts/ux-preview/.seed-credentials.local
+scripts/ux-preview/.preview-manifest.json
 
 # Build outputs
 client/dist/

@@ -12,7 +12,14 @@
     "dev:client": "cd client && npm run dev",
     "dev:server": "cd server && npm run dev",
     "build:client": "cd client && npm run build",
-    "build:functions": "cd functions && npm run build"
+    "build:functions": "cd functions && npm run build",
+    "test:ux-preview-seed": "node --test scripts/ux-preview/seed.test.mjs",
+    "test:ux-preview-guard": "node scripts/ux-preview/verify-production-bundle.mjs",
+    "ux-preview:deploy": "bash scripts/ux-preview/deploy-preview.sh",
+    "ux-preview:seed": "node scripts/ux-preview/seed.mjs"
+  },
+  "devDependencies": {
+    "firebase-admin": "^12.7.0"
   },
   "keywords": [
     "white-elephant",

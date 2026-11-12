@@ -8,9 +8,19 @@ import { useAuth } from '../hooks/useAuth.js';
 import { usePartyModal } from '../contexts/PartyModalContext.jsx';
 import { useSound } from '../contexts/SoundContext.jsx';
 import { useParty } from '../hooks/useParty.js';
+import { UX_PREVIEW_ENABLED } from '../preview/previewFlag.js';
 
 export function Header() {
   const { user, signOut, signInWithGoogle } = useAuth();
+  const [showPreviewSignIn, setShowPreviewSignIn] = useState(false);
+  const [PreviewSignIn, setPreviewSignIn] = useState(null);
+
+  useEffect(() => {
+    if (!UX_PREVIEW_ENABLED || !showPreviewSignIn || PreviewSignIn) return;
+    import('../preview/PreviewChrome.jsx').then((module) => {
+      setPreviewSignIn(() => module.UxPreviewSignIn);
+    });
+  }, [showPreviewSignIn, PreviewSignIn]);
   const { setShowModal } = usePartyModal();
   const { isMuted, toggleMute } = useSound();
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -207,6 +217,19 @@ export function Header() {
                   </div>
                 )}
               </>
+              ) : UX_PREVIEW_ENABLED ? (
+                <>
+                  <button
+                    onClick={() => setShowPreviewSignIn(true)}
+                    className="text-sm text-slate-300 font-medium hover:text-white transition-colors md:flex md:items-center md:gap-2 md:px-4 md:py-2 md:bg-amber-500/20 md:backdrop-blur-md md:text-amber-100 md:border md:border-amber-500/40 md:rounded-md md:hover:bg-amber-500/30"
+                  >
+                    <span className="md:hidden">Preview login</span>
+                    <span className="hidden md:inline">Preview sign in</span>
+                  </button>
+                  {showPreviewSignIn && PreviewSignIn ? (
+                    <PreviewSignIn onClose={() => setShowPreviewSignIn(false)} />
+                  ) : null}
+                </>
               ) : (
                 <button
                   onClick={signInWithGoogle}

@@ -1,5 +1,6 @@
 {
   "projects": {
-    "default": "better-white-elephant"
+    "default": "better-white-elephant",
+    "ux-preview": "better-white-elephant-ux-preview"
   }
 }
