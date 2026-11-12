@@ -3,7 +3,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { dedupeOperationsByDocumentPath } from './dataRetentionBatch.js';
+import { dedupeOperationsByDocumentPath, getAllDocumentsFromQuery } from './dataRetentionBatch.js';
 import {
   MS_PER_DAY,
   collectEndedPartiesBeforeCutoff,
@@ -11,6 +11,7 @@ import {
   isEndedPartyPastRetention,
   legacyAddressCleanupIterator,
   partiesForAddressCleanupIterable,
+  shouldDeleteGiftForRetention,
   shouldRemoveShippingAddress,
   userInAddressBlockingParty,
 } from './dataRetentionLogic.js';
@@ -169,4 +170,122 @@ test('gift-link phase can run after address iterable completes (control-flow sta
   }
   giftStepRan = true;
   assert.equal(giftStepRan, true);
+});
+
+test('gift: full delete when partyEndedAt is past 30-day cutoff', () => {
+  assert.equal(
+    shouldDeleteGiftForRetention({ partyEndedAt: FORTY_DAYS_AGO }, THIRTY_DAYS_AGO, undefined),
+    true,
+  );
+});
+
+test('gift: invalid partyEndedAt is not treated as expired', () => {
+  assert.equal(
+    shouldDeleteGiftForRetention(
+      { partyEndedAt: { seconds: 'not-a-number' }, partyId: 'p' },
+      THIRTY_DAYS_AGO,
+      { status: 'ACTIVE', updatedAt: TWENTY_DAYS_AGO },
+    ),
+    false,
+  );
+});
+
+test('gift: not deleted when partyEndedAt is within 30 days', () => {
+  assert.equal(
+    shouldDeleteGiftForRetention(
+      { partyEndedAt: TWENTY_DAYS_AGO, partyId: 'p' },
+      THIRTY_DAYS_AGO,
+      { status: 'ENDED', endedAt: TWENTY_DAYS_AGO },
+    ),
+    false,
+  );
+});
+
+test('gift: deleted via ENDED party when partyEndedAt missing', () => {
+  assert.equal(
+    shouldDeleteGiftForRetention(
+      { partyId: 'p' },
+      THIRTY_DAYS_AGO,
+      { status: 'ENDED', endedAt: FORTY_DAYS_AGO },
+    ),
+    true,
+  );
+});
+
+test('gift: not deleted for LOBBY or ACTIVE parties', () => {
+  assert.equal(
+    shouldDeleteGiftForRetention(
+      { partyId: 'p' },
+      THIRTY_DAYS_AGO,
+      { status: 'LOBBY', updatedAt: FORTY_DAYS_AGO },
+    ),
+    false,
+  );
+  assert.equal(
+    shouldDeleteGiftForRetention(
+      { partyId: 'p' },
+      THIRTY_DAYS_AGO,
+      { status: 'ACTIVE', updatedAt: TWENTY_DAYS_AGO },
+    ),
+    false,
+  );
+});
+
+test('gift: deleted when party document is missing (orphan)', () => {
+  assert.equal(
+    shouldDeleteGiftForRetention({ partyId: 'missing' }, THIRTY_DAYS_AGO, null),
+    true,
+  );
+});
+
+test('regression: unpaginated limit(500) would miss expired gifts on page 2', async () => {
+  const totalGifts = 501;
+  const docsByPage = [];
+  for (let i = 0; i < totalGifts; i += 1) {
+    const pageIndex = Math.floor(i / 500);
+    if (!docsByPage[pageIndex]) docsByPage[pageIndex] = [];
+    docsByPage[pageIndex].push({
+      id: `gift-${i}`,
+      data: () => ({
+        partyEndedAt: i >= 500 ? FORTY_DAYS_AGO : TWENTY_DAYS_AGO,
+      }),
+    });
+  }
+
+  const baseQuery = {
+    limit(pageSize) {
+      let startAfterDoc = null;
+      const query = {
+        startAfter(doc) {
+          startAfterDoc = doc;
+          return query;
+        },
+        async get() {
+          const pageIdx = startAfterDoc == null ? 0 : 1;
+          return { docs: docsByPage[pageIdx] ?? [] };
+        },
+      };
+      return query;
+    },
+  };
+
+  const allDocs = await getAllDocumentsFromQuery(baseQuery, 500);
+  assert.equal(allDocs.length, 501);
+
+  const toDelete = allDocs.filter((doc) =>
+    shouldDeleteGiftForRetention(doc.data(), THIRTY_DAYS_AGO, undefined),
+  );
+  assert.equal(toDelete.length, 1);
+  assert.equal(toDelete[0].id, 'gift-500');
+});
+
+test('regression: field-only url delete would leave title and partyId (full doc delete required)', () => {
+  const gift = {
+    partyEndedAt: FORTY_DAYS_AGO,
+    title: 'Widget',
+    partyId: 'party-old',
+    url: 'https://example.com/gift',
+  };
+  assert.equal(shouldDeleteGiftForRetention(gift, THIRTY_DAYS_AGO, undefined), true);
+  assert.ok(gift.title, 'stale job left non-url fields indefinitely');
 });

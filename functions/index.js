@@ -13,6 +13,7 @@ import {
   isEndedPartyPastRetention,
   partiesForAddressCleanupIterable,
   partyStatusBlocksAddressDeletion,
+  shouldDeleteGiftForRetention,
   shouldRemoveShippingAddress,
 } from './dataRetentionLogic.js';
 import {
@@ -519,47 +520,29 @@ export const dataRetentionCleanup = onSchedule(
         stats.deletedShippingAddresses = dedupedAddressOperations.length;
       }
 
-      // 3. Delete gift links: 30 days after game ends
-      // Find gifts from parties that ended more than 30 days ago
-      // Note: For backward compatibility, also check gifts without partyEndedAt by looking up party
-      const allGiftsForCleanup = await db.collection('gifts')
-        .limit(500)
-        .get();
-
-      const expiredGifts = [];
-      for (const giftDoc of allGiftsForCleanup.docs) {
+      // 3. Delete gift documents 30 days after game ends (full doc, not url-only)
+      const allGiftDocs = await getAllDocumentsFromQuery(db.collection('gifts'));
+      const giftDeleteOperations = [];
+      for (const giftDoc of allGiftDocs) {
         const gift = giftDoc.data();
-        const partyEndedAt = gift.partyEndedAt;
+        const partyEndedAtExpired =
+          gift.partyEndedAt && gift.partyEndedAt <= thirtyDaysAgoTimestamp;
 
-        if (partyEndedAt && partyEndedAt <= thirtyDaysAgoTimestamp) {
-          expiredGifts.push(giftDoc);
-        } else if (!partyEndedAt && gift.partyId) {
-          // Backward compatibility: check party status
+        let party = undefined;
+        if (!partyEndedAtExpired && gift.partyId) {
           const partyDoc = await db.collection('parties').doc(gift.partyId).get();
-          if (partyDoc.exists) {
-            const party = partyDoc.data();
-            if (party.status === 'ENDED') {
-              const partyEnded = party.endedAt || party.updatedAt;
-              if (partyEnded && partyEnded <= thirtyDaysAgoTimestamp) {
-                expiredGifts.push(giftDoc);
-              }
-            }
-          }
+          party = partyDoc.exists ? partyDoc.data() : null;
+        }
+
+        if (shouldDeleteGiftForRetention(gift, thirtyDaysAgoTimestamp, party)) {
+          giftDeleteOperations.push({ type: 'delete', ref: giftDoc.ref });
         }
       }
-
-      const giftBatch = db.batch();
-      expiredGifts.forEach((doc) => {
-        // Only delete the gift link, keep other gift data
-        giftBatch.update(doc.ref, {
-          url: admin.firestore.FieldValue.delete(),
-          scrapedData: admin.firestore.FieldValue.delete(),
-        });
-        stats.deletedGiftLinks++;
-      });
-      if (expiredGifts.length > 0) {
-        await giftBatch.commit();
-        console.log(`✅ Deleted ${stats.deletedGiftLinks} expired gift links`);
+      const dedupedGiftDeletes = dedupeOperationsByDocumentPath(giftDeleteOperations);
+      if (dedupedGiftDeletes.length > 0) {
+        await commitOperationsInBatches(db, dedupedGiftDeletes);
+        stats.deletedGiftLinks = dedupedGiftDeletes.length;
+        console.log(`✅ Deleted ${stats.deletedGiftLinks} expired gift documents`);
       }
 
       // 4. Delete ENDED parties 30 days after game ends (participants + pendingInvites)
