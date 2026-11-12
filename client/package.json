@@ -19,27 +19,27 @@
     "@heroicons/react": "^2.2.0",
     "@tanstack/react-query": "^5.90.12",
     "canvas-confetti": "^1.9.4",
-    "firebase": "^10.7.1",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-helmet-async": "^2.0.4",
-    "react-router-dom": "^6.21.1",
+    "firebase": "^13.2.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-helmet-async": "^3.0.0",
+    "react-router-dom": "^7.18.5",
     "socket.io-client": "^4.6.1",
-    "framer-motion": "^10.16.16"
+    "framer-motion": "^14.11.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.40.0",
-    "@testing-library/jest-dom": "^6.1.5",
-    "@testing-library/react": "^14.1.2",
-    "@types/react": "^18.2.43",
-    "@types/react-dom": "^18.2.17",
-    "@vitejs/plugin-react": "^4.2.1",
-    "@vitest/ui": "^1.0.4",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "@vitest/ui": "^5.1.0",
     "autoprefixer": "^10.4.16",
-    "jsdom": "^23.0.1",
+    "jsdom": "^31.0.0",
     "postcss": "^8.4.32",
-    "tailwindcss": "^3.3.6",
-    "vite": "^5.0.8",
-    "vitest": "^1.0.4"
+    "tailwindcss": "^4.3.5",
+    "vite": "^8.3.7",
+    "vitest": "^5.1.0"
   }
 }
