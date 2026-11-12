@@ -102,7 +102,6 @@ export function Privacy() {
               <li><strong>Game and Party Data:</strong> Auto-deletes 30 days after the game ends.</li>
               <li><strong>Fulfillment Information (Shipping Addresses):</strong> Auto-deletes 30 days after the game ends.</li>
               <li><strong>Gift Links:</strong> Auto-deletes 30 days after the game ends.</li>
-              <li><strong>Analytics and Logs:</strong> Retained for 90 days, then automatically deleted</li>
               <li><strong>Support Communications:</strong> Retained for 1 year after the last communication</li>
             </ul>
             <p className="text-slate-300 leading-relaxed mt-4">

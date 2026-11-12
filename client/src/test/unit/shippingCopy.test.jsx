@@ -57,6 +57,15 @@ describe('Copywriter shipping / retention strings', () => {
     );
   });
 
+  it('Privacy Data Retention: no 90-day analytics auto-delete bullet; Service Providers analytics sharing remains', () => {
+    expect(privacySource).not.toContain(
+      '<strong>Analytics and Logs:</strong> Retained for 90 days, then automatically deleted',
+    );
+    expect(privacySource).toContain(
+      'such as hosting, analytics, and email delivery.',
+    );
+  });
+
   it('does not retain removed email / sharing / 1-year claims', () => {
     const combined = [rulesSource, profileSource, privacySource, AUTO_PILOT_BODY].join('\n');
     expect(combined).not.toMatch(/we email/i);
