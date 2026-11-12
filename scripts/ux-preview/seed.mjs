@@ -17,9 +17,30 @@ import {
   PARTY_IDS,
   buildSeedPlan,
 } from './seed-lib.mjs';
-
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '../..');
+
+export const PRODUCTION_PROJECT_ID = 'better-white-elephant';
+export const UX_PREVIEW_PROJECT_ID = 'better-white-elephant-ux-preview';
+
+/** Fail closed: preview project only without both emulator hosts for any other project id. */
+export function assertSafeSeedProject(projectId, env = process.env) {
+  if (projectId === UX_PREVIEW_PROJECT_ID) {
+    return;
+  }
+  const authEmulator = Boolean(env.FIREBASE_AUTH_EMULATOR_HOST);
+  const firestoreEmulator = Boolean(env.FIRESTORE_EMULATOR_HOST);
+  if (!authEmulator || !firestoreEmulator) {
+    if (projectId === PRODUCTION_PROJECT_ID) {
+      throw new Error(
+        'Refusing to seed production project better-white-elephant. Set FIREBASE_AUTH_EMULATOR_HOST and FIRESTORE_EMULATOR_HOST, or use project better-white-elephant-ux-preview.'
+      );
+    }
+    throw new Error(
+      `Refusing to seed project ${projectId} without both FIREBASE_AUTH_EMULATOR_HOST and FIRESTORE_EMULATOR_HOST.`
+    );
+  }
+}
 
 function loadProjectId() {
   if (process.env.GCLOUD_PROJECT || process.env.FIREBASE_PROJECT_ID) {
@@ -142,10 +163,14 @@ async function applySeed(auth, db, password) {
 async function main() {
   const projectId = loadProjectId();
   const password = loadPassword();
-  const usingEmulator = Boolean(process.env.FIREBASE_AUTH_EMULATOR_HOST);
+  const usingEmulator =
+    Boolean(process.env.FIREBASE_AUTH_EMULATOR_HOST) &&
+    Boolean(process.env.FIRESTORE_EMULATOR_HOST);
 
-  if (!usingEmulator && projectId === 'better-white-elephant') {
-    console.error('Refusing to seed production project better-white-elephant.');
+  try {
+    assertSafeSeedProject(projectId, process.env);
+  } catch (error) {
+    console.error(error.message);
     process.exit(1);
   }
 
@@ -170,7 +195,12 @@ async function main() {
   console.log(`Wrote ${manifestPath}`);
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+const isDirectRun =
+  process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
+
+if (isDirectRun) {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}

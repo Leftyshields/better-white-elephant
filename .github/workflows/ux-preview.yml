@@ -72,8 +72,21 @@ jobs:
             --project better-white-elephant-ux-preview \
             --expires 30d
 
+      - name: Detect preview seed credentials
+        id: seed_credentials
+        env:
+          UX_PREVIEW_SEED_PASSWORD: ${{ secrets.UX_PREVIEW_SEED_PASSWORD }}
+          UX_PREVIEW_FIREBASE_SERVICE_ACCOUNT: ${{ secrets.UX_PREVIEW_FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -n "$UX_PREVIEW_SEED_PASSWORD" ] && [ -n "$UX_PREVIEW_FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Preview seed skipped: UX_PREVIEW_SEED_PASSWORD and/or UX_PREVIEW_FIREBASE_SERVICE_ACCOUNT not set."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Seed preview Firestore and Auth users
-        if: ${{ secrets.UX_PREVIEW_SEED_PASSWORD != '' && secrets.UX_PREVIEW_FIREBASE_SERVICE_ACCOUNT != '' }}
+        if: steps.seed_credentials.outputs.present == 'true'
         env:
           UX_PREVIEW_SEED_PASSWORD: ${{ secrets.UX_PREVIEW_SEED_PASSWORD }}
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/ux-preview-sa.json
