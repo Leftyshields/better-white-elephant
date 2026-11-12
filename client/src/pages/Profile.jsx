@@ -142,8 +142,10 @@ export function Profile() {
 
       if (hasShippingFields) {
         setShowSavedAddressNeedsConsentNote(!shareConsent);
+        setHadGrantedSenderShareConsent(shareConsent);
       } else {
         setShowSavedAddressNeedsConsentNote(false);
+        setHadGrantedSenderShareConsent(false);
       }
 
       setSuccessMessage('Profile updated successfully!');
@@ -262,13 +264,7 @@ export function Profile() {
                 type="checkbox"
                 className="mt-1"
                 checked={shareConsent}
-                onChange={(e) => {
-                  const checked = e.target.checked;
-                  if (checked) {
-                    setHadGrantedSenderShareConsent(true);
-                  }
-                  setShareConsent(checked);
-                }}
+                onChange={(e) => setShareConsent(e.target.checked)}
               />
               <span>{SHIPPING_ADDRESS_SENDER_SHARE_CONSENT_LABEL}</span>
             </label>

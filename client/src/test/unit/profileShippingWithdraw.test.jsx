@@ -139,6 +139,43 @@ describe('Profile consent withdrawal and address deletion', () => {
     expect(screen.queryByText(SHIPPING_ADDRESS_CONSENT_WITHDRAW_PENDING_PROFILE)).not.toBeInTheDocument();
   });
 
+  it('does not show withdraw-pending when consent was never saved (check then uncheck)', async () => {
+    mockLoadedProfile({ address: undefined, consentAt: undefined });
+    await renderProfile();
+
+    fireEvent.change(screen.getByPlaceholderText('Enter your full name'), { target: { value: completeAddress.name } });
+    fireEvent.change(screen.getByPlaceholderText('123 Main St'), { target: { value: completeAddress.street } });
+    fireEvent.change(screen.getByPlaceholderText('City'), { target: { value: completeAddress.city } });
+    fireEvent.change(screen.getByPlaceholderText('State'), { target: { value: completeAddress.state } });
+    fireEvent.change(screen.getByPlaceholderText('12345'), { target: { value: completeAddress.zip } });
+    fireEvent.change(screen.getByPlaceholderText('Country'), { target: { value: completeAddress.country } });
+
+    const consentBox = await screen.findByRole('checkbox');
+    fireEvent.click(consentBox);
+    fireEvent.click(consentBox);
+
+    expect(screen.queryByText(SHIPPING_ADDRESS_CONSENT_WITHDRAW_PENDING_PROFILE)).not.toBeInTheDocument();
+  });
+
+  it('shows withdraw-pending after save with consent then uncheck before next save', async () => {
+    mockLoadedProfile({ address: completeAddress, consentAt: undefined });
+    await renderProfile();
+
+    const consentBox = await screen.findByRole('checkbox');
+    fireEvent.click(consentBox);
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(updateDoc).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(screen.queryByText(SHIPPING_ADDRESS_SAVED_NEEDS_CONSENT_PROFILE)).not.toBeInTheDocument();
+    });
+
+    fireEvent.click(consentBox);
+    expect(screen.getByText(SHIPPING_ADDRESS_CONSENT_WITHDRAW_PENDING_PROFILE)).toBeInTheDocument();
+  });
+
   it('shows withdraw-pending note after uncheck and hides it when consent is re-checked before save', async () => {
     mockLoadedProfile({ address: completeAddress, consentAt: new Date() });
     await renderProfile();
