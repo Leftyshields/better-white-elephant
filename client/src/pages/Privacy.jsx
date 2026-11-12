@@ -48,7 +48,7 @@ export function Privacy() {
             <ul className="list-disc pl-6 space-y-2 text-slate-300">
               <li><strong>Account Information:</strong> Name, email address, and profile information when you create an account</li>
               <li><strong>Gift Links:</strong> URLs to gift items you submit for exchange</li>
-              <li><strong>Fulfillment Information:</strong> Shipping addresses you provide for gift fulfillment (only shared with the person assigned to send you a gift)</li>
+              <li><strong>Fulfillment Information:</strong> Shipping addresses you provide for gift fulfillment. The person mailing your gift uses this address to ship. It auto-deletes 30 days after the game ends.</li>
               <li><strong>Game Data:</strong> Information about your participation in gift exchange games, including turn actions and game history</li>
             </ul>
 
@@ -85,7 +85,7 @@ export function Privacy() {
               We do not sell your personal information. We may share your information in the following circumstances:
             </p>
             <ul className="list-disc pl-6 space-y-2 text-slate-300">
-              <li><strong>With Other Participants:</strong> Your name and email may be visible to other participants in the same gift exchange party. Shipping addresses are only shared with the person assigned to send you a gift.</li>
+              <li><strong>With Other Participants:</strong> Your name and email may be visible to other participants in the same gift exchange party. After the game, the person mailing your gift uses your shipping address to ship. That address auto-deletes 30 days after the game ends.</li>
               <li><strong>Service Providers:</strong> We may share information with third-party service providers who perform services on our behalf, such as hosting, analytics, and email delivery.</li>
               <li><strong>Legal Requirements:</strong> We may disclose information if required by law or in response to valid requests by public authorities.</li>
               <li><strong>Business Transfers:</strong> In the event of a merger, acquisition, or sale of assets, your information may be transferred as part of that transaction.</li>
@@ -99,9 +99,9 @@ export function Privacy() {
             </p>
             <ul className="list-disc pl-6 space-y-2 text-slate-300">
               <li><strong>Account Information:</strong> Retained while your account is active and for 90 days after account deletion, unless you request immediate deletion</li>
-              <li><strong>Game and Party Data:</strong> Retained for 1 year after the game ends, then automatically deleted</li>
-              <li><strong>Fulfillment Information (Shipping Addresses):</strong> Deleted immediately after gift fulfillment is confirmed or 30 days after game ends, whichever comes first</li>
-              <li><strong>Gift Links:</strong> Retained for the duration of the game and 30 days after game ends</li>
+              <li><strong>Game and Party Data:</strong> Auto-deletes 30 days after the game ends.</li>
+              <li><strong>Fulfillment Information (Shipping Addresses):</strong> Auto-deletes 30 days after the game ends.</li>
+              <li><strong>Gift Links:</strong> Auto-deletes 30 days after the game ends.</li>
               <li><strong>Analytics and Logs:</strong> Retained for 90 days, then automatically deleted</li>
               <li><strong>Support Communications:</strong> Retained for 1 year after the last communication</li>
             </ul>

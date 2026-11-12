@@ -29,7 +29,11 @@ describe('landingMarketingCopy', () => {
     expect(setup?.body).not.toMatch(/scraping/i);
   });
 
-  it('does not claim the product emails shipping addresses (interim until Copywriter strings)', () => {
+  it('Auto-Pilot Logistics uses Copywriter 30-day auto-delete copy', () => {
+    const autopilot = FEATURE_CARDS.find((c) => c.title === 'Auto-Pilot Logistics');
+    expect(autopilot?.body).toBe(
+      'Before the game, you add a shipping address so the person mailing your gift can ship. It auto-deletes 30 days after the game ends.',
+    );
     const featureCopy = FEATURE_CARDS.map((c) => c.body).join(' ');
     expect(featureCopy).not.toMatch(/we email/i);
     expect(featureCopy).not.toMatch(/nobody else sees it/i);

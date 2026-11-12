@@ -100,7 +100,7 @@ export function RulesContent({ pageHeading }) {
               <h2 className="text-2xl font-bold text-white">After the game</h2>
             </div>
             <p className="text-slate-300 leading-relaxed">
-              Before the game, add a shipping address in your profile. After the game, the person mailing your gift uses it to ship.
+              Before the game, add a shipping address in your profile so the person mailing your gift can ship. It auto-deletes 30 days after the game ends.
             </p>
           </div>
         </div>

@@ -157,7 +157,7 @@ export function Profile() {
         <div className="border-t border-white/10 pt-6">
           <h2 className="text-xl font-bold mb-4 text-white">Shipping Address</h2>
           <p className="text-sm text-slate-400 mb-4">
-            Add this before the game. After the game, the person mailing your gift uses it to ship.
+            Add this before the game so the person mailing your gift can ship. It auto-deletes 30 days after the game ends.
           </p>
 
           <div className="space-y-4">
