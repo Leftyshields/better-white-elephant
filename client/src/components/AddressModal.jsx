@@ -13,6 +13,19 @@ import {
   SHIPPING_ADDRESS_SENDER_SHARE_CONSENT_LABEL,
 } from '../utils/shippingAddressCopy.js';
 
+const ADDRESS_FIELD_KEYS = ['name', 'street', 'city', 'state', 'zip', 'country'];
+
+function hasCompleteShippingFields(address) {
+  return ADDRESS_FIELD_KEYS.every((key) => Boolean(address[key]?.trim()));
+}
+
+function trimShippingAddress(address) {
+  return ADDRESS_FIELD_KEYS.reduce((acc, key) => {
+    acc[key] = address[key]?.trim() ?? '';
+    return acc;
+  }, {});
+}
+
 export function AddressModal({ isOpen, onClose, giftTitle }) {
   const { user } = useAuth();
   const [address, setAddress] = useState({
@@ -63,10 +76,16 @@ export function AddressModal({ isOpen, onClose, giftTitle }) {
       return;
     }
 
+    if (!hasCompleteShippingFields(address)) {
+      return;
+    }
+
+    const trimmedAddress = trimShippingAddress(address);
+
     setSaving(true);
     try {
       await updateDoc(doc(db, 'users', user.uid), {
-        shippingAddress: address,
+        shippingAddress: trimmedAddress,
         shippingAddressSenderShareConsentAt: new Date(),
         updatedAt: new Date(),
       });
@@ -88,6 +107,8 @@ export function AddressModal({ isOpen, onClose, giftTitle }) {
       setSaving(false);
     }
   };
+
+  const canSaveAddress = hasCompleteShippingFields(address) && shareConsent;
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Enter Shipping Address">
@@ -160,7 +181,7 @@ export function AddressModal({ isOpen, onClose, giftTitle }) {
           <Button variant="secondary" onClick={onClose} type="button">
             Cancel
           </Button>
-          <Button type="submit" disabled={saving || !shareConsent}>
+          <Button type="submit" disabled={saving || !canSaveAddress}>
             {saving ? 'Saving...' : 'Save Address'}
           </Button>
         </div>

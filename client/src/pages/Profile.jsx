@@ -109,7 +109,7 @@ export function Profile() {
           const loadedHadCompleteAddress = hasCompleteShippingFields(loadedAddress);
           const loadedHadConsent = Boolean(userData.shippingAddressSenderShareConsentAt);
           setShowSavedAddressNeedsConsentNote(loadedHadCompleteAddress && !loadedHadConsent);
-          setHadPersistedShippingAddress(loadedHadCompleteAddress);
+          setHadPersistedShippingAddress(Boolean(userData.shippingAddress));
           rememberPersistedCompleteAddress(loadedAddress);
           setHadGrantedSenderShareConsent(loadedHadConsent);
         } else {
@@ -139,7 +139,7 @@ export function Profile() {
   }, [user, authLoading, navigate]);
 
   const persistConsentWithdrawOnly = async () => {
-    if (!user || !persistedStoredAddress) return;
+    if (!user) return;
 
     setSaving(true);
     setSuccessMessage('');
@@ -158,7 +158,9 @@ export function Profile() {
 
       setHadGrantedSenderShareConsent(false);
       setShowSavedAddressNeedsConsentNote(false);
-      setAddress({ ...persistedStoredAddress });
+      if (persistedStoredAddress) {
+        setAddress({ ...persistedStoredAddress });
+      }
       setShowIncompleteShareOffMessage(true);
     } catch (error) {
       console.error('Error updating profile:', error);

@@ -260,6 +260,29 @@ test('assigned sender is denied if winner has address but no consent', async () 
   assert.match(result.error, /consent/i);
 });
 
+test('denies when shipping address street is whitespace-only after trim', async () => {
+  const db = makeFirestoreMock({
+    users: {
+      [WINNER_ID]: {
+        displayName: 'Winner',
+        email: 'winner@example.com',
+        shippingAddress: {
+          ...sampleAddress,
+          street: '   ',
+        },
+        shippingAddressSenderShareConsentAt: new Date('2026-01-01T00:00:00Z'),
+      },
+    },
+  });
+  const result = await fetchWinnerShippingAddressForSender(
+    db,
+    { callerUid: SENDER_ID, partyId: PARTY_ID, giftId: GIFT_ID },
+    defaultDeps(),
+  );
+  assert.equal(result.status, 404);
+  assert.match(result.error, /address/i);
+});
+
 test('response does not include email or other profile fields', async () => {
   const db = makeFirestoreMock();
   const result = await fetchWinnerShippingAddressForSender(

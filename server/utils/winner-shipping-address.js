@@ -9,8 +9,12 @@ function pickShippingAddress(raw) {
   }
   const picked = {};
   for (const key of SHIPPING_ADDRESS_KEYS) {
-    if (raw[key] != null && raw[key] !== '') {
-      picked[key] = String(raw[key]);
+    if (raw[key] == null) {
+      continue;
+    }
+    const trimmed = String(raw[key]).trim();
+    if (trimmed) {
+      picked[key] = trimmed;
     }
   }
   const hasStreet = picked.street && picked.city;

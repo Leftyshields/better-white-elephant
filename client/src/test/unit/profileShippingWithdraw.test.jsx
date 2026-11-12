@@ -311,6 +311,55 @@ describe('Profile consent withdrawal and address deletion', () => {
     expect(screen.getByDisplayValue(completeAddress.zip)).toBeInTheDocument();
   });
 
+  it('whitespace ZIP leftover: uncheck plus Save withdraws consent without success banner', async () => {
+    const whitespaceZipAddress = { ...completeAddress, zip: ' ' };
+    mockLoadedProfile({ address: whitespaceZipAddress, consentAt: new Date() });
+    await renderProfile();
+
+    fireEvent.click(await screen.findByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(updateDoc).toHaveBeenCalled();
+    });
+
+    const payload = updateDoc.mock.calls[0][1];
+    expect(payload.shippingAddressSenderShareConsentAt).toEqual(deleteField());
+    expect(payload.shippingAddress).toBeUndefined();
+    expect(screen.getByText(SHIPPING_ADDRESS_INCOMPLETE_SHARE_OFF_PROFILE)).toBeInTheDocument();
+    expect(screen.queryByText(PROFILE_SAVE_SUCCESS_MESSAGE)).not.toBeInTheDocument();
+  });
+
+  it('whitespace ZIP leftover: clear all fields shows delete confirm and deletes on confirm', async () => {
+    const whitespaceZipAddress = { ...completeAddress, zip: ' ' };
+    mockLoadedProfile({ address: whitespaceZipAddress, consentAt: new Date() });
+    await renderProfile();
+
+    fireEvent.change(screen.getByPlaceholderText('Enter your full name'), { target: { value: '' } });
+    fireEvent.change(screen.getByPlaceholderText('123 Main St'), { target: { value: '' } });
+    fireEvent.change(screen.getByPlaceholderText('City'), { target: { value: '' } });
+    fireEvent.change(screen.getByPlaceholderText('State'), { target: { value: '' } });
+    fireEvent.change(screen.getByPlaceholderText('12345'), { target: { value: ' ' } });
+    fireEvent.change(screen.getByPlaceholderText('Country'), { target: { value: '' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(SHIPPING_ADDRESS_DELETE_CONFIRM_PROFILE)).toBeInTheDocument();
+    });
+    expect(updateDoc).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: SHIPPING_ADDRESS_DELETE_CONFIRM_ACTION_PROFILE }));
+
+    await waitFor(() => {
+      expect(updateDoc).toHaveBeenCalledTimes(1);
+    });
+
+    const payload = updateDoc.mock.calls[0][1];
+    expect(payload.shippingAddress).toEqual(deleteField());
+    expect(payload.shippingAddressSenderShareConsentAt).toEqual(deleteField());
+  });
+
   it('same session: save new address then clear all fields shows confirm and deletes', async () => {
     mockLoadedProfile({ address: undefined, consentAt: undefined });
     await renderProfile();

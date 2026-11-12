@@ -60,6 +60,7 @@ describe('Profile shipping UX must-fixes', () => {
     expect(profile).toContain('areAllShippingFieldsEmpty');
     expect(profile).toContain('showAddressIncompleteError');
     expect(profile).toContain('setHadPersistedShippingAddress(true)');
+    expect(profile).toMatch(/setHadPersistedShippingAddress\(Boolean\(userData\.shippingAddress\)\)/);
     expect(profile).toContain('persistConsentWithdrawOnly');
   });
 });
