@@ -313,12 +313,7 @@ export class GameEngine {
         const nextPlayer = this.findNextValidPlayer();
         
         if (nextPlayer) {
-          // Update currentTurnIndex to match the found player's position
-          const nextIndex = this.turnQueue.indexOf(nextPlayer);
-          if (nextIndex >= 0) {
-            this.currentTurnIndex = nextIndex;
-          }
-          // Reset turn action for next player
+          // findNextValidPlayer sets currentTurnIndex to the snake-draft slot
           this.turnAction.set(nextPlayer, null);
         } else {
           // No valid player found - check if game should end
@@ -716,7 +711,8 @@ export class GameEngine {
     const isBoomerangPhase = this.isBoomerangPhase || 
       (this.currentTurnIndex >= (this.turnOrder?.length || 0));
     
-    let searchIndex = (this.currentTurnIndex || 0) + 1;
+    // currentTurnIndex was already advanced by the caller (pickGift / endTurn)
+    let searchIndex = this.currentTurnIndex || 0;
     const maxIterations = this.turnQueue.length; // Prevent infinite loops
     
     // Check if this is the bookend turn in Standard mode (last index, Player 1 goes again)
@@ -734,6 +730,8 @@ export class GameEngine {
       
       // In boomerang phase, players WITH gifts can act (swap), so don't skip them
       if (isBoomerangPhase) {
+        // Pin index to this queue slot (duplicate player IDs must not use indexOf)
+        this.currentTurnIndex = searchIndex;
         return candidatePlayerId;
       }
       
@@ -910,12 +908,7 @@ export class GameEngine {
         const nextPlayer = this.findNextValidPlayer();
         
         if (nextPlayer) {
-          // Update currentTurnIndex to match the found player's position
-          const nextIndex = this.turnQueue.indexOf(nextPlayer);
-          if (nextIndex >= 0) {
-            this.currentTurnIndex = nextIndex;
-          }
-          // Reset turn action for next player
+          // findNextValidPlayer sets currentTurnIndex to the snake-draft slot
           this.turnAction.set(nextPlayer, null);
         } else {
           // No valid player found - check if game should end
