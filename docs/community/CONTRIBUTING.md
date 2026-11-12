@@ -38,7 +38,7 @@ Feature suggestions are welcome! Open an issue with:
 
 ### Development Setup
 
-See the [README.md](./README.md) for setup instructions.
+See the [README.md](../../README.md) for setup instructions.
 
 ### Questions?
 
