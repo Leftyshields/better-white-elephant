@@ -321,6 +321,10 @@ export async function endBotTurn(partyId, io) {
     
     // Ensure partyId is set
     gameState.partyId = partyId;
+
+    if (gameState.phase === 'ENDED') {
+      return;
+    }
     
     if (gameState.phase !== 'ACTIVE') {
       return;
@@ -403,6 +407,12 @@ export async function endBotTurn(partyId, io) {
       if (giftsForRetentionSnapshot.docs.length > 0) {
         await giftRetentionBatch.commit();
       }
+
+      finalState.state.finalOwnership = finalOwnership;
+      finalState.state.config = gameState.config;
+      await saveGameState(partyId, finalState.state);
+      const { saveShippingFulfillmentSnapshot } = await import('./shipping-fulfillment-snapshot.js');
+      await saveShippingFulfillmentSnapshot(partyId, finalOwnership, db);
       
       io.to(`party:${partyId}`).emit('game-ended', finalState);
     } else {

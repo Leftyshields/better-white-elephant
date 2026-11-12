@@ -5,39 +5,39 @@
 import { useState, useEffect } from 'react';
 import { Modal } from './ui/Modal.jsx';
 import { Button } from './ui/Button.jsx';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../utils/firebase.js';
+import { fetchWinnerShippingAddress } from '../utils/api.js';
+import { SHIPPING_ADDRESS_WINNER_NOT_SHARED_VIEW_MODAL } from '../utils/shippingAddressCopy.js';
 
-export function ShippingAddressViewModal({ isOpen, onClose, winnerId, winnerName, giftTitle }) {
+export function ShippingAddressViewModal({ isOpen, onClose, partyId, giftId, winnerName, giftTitle }) {
   const [address, setAddress] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [unavailable, setUnavailable] = useState(false);
 
   useEffect(() => {
     const fetchAddress = async () => {
-      if (!isOpen || !winnerId) {
+      if (!isOpen || !partyId || !giftId) {
         setAddress(null);
+        setUnavailable(false);
         return;
       }
 
       setLoading(true);
+      setUnavailable(false);
       try {
-        const userDoc = await getDoc(doc(db, 'users', winnerId));
-        if (userDoc.exists()) {
-          const userData = userDoc.data();
-          setAddress(userData.shippingAddress || null);
-        } else {
-          setAddress(null);
-        }
+        const data = await fetchWinnerShippingAddress(partyId, giftId);
+        setAddress(data.shippingAddress || null);
+        setUnavailable(!data.shippingAddress);
       } catch (error) {
         console.error('Error fetching address:', error);
         setAddress(null);
+        setUnavailable(true);
       } finally {
         setLoading(false);
       }
     };
 
     fetchAddress();
-  }, [isOpen, winnerId]);
+  }, [isOpen, partyId, giftId]);
 
   if (!isOpen) return null;
 
@@ -65,8 +65,16 @@ export function ShippingAddressViewModal({ isOpen, onClose, winnerId, winnerName
             {address.country && <p>{address.country}</p>}
           </div>
         ) : (
-          <p className="text-gray-500 italic">
-            Winner has not provided their shipping address yet.
+          <p
+            className={
+              unavailable
+                ? 'text-sm text-slate-300 italic'
+                : 'text-gray-500 italic'
+            }
+          >
+            {unavailable
+              ? SHIPPING_ADDRESS_WINNER_NOT_SHARED_VIEW_MODAL
+              : 'Winner has not provided their shipping address yet.'}
           </p>
         )}
 
@@ -79,4 +87,3 @@ export function ShippingAddressViewModal({ isOpen, onClose, winnerId, winnerName
     </Modal>
   );
 }
-

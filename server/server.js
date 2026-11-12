@@ -427,6 +427,11 @@ io.on('connection', (socket) => {
         return;
       }
 
+      if (gameState.phase === 'ENDED') {
+        socket.emit('error', { message: 'Game has already ended' });
+        return;
+      }
+
       // CRITICAL: Validate gameState.partyId matches partyId parameter
       if (gameState.partyId && gameState.partyId !== partyId) {
         console.error(`❌ CRITICAL: partyId mismatch in end-turn! Parameter: ${partyId}, gameState.partyId: ${gameState.partyId}`);
@@ -536,7 +541,10 @@ io.on('connection', (socket) => {
         const { redisTtlSecondsForPartyStatus } = await import('./utils/game-state-persistence.js');
         finalState.state.config = config;
         finalState.state.partyId = partyId;
+        finalState.state.finalOwnership = finalOwnership;
         await saveGameState(partyId, finalState.state, redisTtlSecondsForPartyStatus('ENDED'));
+        const { saveShippingFulfillmentSnapshot } = await import('./utils/shipping-fulfillment-snapshot.js');
+        await saveShippingFulfillmentSnapshot(partyId, finalOwnership, db);
         
         io.to(`party:${partyId}`).emit('game-ended', finalState);
       }

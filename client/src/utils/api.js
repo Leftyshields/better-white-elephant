@@ -37,4 +37,16 @@ export async function scrapeGiftUrl(url) {
   });
 }
 
+/**
+ * Fetch winner shipping address for the assigned sender (gift submitter) after game end.
+ */
+export async function fetchWinnerShippingAddress(partyId, giftId) {
+  if (!partyId || !giftId) {
+    throw new Error('partyId and giftId are required');
+  }
+  return apiRequest(`/api/game/winner-shipping-address/${encodeURIComponent(partyId)}/${encodeURIComponent(giftId)}`, {
+    method: 'GET',
+  });
+}
+
 
