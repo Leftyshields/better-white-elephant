@@ -245,6 +245,10 @@ router.post('/end', async (req, res) => {
     if (!gameState) {
       return res.status(404).json({ error: 'Game state not found' });
     }
+
+    if (gameState.phase === 'ENDED') {
+      return res.status(403).json({ error: 'Game has already ended' });
+    }
     
     // Verify user is admin (admin only can end game)
     if (party.adminId !== userId) {

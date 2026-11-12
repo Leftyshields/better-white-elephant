@@ -427,6 +427,11 @@ io.on('connection', (socket) => {
         return;
       }
 
+      if (gameState.phase === 'ENDED') {
+        socket.emit('error', { message: 'Game has already ended' });
+        return;
+      }
+
       // CRITICAL: Validate gameState.partyId matches partyId parameter
       if (gameState.partyId && gameState.partyId !== partyId) {
         console.error(`❌ CRITICAL: partyId mismatch in end-turn! Parameter: ${partyId}, gameState.partyId: ${gameState.partyId}`);

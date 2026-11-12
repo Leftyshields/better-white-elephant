@@ -10,12 +10,21 @@ const SENDER_ID = 'sender-http';
 const WINNER_ID = 'winner-http';
 const HOST_ID = 'host-http';
 
-const sampleAddress = {
-  name: 'Winner',
+const winnerAddress = {
+  name: 'True Winner',
   street: '1 Main',
   city: 'City',
   state: 'ST',
   zip: '11111',
+  country: 'US',
+};
+
+const victimAddress = {
+  name: 'Hacked Victim',
+  street: '9 Evil Way',
+  city: 'Scam',
+  state: 'XX',
+  zip: '99999',
   country: 'US',
 };
 
@@ -31,13 +40,13 @@ function buildMockDb(overrides = {}) {
 
   const users = {
     [WINNER_ID]: {
-      shippingAddress: sampleAddress,
+      shippingAddress: overrides.winnerAddress ?? winnerAddress,
       shippingAddressSenderShareConsentAt: new Date(),
     },
     ...(overrides.hackedUser
       ? {
           'victim-hacked': {
-            shippingAddress: sampleAddress,
+            shippingAddress: overrides.victimAddress ?? victimAddress,
             shippingAddressSenderShareConsentAt: new Date(),
           },
         }
@@ -156,7 +165,7 @@ test('HTTP denies made-up party without server fulfillment snapshot', async () =
   });
 });
 
-test('HTTP denies repointed Firestore winnerId when fulfillment names true winner', async () => {
+test('HTTP returns true winner address when Firestore winnerId was repointed', async () => {
   const db = buildMockDb({
     giftWinnerId: 'victim-hacked',
     hackedUser: true,
@@ -181,7 +190,8 @@ test('HTTP denies repointed Firestore winnerId when fulfillment names true winne
       SENDER_ID,
     );
     assert.equal(status, 200);
-    assert.deepEqual(body.shippingAddress, sampleAddress);
+    assert.deepEqual(body.shippingAddress, winnerAddress);
+    assert.notDeepEqual(body.shippingAddress, victimAddress);
   });
 });
 

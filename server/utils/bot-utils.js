@@ -321,6 +321,10 @@ export async function endBotTurn(partyId, io) {
     
     // Ensure partyId is set
     gameState.partyId = partyId;
+
+    if (gameState.phase === 'ENDED') {
+      return;
+    }
     
     if (gameState.phase !== 'ACTIVE') {
       return;
