@@ -113,3 +113,22 @@ jobs:
           path: client/dist
           retention-days: 1
 
+  server-docker-health:
+    name: Game server Docker health smoke
+    runs-on: ubuntu-latest
+
+    services:
+      redis:
+        image: redis:7-alpine@sha256:e4ee3e03ce8f75471f40937a7c6b2b0e500390b6812fcdf5cb32c01295ded446
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Docker build and GET /health smoke
+        env:
+          REDIS_URL: redis://host.docker.internal:6379
+        run: bash server/scripts/ci-docker-health-smoke.sh
+
