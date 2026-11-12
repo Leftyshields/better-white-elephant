@@ -26,19 +26,16 @@ service cloud.firestore {
     
     // Users collection
     match /users/{userId} {
-      // Users can read their own profile
-      allow read: if isOwner(userId);
+      // Users can read their own profile (get and list own document in queries)
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
       
       // Users can create/update their own profile
       allow create: if isOwner(userId);
       allow update: if isOwner(userId);
       
-      // Allow reads of displayName and email (for public invite pages and party display)
-      // But never allow reading shippingAddress unless it's the user's own profile
-      // Unauthenticated users can read if document doesn't have shippingAddress
-      // Authenticated users can read if document doesn't have shippingAddress OR it's a collection query
-      allow read: if !resource.data.keys().hasAny(['shippingAddress']) || 
-                     (isAuthenticated() && request.query.limit != null);
+      // Public single-document reads for invite/party display (no shippingAddress on document).
+      allow get: if !resource.data.keys().hasAny(['shippingAddress']);
     }
     
     // Parties collection
