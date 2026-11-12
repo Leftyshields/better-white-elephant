@@ -1,6 +1,6 @@
 # Google Analytics Events Documentation
 
-Complete list of all analytics events tracked in Better White Elephant for dashboard creation.
+Complete list of analytics events tracked in StealOrReveal, for building dashboards.
 
 ## Event Categories
 

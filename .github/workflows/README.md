@@ -1,6 +1,6 @@
 # GitHub Actions Workflows
 
-This directory contains CI/CD workflows for the Better White Elephant project.
+This directory contains CI/CD workflows for StealOrReveal.
 
 ## Workflows
 
@@ -36,6 +36,10 @@ Runs on pushes to `main` branch or can be manually triggered.
 - `VITE_FIREBASE_APP_ID`
 - `VITE_SERVER_URL`
 - `FIREBASE_SERVICE_ACCOUNT` (JSON service account key)
+
+### Deploy game server to Cloud Run (`deploy-game-server-cloud-run.yml`)
+
+Manual only (`workflow_dispatch` from `main`). Does not run on push. Deploys `stealorreveal-game-server` in `us-central1` and requires the `game-server` GitHub Environment. Full steps: [docs/deploy/DEPLOY_GAME_SERVER.md](../../docs/deploy/DEPLOY_GAME_SERVER.md).
 
 ### 🔍 CodeQL Analysis (`codeql.yml`)
 Runs security analysis on code.

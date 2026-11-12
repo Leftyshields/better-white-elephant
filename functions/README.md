@@ -61,7 +61,7 @@ curl -X POST http://127.0.0.1:5001/better-white-elephant/us-central1/sendContact
 
 ## Deployment
 
-See [../DEPLOY_FUNCTIONS.md](../DEPLOY_FUNCTIONS.md) for deployment instructions.
+See [../docs/deploy/DEPLOY_FUNCTIONS.md](../docs/deploy/DEPLOY_FUNCTIONS.md) for deployment instructions.
 
 Quick deploy:
 ```bash

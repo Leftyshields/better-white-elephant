@@ -1,6 +1,6 @@
 # Deploying Firebase Functions
 
-This guide explains how to deploy the Firebase Functions (email service) for Better White Elephant.
+This guide explains how to deploy the Firebase Functions (email service) for StealOrReveal.
 
 ## Prerequisites
 

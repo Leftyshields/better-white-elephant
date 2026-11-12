@@ -1,6 +1,6 @@
 # Analytics Tracking Guide
 
-This document outlines the analytics events being tracked in the Better White Elephant application.
+Analytics events tracked in StealOrReveal.
 
 ## Conversion Funnel Metrics
 

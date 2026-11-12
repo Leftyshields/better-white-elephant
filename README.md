@@ -1,6 +1,6 @@
-# Better White Elephant 🎁
+# StealOrReveal
 
-A real-time White Elephant gift exchange platform built with React, Firebase, Node.js, Socket.io, and Redis.
+A live White Elephant gift exchange for remote teams, built with React, Firebase, Node.js, Socket.io, and Redis. This repository is `better-white-elephant`.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![CI](https://github.com/leftyshields/better-white-elephant/workflows/CI/badge.svg)](https://github.com/leftyshields/better-white-elephant/actions)
@@ -9,12 +9,25 @@ A real-time White Elephant gift exchange platform built with React, Firebase, No
 
 ## Architecture
 
-- **Frontend**: React (Vite) + Tailwind CSS
+- **Frontend**: React (Vite) + Tailwind CSS, hosted on **Firebase Hosting**
 - **Auth**: Firebase Authentication (Email Link + Google Sign-In)
 - **Database**: Cloud Firestore (persistence)
-- **Game Engine**: Node.js + Socket.io (real-time)
-- **State Cache**: Redis (transient game state)
+- **Game Engine**: Node.js + Socket.io on **Google Cloud Run** (`stealorreveal-game-server`, `us-central1`)
+- **State Cache**: Upstash Redis (transient game state)
 - **Email**: Resend API (via Firebase Functions)
+
+## Documentation
+
+| Topic | Link |
+|-------|------|
+| All docs (index) | [docs/README.md](./docs/README.md) |
+| Game rules | [docs/GAME_RULES.md](./docs/GAME_RULES.md) |
+| Architecture spec | [docs/ARCHITECTURE_SPEC.md](./docs/ARCHITECTURE_SPEC.md) |
+| Testing | [docs/TESTING.md](./docs/TESTING.md) |
+| Deploy game server | [docs/deploy/DEPLOY_GAME_SERVER.md](./docs/deploy/DEPLOY_GAME_SERVER.md) |
+| Deploy Functions / email | [docs/deploy/DEPLOY_FUNCTIONS.md](./docs/deploy/DEPLOY_FUNCTIONS.md), [docs/deploy/DEPLOY_EMAIL_SERVICE.md](./docs/deploy/DEPLOY_EMAIL_SERVICE.md) |
+| Analytics | [docs/analytics/ANALYTICS_TRACKING.md](./docs/analytics/ANALYTICS_TRACKING.md) |
+| Contributing | [docs/community/CONTRIBUTING.md](./docs/community/CONTRIBUTING.md) |
 
 ## Project Structure
 
@@ -23,6 +36,7 @@ better-white-elephant/
 ├── client/          # React frontend
 ├── server/          # Node.js game server
 ├── functions/       # Firebase Functions (email)
+├── docs/            # Project documentation
 └── firebase.json    # Firebase configuration
 ```
 
@@ -52,7 +66,7 @@ better-white-elephant/
      - Helps test state version checking and prevent stale state resets
      - Bots will randomly refresh every 30-120 seconds with 30% probability
      - Useful for testing the game state persistence and version checking fixes
-   - For Functions: Set up Resend API key (see [DEPLOY_FUNCTIONS.md](./DEPLOY_FUNCTIONS.md))
+   - For Functions: Set up Resend API key (see [docs/deploy/DEPLOY_FUNCTIONS.md](./docs/deploy/DEPLOY_FUNCTIONS.md))
 
 3. **Firebase setup:**
    - Initialize Firebase project: `firebase init`
@@ -74,6 +88,8 @@ better-white-elephant/
 
 ## Game Rules
 
+Canonical rules live in [docs/GAME_RULES.md](./docs/GAME_RULES.md). Summary:
+
 - Players take turns picking wrapped gifts or stealing unwrapped gifts
 - Gifts become "frozen" after being stolen a maximum number of times
 - When a gift is stolen, the previous owner goes next (steal stack)
@@ -81,7 +97,7 @@ better-white-elephant/
 
 ## Deployment
 
-### Firebase Hosting (Frontend)
+### Firebase Hosting (frontend)
 
 1. **Build the client:**
    ```bash
@@ -95,13 +111,12 @@ better-white-elephant/
    firebase deploy --only hosting
    ```
 
-See [DEPLOY_FIREBASE_HOSTING.md](./DEPLOY_FIREBASE_HOSTING.md) for detailed instructions.
+Production hosting also runs via GitHub Actions. See [.github/workflows/README.md](./.github/workflows/README.md) (Deploy to Firebase Hosting).
 
-### Other Services
+### Other services
 
-- **Server**: Deploy to cloud service (Railway, Render, etc.)
-- **Functions**: Deploy via Firebase CLI: `firebase deploy --only functions`
-- **Redis**: Use cloud Redis service (Upstash, Redis Cloud)
-- **Firestore Rules**: Deploy via Firebase CLI: `firebase deploy --only firestore:rules`
-
+- **Game server (Cloud Run):** [docs/deploy/DEPLOY_GAME_SERVER.md](./docs/deploy/DEPLOY_GAME_SERVER.md) (manual `workflow_dispatch` only)
+- **Functions:** `firebase deploy --only functions` or [docs/deploy/DEPLOY_FUNCTIONS.md](./docs/deploy/DEPLOY_FUNCTIONS.md)
+- **Redis (production):** Upstash URL in Secret Manager (`game-server-redis-url`); see deploy guide
+- **Firestore rules:** `firebase deploy --only firestore:rules`
 
