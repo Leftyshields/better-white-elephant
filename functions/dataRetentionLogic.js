@@ -129,3 +129,22 @@ export function legacyAddressCleanupIterator(partiesForAddressCleanup) {
   }
   return docs;
 }
+
+/**
+ * Whether a gift document should be fully deleted by dataRetentionCleanup.
+ * @param {object} gift
+ * @param {FirebaseFirestore.Timestamp|Date|number} cutoff — 30 days ago
+ * @param {object|null|undefined} party — party data, null if doc missing, undefined if not loaded
+ */
+export function shouldDeleteGiftForRetention(gift, cutoff, party) {
+  if (gift?.partyEndedAt && toMillis(gift.partyEndedAt) <= toMillis(cutoff)) {
+    return true;
+  }
+  if (party === null) {
+    return true;
+  }
+  if (party && party.status === 'ENDED' && isEndedPartyPastRetention(party, cutoff)) {
+    return true;
+  }
+  return false;
+}

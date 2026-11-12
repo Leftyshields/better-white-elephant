@@ -5,6 +5,20 @@
 import redisClient from './redis.js';
 import { db } from '../config/firebase-admin.js';
 import admin from 'firebase-admin';
+import {
+  REDIS_TTL_ENDED_SECONDS,
+  clampEndedRedisKeyTtl,
+  resolveRedisTtlSeconds,
+} from './redis-game-ttl.mjs';
+
+export {
+  REDIS_TTL_ACTIVE_SECONDS,
+  REDIS_TTL_ENDED_SECONDS,
+  clampEndedRedisKeyTtl,
+  isEndedPartyOrGameState,
+  redisTtlSecondsForPartyStatus,
+  resolveRedisTtlSeconds,
+} from './redis-game-ttl.mjs';
 
 const { Timestamp } = admin.firestore;
 
@@ -178,7 +192,7 @@ function cleanForRedis(obj) {
  * 
  * TTL Calculation:
  * - Active games: 2 years (63072000s) - ensures games don't expire while active
- * - Ended games: 1 year (31536000s) - per privacy policy: "Retained for 1 year after the game ends"
+ * - Ended games: 30 days (2592000s) - per privacy policy: auto-delete 30 days after the game ends
  * - Default: 2 years if party status cannot be determined
  */
 export async function saveGameState(partyId, gameState, ttl = null) {
@@ -205,31 +219,18 @@ export async function saveGameState(partyId, gameState, ttl = null) {
   gameState.updatedAt = new Date().toISOString();
   
   const redisKey = `game:${partyId}`;
-  
-  // Determine TTL based on party status if not provided
-  // Privacy policy: "Game and Party Data: Retained for 1 year after the game ends"
-  // For active games, use 2 years to ensure they don't expire while active
-  if (ttl === null) {
-    try {
-      const partyDoc = await db.collection('parties').doc(partyId).get();
-      if (partyDoc.exists) {
-        const partyData = partyDoc.data();
-        if (partyData.status === 'ENDED') {
-          // Ended games: 1 year per privacy policy
-          ttl = 31536000; // 1 year in seconds
-        } else {
-          // Active games: 2 years to ensure they don't expire while active
-          ttl = 63072000; // 2 years in seconds
-        }
-      } else {
-        // Default to 2 years if party not found (shouldn't happen, but be safe)
-        ttl = 63072000;
-      }
-    } catch (error) {
-      console.error(`⚠️ Error determining TTL for party ${partyId}, using default 2 years:`, error);
-      ttl = 63072000; // Default to 2 years
+
+  let partyStatus = null;
+  try {
+    const partyDoc = await db.collection('parties').doc(partyId).get();
+    if (partyDoc.exists) {
+      partyStatus = partyDoc.data().status;
     }
+  } catch (error) {
+    console.error(`⚠️ Error loading party ${partyId} for Redis TTL, using game state only:`, error);
   }
+
+  ttl = resolveRedisTtlSeconds(partyStatus, gameState.phase, ttl);
   
   // Clean the game state for Firestore compatibility
   // This handles Maps, Sets, Dates, undefined values, etc.
@@ -317,7 +318,28 @@ export async function loadGameState(partyId) {
     if (!parsed.updatedAt) {
       parsed.updatedAt = new Date().toISOString();
     }
-    
+
+    let partyStatus = null;
+    try {
+      const partyDoc = await db.collection('parties').doc(partyId).get();
+      if (partyDoc.exists) {
+        partyStatus = partyDoc.data().status;
+      }
+    } catch (error) {
+      console.error(`⚠️ Error loading party ${partyId} for Redis TTL clamp:`, error);
+    }
+
+    const clamped = await clampEndedRedisKeyTtl(
+      redisClient,
+      redisKey,
+      redisState,
+      partyStatus,
+      parsed.phase,
+    );
+    if (clamped) {
+      console.log(`✅ Clamped Redis TTL to ${REDIS_TTL_ENDED_SECONDS}s for ended party ${partyId}`);
+    }
+
     return parsed;
   }
   
@@ -327,8 +349,10 @@ export async function loadGameState(partyId) {
     if (partyDoc.exists) {
       const partyData = partyDoc.data();
       
-      // Check if party is ACTIVE and has game state in Firestore
-      if (partyData.status === 'ACTIVE' && partyData.gameState) {
+      if (
+        (partyData.status === 'ACTIVE' || partyData.status === 'ENDED')
+        && partyData.gameState
+      ) {
         const gameState = partyData.gameState;
         console.log(`🔄 Restoring game state from Firestore for party ${partyId}`);
         console.log(`   Party status: ${partyData.status}, Has gameState: ${!!partyData.gameState}`);
@@ -355,12 +379,7 @@ export async function loadGameState(partyId) {
           convertedState.updatedAt = new Date().toISOString();
         }
         
-        // Determine TTL based on party status
-        // Privacy policy: "Game and Party Data: Retained for 1 year after the game ends"
-        let restoreTtl = 63072000; // Default: 2 years for active games
-        if (partyData.status === 'ENDED') {
-          restoreTtl = 31536000; // 1 year for ended games per privacy policy
-        }
+        const restoreTtl = resolveRedisTtlSeconds(partyData.status, convertedState.phase, null);
         
         // Restore to Redis for future fast access (convert back to JSON-safe format)
         const redisState = cleanForRedis(convertedState);
@@ -370,8 +389,8 @@ export async function loadGameState(partyId) {
         return convertedState;
       } else {
         console.log(`⚠️ Party ${partyId} status: ${partyData.status}, has gameState: ${!!partyData.gameState}`);
-        if (partyData.status !== 'ACTIVE') {
-          console.log(`   Party is not ACTIVE, cannot restore game state`);
+        if (partyData.status !== 'ACTIVE' && partyData.status !== 'ENDED') {
+          console.log(`   Party is not ACTIVE or ENDED, cannot restore game state`);
         }
         if (!partyData.gameState) {
           console.log(`   No gameState found in Firestore for party ${partyId}`);
