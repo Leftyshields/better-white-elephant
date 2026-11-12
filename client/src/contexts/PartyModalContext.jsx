@@ -7,9 +7,17 @@ const PartyModalContext = createContext(null);
 
 export function PartyModalProvider({ children }) {
   const [showModal, setShowModal] = useState(false);
+  const [hostSignInNotice, setHostSignInNotice] = useState('');
 
   return (
-    <PartyModalContext.Provider value={{ showModal, setShowModal }}>
+    <PartyModalContext.Provider
+      value={{
+        showModal,
+        setShowModal,
+        hostSignInNotice,
+        setHostSignInNotice,
+      }}
+    >
       {children}
     </PartyModalContext.Provider>
   );

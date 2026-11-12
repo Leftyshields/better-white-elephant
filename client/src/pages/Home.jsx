@@ -5,7 +5,9 @@ import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../hooks/useAuth.js';
 import {
   OPEN_CREATE_PARTY_AFTER_AUTH_KEY,
+  PENDING_HOST_CTA_KEY,
   clearOpenCreatePartyAfterAuthUnlessGoogleSignInSucceeded,
+  focusHostHeroCta,
   useHostFreeGame,
 } from '../hooks/useHostFreeGame.js';
 
@@ -49,6 +51,7 @@ export function Home() {
   } = useHostFreeGame();
   const hostHeroButtonRef = useRef(null);
   const hostParamHandledRef = useRef(false);
+  const pendingHostCtaHandledRef = useRef(false);
   const [partyDate, setPartyDate] = useState('');
   const [partyTitle, setPartyTitle] = useState('');
   const [myParties, setMyParties] = useState([]);
@@ -101,6 +104,24 @@ export function Home() {
   }, [user, navigate, setShowCreatePartyModal]);
 
   useEffect(() => {
+    const pending = window.sessionStorage.getItem(PENDING_HOST_CTA_KEY);
+    if (!pending) {
+      pendingHostCtaHandledRef.current = false;
+      return;
+    }
+    if (authLoading) {
+      return;
+    }
+    if (pendingHostCtaHandledRef.current) {
+      return;
+    }
+    pendingHostCtaHandledRef.current = true;
+    window.sessionStorage.removeItem(PENDING_HOST_CTA_KEY);
+    focusHostHeroCta(hostHeroButtonRef.current);
+    void handleHostFreeGame(pending);
+  }, [authLoading, handleHostFreeGame]);
+
+  useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (params.get('host') !== '1') {
       hostParamHandledRef.current = false;
@@ -122,18 +143,7 @@ export function Home() {
       return;
     }
 
-    requestAnimationFrame(() => {
-      const el = hostHeroButtonRef.current;
-      if (!el) {
-        return;
-      }
-      if (typeof el.scrollIntoView === 'function') {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-      if (typeof el.focus === 'function') {
-        el.focus({ preventScroll: true });
-      }
-    });
+    focusHostHeroCta(hostHeroButtonRef.current);
   }, [location.search, user, authLoading, navigate, setShowCreatePartyModal]);
 
   // Subscribe to parties where user is admin OR participant

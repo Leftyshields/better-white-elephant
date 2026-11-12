@@ -15,7 +15,7 @@ import { LANDING_COPY } from '../utils/landingMarketingCopy.js';
 
 export function RulesContent({ pageHeading }) {
   const navigate = useNavigate();
-  const { handleHostFreeGame } = useHostFreeGame();
+  const { authLoading, queueHostCtaFromRules } = useHostFreeGame();
 
   return (
     <div className="min-h-screen bg-slate-950">
@@ -203,12 +203,15 @@ export function RulesContent({ pageHeading }) {
         <div className="text-center">
           <Link
             to="/"
+            aria-disabled={authLoading}
             onClick={(event) => {
               event.preventDefault();
+              if (!queueHostCtaFromRules('rules_cta')) {
+                return;
+              }
               navigate('/');
-              void handleHostFreeGame('rules_cta');
             }}
-            className="inline-block bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-lg px-12 py-4 rounded-full shadow-[0_0_30px_rgba(139,92,246,0.5)] hover:shadow-[0_0_40px_rgba(139,92,246,0.7)] transform hover:scale-105 transition-all duration-300"
+            className={`inline-block bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-lg px-12 py-4 rounded-full shadow-[0_0_30px_rgba(139,92,246,0.5)] hover:shadow-[0_0_40px_rgba(139,92,246,0.7)] transform hover:scale-105 transition-all duration-300${authLoading ? ' pointer-events-none opacity-60 cursor-wait' : ''}`}
           >
             {LANDING_COPY.primaryCta}
           </Link>

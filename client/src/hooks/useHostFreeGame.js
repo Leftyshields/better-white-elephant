@@ -1,13 +1,14 @@
 /**
  * Shared host / create-party entry (hero, rules CTA). Sign-in runs only from user activation.
  */
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
 import { useAuth } from './useAuth.js';
 import { usePartyModal } from '../contexts/PartyModalContext.jsx';
 import { trackButtonClick } from '../utils/analytics.js';
 import { LANDING_COPY } from '../utils/landingMarketingCopy.js';
 
 export const OPEN_CREATE_PARTY_AFTER_AUTH_KEY = 'openCreatePartyAfterAuth';
+export const PENDING_HOST_CTA_KEY = 'pendingHostCtaSource';
 
 /** Clears host CTA session flag when Google sign-in did not complete (popup dismissed, etc.). */
 export function clearOpenCreatePartyAfterAuthUnlessGoogleSignInSucceeded(signInResult) {
@@ -27,10 +28,26 @@ export function hostSignInUserMessage(error) {
   return 'Sign-in did not complete. Try Host a free game again.';
 }
 
+export function focusHostHeroCta(buttonEl) {
+  window.scrollTo(0, 0);
+  if (!buttonEl) {
+    return;
+  }
+  requestAnimationFrame(() => {
+    if (typeof buttonEl.scrollIntoView === 'function') {
+      buttonEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    if (typeof buttonEl.focus === 'function') {
+      buttonEl.focus({ preventScroll: true });
+    }
+  });
+}
+
 export function useHostFreeGame() {
   const { user, signInWithGoogle, loading: authLoading } = useAuth();
-  const { setShowModal: setShowCreatePartyModal } = usePartyModal();
-  const [hostSignInNotice, setHostSignInNotice] = useState('');
+  const { setShowModal: setShowCreatePartyModal, hostSignInNotice, setHostSignInNotice } = usePartyModal();
+
+  const dismissHostSignInNotice = useCallback(() => setHostSignInNotice(''), [setHostSignInNotice]);
 
   const handleHostFreeGame = useCallback(
     async (analyticsSource = 'hero') => {
@@ -38,12 +55,12 @@ export function useHostFreeGame() {
       trackButtonClick(LANDING_COPY.primaryCta, analyticsSource);
 
       if (authLoading) {
-        return;
+        return { skipped: 'auth_loading' };
       }
 
       if (user) {
         setShowCreatePartyModal(true);
-        return;
+        return { skipped: null };
       }
 
       window.sessionStorage.setItem(OPEN_CREATE_PARTY_AFTER_AUTH_KEY, '1');
@@ -55,17 +72,28 @@ export function useHostFreeGame() {
         }
         clearOpenCreatePartyAfterAuthUnlessGoogleSignInSucceeded(res);
       }
+      return { skipped: null, signInResult: res };
     },
-    [authLoading, signInWithGoogle, setShowCreatePartyModal, user],
+    [authLoading, setHostSignInNotice, signInWithGoogle, setShowCreatePartyModal, user],
   );
 
-  const dismissHostSignInNotice = useCallback(() => setHostSignInNotice(''), []);
+  const queueHostCtaFromRules = useCallback(
+    (analyticsSource = 'rules_cta') => {
+      if (authLoading) {
+        return false;
+      }
+      window.sessionStorage.setItem(PENDING_HOST_CTA_KEY, analyticsSource);
+      return true;
+    },
+    [authLoading],
+  );
 
   return {
     authLoading,
     dismissHostSignInNotice,
     handleHostFreeGame,
     hostSignInNotice,
+    queueHostCtaFromRules,
     user,
   };
 }
