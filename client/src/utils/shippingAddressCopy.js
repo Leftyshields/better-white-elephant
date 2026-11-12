@@ -23,6 +23,9 @@ export const SHIPPING_ADDRESS_CONSENT_WITHDRAW_PENDING_PROFILE =
 export const SHIPPING_ADDRESS_INCOMPLETE_PROFILE =
   'This address is incomplete, so your saved address was left unchanged. Fill in every field, or clear them all to delete it.';
 
+export const SHIPPING_ADDRESS_INCOMPLETE_SHARE_OFF_PROFILE =
+  'This address is incomplete, so your saved address was left unchanged. It is no longer shared with the person mailing your gift. Fill in every field, or clear them all to delete it.';
+
 export const SHIPPING_ADDRESS_DELETE_CONFIRM_PROFILE =
   "This will delete your saved shipping address. It won't be shared with the person mailing your gift.";
 

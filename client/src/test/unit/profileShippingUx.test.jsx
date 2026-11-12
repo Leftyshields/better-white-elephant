@@ -46,6 +46,7 @@ describe('Profile shipping UX must-fixes', () => {
 
   it('includes incomplete and delete-confirm copy constants', () => {
     expect(copyModule).toContain('SHIPPING_ADDRESS_INCOMPLETE_PROFILE');
+    expect(copyModule).toContain('SHIPPING_ADDRESS_INCOMPLETE_SHARE_OFF_PROFILE');
     expect(copyModule).toContain('SHIPPING_ADDRESS_DELETE_CONFIRM_PROFILE');
     expect(copyModule).not.toContain('SHIPPING_ADDRESS_CONSENT_REQUIRED_PROFILE');
   });
@@ -55,6 +56,8 @@ describe('Profile shipping UX must-fixes', () => {
     expect(profile).toContain('deleteAddress: true');
     expect(profile).toContain('areAllShippingFieldsEmpty');
     expect(profile).toContain('showAddressIncompleteError');
+    expect(profile).toContain('setHadPersistedShippingAddress(true)');
+    expect(profile).toContain('persistConsentWithdrawOnly');
   });
 });
 

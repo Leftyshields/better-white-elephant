@@ -11,6 +11,7 @@ import {
   SHIPPING_ADDRESS_DELETE_CONFIRM_PROFILE,
   SHIPPING_ADDRESS_DELETE_SUCCESS_PROFILE,
   SHIPPING_ADDRESS_INCOMPLETE_PROFILE,
+  SHIPPING_ADDRESS_INCOMPLETE_SHARE_OFF_PROFILE,
   SHIPPING_ADDRESS_SAVE_UNCHECKED_SUCCESS_PROFILE,
   SHIPPING_ADDRESS_SAVED_NEEDS_CONSENT_PROFILE,
 } from '../../utils/shippingAddressCopy.js';
@@ -272,7 +273,7 @@ describe('Profile consent withdrawal and address deletion', () => {
     expect(updateDoc).not.toHaveBeenCalled();
   });
 
-  it('incomplete saved address (e.g. blank ZIP) does not delete or call updateDoc', async () => {
+  it('incomplete saved address without consent change does not call updateDoc', async () => {
     mockLoadedProfile({ address: completeAddress, consentAt: new Date() });
     await renderProfile();
 
@@ -282,7 +283,77 @@ describe('Profile consent withdrawal and address deletion', () => {
     await waitFor(() => {
       expect(screen.getByText(SHIPPING_ADDRESS_INCOMPLETE_PROFILE)).toBeInTheDocument();
     });
+    expect(screen.queryByText(SHIPPING_ADDRESS_INCOMPLETE_SHARE_OFF_PROFILE)).not.toBeInTheDocument();
     expect(updateDoc).not.toHaveBeenCalled();
+  });
+
+  it('incomplete address with consent withdraw persists deleteField for consent only', async () => {
+    mockLoadedProfile({ address: completeAddress, consentAt: new Date() });
+    await renderProfile();
+
+    const consentBox = await screen.findByRole('checkbox');
+    fireEvent.click(consentBox);
+    fireEvent.change(screen.getByPlaceholderText('12345'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(updateDoc).toHaveBeenCalled();
+    });
+
+    const payload = updateDoc.mock.calls[0][1];
+    expect(payload.shippingAddressSenderShareConsentAt).toEqual(deleteField());
+    expect(payload.shippingAddress).toBeUndefined();
+
+    expect(screen.getByText(SHIPPING_ADDRESS_INCOMPLETE_SHARE_OFF_PROFILE)).toBeInTheDocument();
+    expect(screen.queryByText(SHIPPING_ADDRESS_INCOMPLETE_PROFILE)).not.toBeInTheDocument();
+    expect(screen.queryByText(SHIPPING_ADDRESS_SAVED_NEEDS_CONSENT_PROFILE)).not.toBeInTheDocument();
+    expect(screen.queryByText(SHIPPING_ADDRESS_CONSENT_WITHDRAW_PENDING_PROFILE)).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue(completeAddress.zip)).toBeInTheDocument();
+  });
+
+  it('same session: save new address then clear all fields shows confirm and deletes', async () => {
+    mockLoadedProfile({ address: undefined, consentAt: undefined });
+    await renderProfile();
+
+    fireEvent.change(screen.getByPlaceholderText('Enter your full name'), { target: { value: completeAddress.name } });
+    fireEvent.change(screen.getByPlaceholderText('123 Main St'), { target: { value: completeAddress.street } });
+    fireEvent.change(screen.getByPlaceholderText('City'), { target: { value: completeAddress.city } });
+    fireEvent.change(screen.getByPlaceholderText('State'), { target: { value: completeAddress.state } });
+    fireEvent.change(screen.getByPlaceholderText('12345'), { target: { value: completeAddress.zip } });
+    fireEvent.change(screen.getByPlaceholderText('Country'), { target: { value: completeAddress.country } });
+
+    fireEvent.click(await screen.findByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(updateDoc).toHaveBeenCalledTimes(1);
+    });
+
+    updateDoc.mockClear();
+
+    fireEvent.change(screen.getByPlaceholderText('Enter your full name'), { target: { value: '' } });
+    fireEvent.change(screen.getByPlaceholderText('123 Main St'), { target: { value: '' } });
+    fireEvent.change(screen.getByPlaceholderText('City'), { target: { value: '' } });
+    fireEvent.change(screen.getByPlaceholderText('State'), { target: { value: '' } });
+    fireEvent.change(screen.getByPlaceholderText('12345'), { target: { value: '' } });
+    fireEvent.change(screen.getByPlaceholderText('Country'), { target: { value: '' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(SHIPPING_ADDRESS_DELETE_CONFIRM_PROFILE)).toBeInTheDocument();
+    });
+    expect(updateDoc).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: SHIPPING_ADDRESS_DELETE_CONFIRM_ACTION_PROFILE }));
+
+    await waitFor(() => {
+      expect(updateDoc).toHaveBeenCalledTimes(1);
+    });
+
+    const payload = updateDoc.mock.calls[0][1];
+    expect(payload.shippingAddress).toEqual(deleteField());
+    expect(payload.shippingAddressSenderShareConsentAt).toEqual(deleteField());
   });
 
   it('shows default success message on save with consent checked', async () => {

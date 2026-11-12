@@ -14,6 +14,7 @@ import {
   SHIPPING_ADDRESS_DELETE_CONFIRM_PROFILE,
   SHIPPING_ADDRESS_DELETE_SUCCESS_PROFILE,
   SHIPPING_ADDRESS_INCOMPLETE_PROFILE,
+  SHIPPING_ADDRESS_INCOMPLETE_SHARE_OFF_PROFILE,
   SHIPPING_ADDRESS_SAVE_UNCHECKED_SUCCESS_PROFILE,
   SHIPPING_ADDRESS_SAVED_NEEDS_CONSENT_PROFILE,
   SHIPPING_ADDRESS_SENDER_SHARE_CONSENT_LABEL,
@@ -59,7 +60,9 @@ export function Profile() {
   const [hadPersistedShippingAddress, setHadPersistedShippingAddress] = useState(false);
   const [hadGrantedSenderShareConsent, setHadGrantedSenderShareConsent] = useState(false);
   const [showAddressIncompleteError, setShowAddressIncompleteError] = useState(false);
+  const [showIncompleteShareOffMessage, setShowIncompleteShareOffMessage] = useState(false);
   const [showDeleteAddressConfirm, setShowDeleteAddressConfirm] = useState(false);
+  const [persistedStoredAddress, setPersistedStoredAddress] = useState(null);
 
   const hasShippingFields = hasCompleteShippingFields(address);
   const saveDisabled = saving;
@@ -67,11 +70,20 @@ export function Profile() {
     hasShippingFields &&
     !shareConsent &&
     !showSavedAddressNeedsConsentNote &&
-    hadGrantedSenderShareConsent;
+    hadGrantedSenderShareConsent &&
+    !showIncompleteShareOffMessage &&
+    !showAddressIncompleteError;
 
   const updateAddressField = (partial) => {
     setShowAddressIncompleteError(false);
+    setShowIncompleteShareOffMessage(false);
     setAddress((prev) => ({ ...prev, ...partial }));
+  };
+
+  const rememberPersistedCompleteAddress = (storedAddress) => {
+    if (storedAddress && hasCompleteShippingFields(storedAddress)) {
+      setPersistedStoredAddress({ ...storedAddress });
+    }
   };
 
   // Load user profile data
@@ -89,15 +101,16 @@ export function Profile() {
         if (userDoc.exists()) {
           const userData = userDoc.data();
           setDisplayName(user.displayName || userData.displayName || '');
+          const loadedAddress = userData.shippingAddress || {};
           if (userData.shippingAddress) {
             setAddress(userData.shippingAddress);
           }
           setShareConsent(Boolean(userData.shippingAddressSenderShareConsentAt));
-          const loadedAddress = userData.shippingAddress || {};
           const loadedHadCompleteAddress = hasCompleteShippingFields(loadedAddress);
           const loadedHadConsent = Boolean(userData.shippingAddressSenderShareConsentAt);
           setShowSavedAddressNeedsConsentNote(loadedHadCompleteAddress && !loadedHadConsent);
-          setHadPersistedShippingAddress(Boolean(userData.shippingAddress));
+          setHadPersistedShippingAddress(loadedHadCompleteAddress);
+          rememberPersistedCompleteAddress(loadedAddress);
           setHadGrantedSenderShareConsent(loadedHadConsent);
         } else {
           // Create user document if it doesn't exist
@@ -124,6 +137,36 @@ export function Profile() {
       loadProfile();
     }
   }, [user, authLoading, navigate]);
+
+  const persistConsentWithdrawOnly = async () => {
+    if (!user || !persistedStoredAddress) return;
+
+    setSaving(true);
+    setSuccessMessage('');
+    setShowAddressIncompleteError(false);
+    setShowIncompleteShareOffMessage(false);
+
+    try {
+      const profileUpdate = {
+        displayName: displayName || user.email || '',
+        email: user.email || '',
+        updatedAt: new Date(),
+        shippingAddressSenderShareConsentAt: deleteField(),
+      };
+
+      await updateDoc(doc(db, 'users', user.uid), profileUpdate);
+
+      setHadGrantedSenderShareConsent(false);
+      setShowSavedAddressNeedsConsentNote(false);
+      setAddress({ ...persistedStoredAddress });
+      setShowIncompleteShareOffMessage(true);
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      alert('Failed to update profile: ' + error.message);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const persistProfile = async ({ deleteAddress = false } = {}) => {
     if (!user) return;
@@ -165,6 +208,8 @@ export function Profile() {
         setHadGrantedSenderShareConsent(false);
         setHadPersistedShippingAddress(false);
       } else if (hasShippingFields) {
+        setHadPersistedShippingAddress(true);
+        rememberPersistedCompleteAddress(address);
         setShowSavedAddressNeedsConsentNote(!shareConsent);
         setHadGrantedSenderShareConsent(shareConsent);
       }
@@ -184,11 +229,16 @@ export function Profile() {
     if (!user) return;
 
     setShowAddressIncompleteError(false);
+    setShowIncompleteShareOffMessage(false);
 
     const anyFilled = hasAnyShippingFieldFilled(address);
     const allEmpty = areAllShippingFieldsEmpty(address);
 
     if (hadPersistedShippingAddress && anyFilled && !hasShippingFields) {
+      if (hadGrantedSenderShareConsent && !shareConsent) {
+        await persistConsentWithdrawOnly();
+        return;
+      }
       setShowAddressIncompleteError(true);
       return;
     }
@@ -316,12 +366,19 @@ export function Profile() {
               />
               <span>{SHIPPING_ADDRESS_SENDER_SHARE_CONSENT_LABEL}</span>
             </label>
-            {showAddressIncompleteError && (
+            {showIncompleteShareOffMessage && (
+              <p className="text-sm text-amber-300" role="alert">
+                {SHIPPING_ADDRESS_INCOMPLETE_SHARE_OFF_PROFILE}
+              </p>
+            )}
+            {showAddressIncompleteError && !showIncompleteShareOffMessage && (
               <p className="text-sm text-amber-300" role="alert">
                 {SHIPPING_ADDRESS_INCOMPLETE_PROFILE}
               </p>
             )}
-            {showSavedAddressNeedsConsentNote && (
+            {showSavedAddressNeedsConsentNote &&
+              !showIncompleteShareOffMessage &&
+              !showAddressIncompleteError && (
               <p className="text-sm text-slate-300">{SHIPPING_ADDRESS_SAVED_NEEDS_CONSENT_PROFILE}</p>
             )}
             {showConsentWithdrawPendingNote && (
