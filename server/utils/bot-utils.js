@@ -426,6 +426,19 @@ export async function endBotTurn(partyId, io) {
 }
 
 /**
+ * After a bot PICK or STEAL, schedule autoplay for whoever is active next.
+ * pickGift advances the queue; endBotTurn must not run on the next player.
+ */
+function scheduleAutoplayContinuation(partyId, newState, io, kind) {
+  const delayMs = kind === 'steal' ? 1000 : 500;
+  setTimeout(() => {
+    checkAndMakeBotMove(partyId, newState, io).catch((error) => {
+      console.error(`❌ Error in checkAndMakeBotMove after bot ${kind}:`, error);
+    });
+  }, delayMs);
+}
+
+/**
  * Check if it's a bot's turn and make a move if autoplay is enabled
  */
 export async function checkAndMakeBotMove(partyId, gameState, io) {
@@ -640,19 +653,13 @@ export async function checkAndMakeBotMove(partyId, gameState, io) {
     // Broadcast update
     io.to(`party:${partyId}`).emit('game-updated', newState);
 
-    // CRITICAL: After a STEAL, the stealer's turn is OVER and the victim becomes active
-    // Do NOT call endBotTurn - the victim is now active and will be handled by checkAndMakeBotMove
-    // Only call endBotTurn for PICK actions (which advance the turn queue)
-    if (decision.action === 'pick') {
-      // After PICK: end turn after a short delay (0.5-1.5 seconds)
-      setTimeout(async () => {
-        await endBotTurn(partyId, io);
-      }, 500 + Math.random() * 1000);
-    } else if (decision.action === 'steal') {
-      // After STEAL: victim becomes active, don't end turn
-      // The victim will be handled by checkAndMakeBotMove (called from server.js after steal)
-      console.log(`✅ Bot ${currentPlayerId} stole - victim ${newState.currentVictim} is now active`);
-    }
+        // pickGift already advanced the queue — schedule the next active player (do not endBotTurn)
+        if (decision.action === 'pick') {
+          scheduleAutoplayContinuation(partyId, newState, io, 'pick');
+        } else if (decision.action === 'steal') {
+          console.log(`✅ Bot ${currentPlayerId} stole - victim ${newState.currentVictim} is now active`);
+          scheduleAutoplayContinuation(partyId, newState, io, 'steal');
+        }
 
       } catch (error) {
         console.error(`❌ Error making bot move for ${currentPlayerId}:`, error);
@@ -801,18 +808,11 @@ export async function forceBotMove(partyId, io) {
     // Broadcast update
     io.to(`party:${partyId}`).emit('game-updated', newState);
 
-    // CRITICAL: After a STEAL, the stealer's turn is OVER and the victim becomes active
-    // Do NOT call endBotTurn - the victim is now active and will be handled separately
-    // Only call endBotTurn for PICK actions (which advance the turn queue)
     if (decision.action === 'pick') {
-      // After PICK: end turn after a short delay (0.5-1.5 seconds)
-      setTimeout(async () => {
-        await endBotTurn(partyId, io);
-      }, 500 + Math.random() * 1000);
+      scheduleAutoplayContinuation(partyId, newState, io, 'pick');
     } else if (decision.action === 'steal') {
-      // After STEAL: victim becomes active, don't end turn
-      // The victim will be handled by checkAndMakeBotMove (called from server.js after steal)
       console.log(`✅ Bot ${currentPlayerId} stole - victim ${newState.currentVictim} is now active`);
+      scheduleAutoplayContinuation(partyId, newState, io, 'steal');
     }
 
     return { success: true, action: decision.action, giftId: decision.giftId };
@@ -944,8 +944,8 @@ export async function forceBotSteal(partyId, io) {
     // Broadcast update
     io.to(`party:${partyId}`).emit('game-updated', newState);
 
-    // After STEAL: victim becomes active, don't end turn
     console.log(`✅ Bot ${currentPlayerId} stole - victim ${newState.currentVictim} is now active`);
+    scheduleAutoplayContinuation(partyId, newState, io, 'steal');
 
     return { success: true, action: 'steal', giftId };
 
@@ -1159,10 +1159,7 @@ export async function forceBotPick(partyId, io) {
     // Broadcast update
     io.to(`party:${partyId}`).emit('game-updated', newState);
 
-    // After PICK: end turn after a short delay
-    setTimeout(async () => {
-      await endBotTurn(partyId, io);
-    }, 500 + Math.random() * 1000);
+    scheduleAutoplayContinuation(partyId, newState, io, 'pick');
 
     return { success: true, action: 'pick', giftId };
 
