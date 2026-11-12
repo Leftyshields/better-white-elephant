@@ -1,8 +1,18 @@
 /**
  * Server-owned gift fulfillment mapping (submitter + winner per gift) written at game end.
  */
-import redisClient from './redis.js';
 import { REDIS_TTL_ENDED_SECONDS } from './redis-game-ttl.mjs';
+
+let defaultRedisPromise;
+async function resolveRedis(redis) {
+  if (redis) {
+    return redis;
+  }
+  if (!defaultRedisPromise) {
+    defaultRedisPromise = import('./redis.js').then((mod) => mod.default);
+  }
+  return defaultRedisPromise;
+}
 
 function fulfillmentRedisKey(partyId) {
   return `fulfillment:${partyId}`;
@@ -12,10 +22,12 @@ function fulfillmentRedisKey(partyId) {
  * @param {string} partyId
  * @param {Record<string, string>} finalOwnership giftId -> winnerId
  * @param {import('firebase-admin/firestore').Firestore} db
+ * @param {import('redis').RedisClientType} [redis]
+ * @returns {Promise<boolean>} true if a new snapshot was written
  */
-export async function saveShippingFulfillmentSnapshot(partyId, finalOwnership, db) {
+export async function saveShippingFulfillmentSnapshot(partyId, finalOwnership, db, redis) {
   if (!partyId || !finalOwnership || typeof finalOwnership !== 'object') {
-    return;
+    return false;
   }
 
   const snapshot = {};
@@ -38,15 +50,15 @@ export async function saveShippingFulfillmentSnapshot(partyId, finalOwnership, d
   }
 
   if (Object.keys(snapshot).length === 0) {
-    return;
+    return false;
   }
 
-  const client = redisClient;
-  await client.setEx(
-    fulfillmentRedisKey(partyId),
-    REDIS_TTL_ENDED_SECONDS,
-    JSON.stringify(snapshot),
-  );
+  const client = await resolveRedis(redis);
+  const wrote = await client.set(fulfillmentRedisKey(partyId), JSON.stringify(snapshot), {
+    NX: true,
+    EX: REDIS_TTL_ENDED_SECONDS,
+  });
+  return Boolean(wrote);
 }
 
 /**
@@ -54,8 +66,9 @@ export async function saveShippingFulfillmentSnapshot(partyId, finalOwnership, d
  * @param {import('redis').RedisClientType} [redis]
  * @returns {Promise<Record<string, { submitterId: string, winnerId: string }> | null>}
  */
-export async function loadShippingFulfillmentSnapshot(partyId, redis = redisClient) {
-  const raw = await redis.get(fulfillmentRedisKey(partyId));
+export async function loadShippingFulfillmentSnapshot(partyId, redis) {
+  const client = await resolveRedis(redis);
+  const raw = await client.get(fulfillmentRedisKey(partyId));
   if (!raw) {
     return null;
   }
