@@ -2,13 +2,18 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { FEATURE_CARDS } from '../../utils/landingMarketingCopy.js';
+import {
+  FEATURE_CARDS,
+  LEGAL_LAST_UPDATED,
+  PRIVACY_LAST_UPDATED,
+} from '../../utils/landingMarketingCopy.js';
 
 const clientSrc = join(dirname(fileURLToPath(import.meta.url)), '../..');
 
 const rulesSource = readFileSync(join(clientSrc, 'components/RulesContent.jsx'), 'utf8');
 const profileSource = readFileSync(join(clientSrc, 'pages/Profile.jsx'), 'utf8');
 const privacySource = readFileSync(join(clientSrc, 'pages/Privacy.jsx'), 'utf8');
+const termsSource = readFileSync(join(clientSrc, 'pages/Terms.jsx'), 'utf8');
 
 const AUTO_PILOT_BODY =
   'Before the game, you add a shipping address so the person mailing your gift can ship. It auto-deletes 30 days after the game ends.';
@@ -54,6 +59,23 @@ describe('Copywriter shipping / retention strings', () => {
     );
     expect(privacySource).toContain(
       '<strong>Gift Links:</strong> Auto-deletes 30 days after the game ends.',
+    );
+  });
+
+  it('Privacy last updated uses PRIVACY_LAST_UPDATED; Terms still uses shared LEGAL_LAST_UPDATED', () => {
+    expect(LEGAL_LAST_UPDATED).toBe('November 11, 2026');
+    expect(PRIVACY_LAST_UPDATED).toBe('November 12, 2026');
+    expect(privacySource).toContain('Last updated: {PRIVACY_LAST_UPDATED}');
+    expect(privacySource).not.toContain('LEGAL_LAST_UPDATED');
+    expect(termsSource).toContain('Last updated: {LEGAL_LAST_UPDATED}');
+  });
+
+  it('Privacy Data Retention: no 90-day analytics auto-delete bullet; Service Providers analytics sharing remains', () => {
+    expect(privacySource).not.toContain(
+      '<strong>Analytics and Logs:</strong> Retained for 90 days, then automatically deleted',
+    );
+    expect(privacySource).toContain(
+      'such as hosting, analytics, and email delivery.',
     );
   });
 

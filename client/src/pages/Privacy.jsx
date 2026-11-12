@@ -4,7 +4,7 @@
 import { Link } from 'react-router-dom';
 import { ShieldCheckIcon } from '@heroicons/react/24/outline';
 import { SEO } from '../components/SEO.jsx';
-import { LEGAL_LAST_UPDATED } from '../utils/landingMarketingCopy.js';
+import { PRIVACY_LAST_UPDATED } from '../utils/landingMarketingCopy.js';
 
 export function Privacy() {
   return (
@@ -25,7 +25,7 @@ export function Privacy() {
             </h1>
           </div>
           <p className="text-sm text-slate-400">
-            Last updated: {LEGAL_LAST_UPDATED}
+            Last updated: {PRIVACY_LAST_UPDATED}
           </p>
         </div>
 
@@ -102,7 +102,6 @@ export function Privacy() {
               <li><strong>Game and Party Data:</strong> Auto-deletes 30 days after the game ends.</li>
               <li><strong>Fulfillment Information (Shipping Addresses):</strong> Auto-deletes 30 days after the game ends.</li>
               <li><strong>Gift Links:</strong> Auto-deletes 30 days after the game ends.</li>
-              <li><strong>Analytics and Logs:</strong> Retained for 90 days, then automatically deleted</li>
               <li><strong>Support Communications:</strong> Retained for 1 year after the last communication</li>
             </ul>
             <p className="text-slate-300 leading-relaxed mt-4">

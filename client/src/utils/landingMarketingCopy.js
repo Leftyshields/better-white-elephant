@@ -69,3 +69,6 @@ export const INVITE_SEO = {
 };
 
 export const LEGAL_LAST_UPDATED = 'November 11, 2026';
+
+/** Privacy Policy only — bump when Privacy changes without a Terms update. */
+export const PRIVACY_LAST_UPDATED = 'November 12, 2026';
