@@ -56,7 +56,7 @@ export function PartyLobby({ partyId, onStartGame }) {
   const [savingRules, setSavingRules] = useState(false);
   const [openStep, setOpenStep] = useState(null); // Track which step is open
 
-  const isAdmin = party?.adminId === user?.uid;
+  const isAdmin = !!user && !!party && party.adminId === user.uid;
   const currentParticipant = participants.find((p) => p.id === user?.uid);
   const userGift = gifts.find((g) => g.submitterId === user?.uid);
   const [adminShippingAddress, setAdminShippingAddress] = useState(null);

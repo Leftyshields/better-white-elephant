@@ -622,7 +622,7 @@ export function GameBoard({ partyId, onEndTurn }) {
     console.log('GameBoard: Waiting for connection or gameState', { connected, hasGameState: !!gameState, gameStateTimeout });
     
     if (gameStateTimeout) {
-      const isAdmin = party?.adminId === user?.uid;
+      const isAdmin = !!user && !!party && party.adminId === user.uid;
       return (
         <div className="min-h-screen flex items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black py-12">
           <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
@@ -716,7 +716,7 @@ export function GameBoard({ partyId, onEndTurn }) {
   const unwrappedGiftList = allUnwrappedGifts.slice(0, numPlayers);
 
   const currentAction = turnActionMap.get(currentPlayerId);
-  const isAdmin = party?.adminId === user?.uid;
+  const isAdmin = !!user && !!party && party.adminId === user.uid;
 
   // Calculate rounds/turns remaining
   const calculateRoundsRemaining = () => {

@@ -279,7 +279,7 @@ export function GameRoom({ partyId }) {
     returnToStartEnabled &&
     (state.gameState?.isBoomerangPhase ||
       (state.gameState?.currentTurnIndex >= (state.gameState?.turnOrder?.length || 0)));
-  const isAdmin = party?.adminId === user?.uid;
+  const isAdmin = !!user && !!party && party.adminId === user.uid;
   // Use activePlayerId from state machine (accounts for pendingVictimId)
   const currentPlayerId = state.activePlayerId;
   const allGiftsFrozen = Object.values(state.gifts).filter(g => !g.isWrapped).every(g => g.isFrozen);
