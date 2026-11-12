@@ -12,7 +12,8 @@
     "dev:client": "cd client && npm run dev",
     "dev:server": "cd server && npm run dev",
     "build:client": "cd client && npm run build",
-    "build:functions": "cd functions && npm run build"
+    "build:functions": "cd functions && npm run build",
+    "test:firestore-rules": "firebase emulators:exec --only firestore --project better-white-elephant-rules-test 'node --test tests/firestore.users.rules.test.mjs'"
   },
   "keywords": [
     "white-elephant",
@@ -24,6 +25,9 @@
   "license": "MIT",
   "dependencies": {
     "firebase": "^12.6.0"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.0",
+    "firebase-tools": "^14.27.0"
   }
 }
-  
