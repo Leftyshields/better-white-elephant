@@ -62,7 +62,7 @@ export function Profile() {
       try {
         // Load from Firestore
         const userDoc = await getDoc(doc(db, 'users', user.uid));
-        if (userDoc.exists) {
+        if (userDoc.exists()) {
           const userData = userDoc.data();
           setDisplayName(user.displayName || userData.displayName || '');
           if (userData.shippingAddress) {

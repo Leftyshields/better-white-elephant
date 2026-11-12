@@ -4,9 +4,10 @@ import { MemoryRouter } from 'react-router-dom';
 import { Profile } from '../../pages/Profile.jsx';
 import { deleteField } from 'firebase/firestore';
 
-const { updateDoc, getDoc, mockUser } = vi.hoisted(() => ({
+const { updateDoc, getDoc, setDoc, mockUser } = vi.hoisted(() => ({
   updateDoc: vi.fn(),
   getDoc: vi.fn(),
+  setDoc: vi.fn(),
   mockUser: {
     uid: 'user-1',
     email: 'user@example.com',
@@ -21,7 +22,7 @@ vi.mock('firebase/firestore', async (importOriginal) => {
     doc: (...args) => ({ path: args.join('/') }),
     getDoc,
     updateDoc,
-    setDoc: vi.fn(),
+    setDoc,
     deleteField: actual.deleteField,
   };
 });
@@ -66,7 +67,7 @@ const completeAddress = {
 
 function mockLoadedProfile({ address, consentAt } = {}) {
   getDoc.mockResolvedValue({
-    exists: true,
+    exists: () => true,
     data: () => ({
       displayName: 'User',
       shippingAddress: address,
@@ -91,7 +92,9 @@ describe('Profile consent withdrawal and address deletion', () => {
   beforeEach(() => {
     updateDoc.mockReset();
     getDoc.mockReset();
+    setDoc.mockReset();
     updateDoc.mockResolvedValue(undefined);
+    setDoc.mockResolvedValue(undefined);
   });
 
   it('allows unchecking consent and Save; removes stored consent', async () => {
@@ -159,5 +162,19 @@ describe('Profile consent withdrawal and address deletion', () => {
     const payload = updateDoc.mock.calls[0][1];
     expect(payload.displayName).toBe('New Name');
     expect(payload.shippingAddress).toBeUndefined();
+  });
+
+  it('missing user document (exists() false) loads without crash and creates profile doc', async () => {
+    getDoc.mockResolvedValue({
+      exists: () => false,
+      data: () => undefined,
+    });
+    await renderProfile();
+
+    await waitFor(() => {
+      expect(setDoc).toHaveBeenCalled();
+    });
+    expect(screen.getByText('Your Profile')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /save changes/i })).not.toBeDisabled();
   });
 });
