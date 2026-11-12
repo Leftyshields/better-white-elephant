@@ -22,7 +22,8 @@ export function SEO({ title, description, image, url }) {
       {/* Standard Meta Tags */}
       <title>{fullTitle}</title>
       <meta name="description" content={description} />
-      
+      <link rel="canonical" href={fullUrl} />
+
       {/* Open Graph Tags */}
       <meta property="og:title" content={title || 'StealOrReveal'} />
       <meta property="og:description" content={description} />

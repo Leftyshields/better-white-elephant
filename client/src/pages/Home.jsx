@@ -1,7 +1,7 @@
 /**
  * Home Page
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../hooks/useAuth.js';
 import { Button } from '../components/ui/Button.jsx';
 import { Input } from '../components/ui/Input.jsx';
@@ -28,6 +28,15 @@ import {
   partyEntryButtonLabel,
   PARTIES_LOAD_ERROR,
 } from '../utils/partyUiCopy.js';
+
+export const OPEN_CREATE_PARTY_AFTER_AUTH_KEY = 'openCreatePartyAfterAuth';
+
+/** Clears host CTA session flag when Google sign-in did not complete (popup dismissed, etc.). */
+export function clearOpenCreatePartyAfterAuthUnlessGoogleSignInSucceeded(signInResult) {
+  if (!signInResult?.success) {
+    window.sessionStorage.removeItem(OPEN_CREATE_PARTY_AFTER_AUTH_KEY);
+  }
+}
 
 export function Home() {
   const { user, signInWithGoogle, signInWithEmailAndPassword, signUpWithEmailAndPassword } = useAuth();
@@ -75,12 +84,40 @@ export function Home() {
         navigate(redirectPath);
         return;
       }
-      if (window.sessionStorage.getItem('openCreatePartyAfterAuth')) {
-        window.sessionStorage.removeItem('openCreatePartyAfterAuth');
+      if (window.sessionStorage.getItem(OPEN_CREATE_PARTY_AFTER_AUTH_KEY)) {
+        window.sessionStorage.removeItem(OPEN_CREATE_PARTY_AFTER_AUTH_KEY);
         setShowCreatePartyModal(true);
       }
     }
   }, [user, navigate]);
+
+  const handleHostFreeGame = useCallback(
+    async (analyticsSource = 'hero') => {
+      trackButtonClick(LANDING_COPY.primaryCta, analyticsSource);
+      window.sessionStorage.setItem(OPEN_CREATE_PARTY_AFTER_AUTH_KEY, '1');
+      const res = await signInWithGoogle();
+      if (!res?.success) {
+        if (res?.error) {
+          console.error('Sign in failed:', res.error);
+        }
+        clearOpenCreatePartyAfterAuthUnlessGoogleSignInSucceeded(res);
+      }
+    },
+    [signInWithGoogle],
+  );
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('host') !== '1') {
+      return;
+    }
+    navigate('/', { replace: true });
+    if (user) {
+      setShowCreatePartyModal(true);
+      return;
+    }
+    void handleHostFreeGame('rules_cta');
+  }, [location.search, user, navigate, handleHostFreeGame, setShowCreatePartyModal]);
 
   // Subscribe to parties where user is admin OR participant
   useEffect(() => {
@@ -356,17 +393,6 @@ export function Home() {
     const featuresSection = document.getElementById('features-section');
     if (featuresSection) {
       featuresSection.scrollIntoView({ behavior: 'smooth' });
-    }
-  };
-
-  const handleHostFreeGame = async () => {
-    trackButtonClick(LANDING_COPY.primaryCta, 'hero');
-    window.sessionStorage.setItem('openCreatePartyAfterAuth', '1');
-    try {
-      await signInWithGoogle();
-    } catch (error) {
-      console.error('Sign in failed:', error);
-      window.sessionStorage.removeItem('openCreatePartyAfterAuth');
     }
   };
 

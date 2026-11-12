@@ -13,7 +13,7 @@ export const LANDING_COPY = {
     'Host a free online White Elephant, or Dirty Santa, and play in the browser during Zoom, Teams, or Meet. Guests join from a link. The game handles turns, steals, and the rules.',
   primaryCta: 'Host a free game',
   secondaryCta: 'See how it works',
-  microline: 'Free. Guests join from a link.',
+  microline: 'Free. You and your guests sign in with Google.',
   sectionHeading: "Built for the call you're already on",
   calloutZoom: 'Works alongside Zoom, Teams, or Meet.',
   calloutTimezone: 'Works for distributed teams. Everyone just needs to be on the same call.',
@@ -37,7 +37,7 @@ export const FEATURE_CARDS = [
   {
     emoji: '✈️',
     title: 'Auto-Pilot Logistics',
-    body: "The game tracks turn order and enforces the rules. When it ends, each winner's address goes privately to the one person sending their gift, and nobody else sees it.",
+    body: 'Before the game, you add a shipping address. When the game ends, we email it to the person mailing your gift. We delete it from our records 30 days later.',
   },
 ];
 

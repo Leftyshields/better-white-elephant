@@ -96,13 +96,8 @@ export function RulesContent({ pageHeading }) {
               <h2 className="text-2xl font-bold text-white">After the game</h2>
             </div>
             <p className="text-slate-300 leading-relaxed">
-              When the game ends, each winner privately shares their address with the person sending their gift. That person buys the gift and ships it.
+              Before the game, add a shipping address in your profile. When the game ends, we email it to the person mailing your gift. That person buys the gift and ships it. We delete it from our records 30 days later.
             </p>
-            <div className="mt-4 pt-4 border-t border-white/5">
-              <p className="text-sm text-slate-400">
-                <strong className="text-slate-300">Privacy:</strong> Addresses are only visible to the person who needs to send your gift.
-              </p>
-            </div>
           </div>
         </div>
 
@@ -202,13 +197,11 @@ export function RulesContent({ pageHeading }) {
         </div>
 
         <div className="text-center">
-          <Link to="/">
-            <button
-              type="button"
-              className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-lg px-12 py-4 rounded-full shadow-[0_0_30px_rgba(139,92,246,0.5)] hover:shadow-[0_0_40px_rgba(139,92,246,0.7)] transform hover:scale-105 transition-all duration-300"
-            >
-              {LANDING_COPY.primaryCta}
-            </button>
+          <Link
+            to="/?host=1"
+            className="inline-block bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-lg px-12 py-4 rounded-full shadow-[0_0_30px_rgba(139,92,246,0.5)] hover:shadow-[0_0_40px_rgba(139,92,246,0.7)] transform hover:scale-105 transition-all duration-300"
+          >
+            {LANDING_COPY.primaryCta}
           </Link>
         </div>
       </div>

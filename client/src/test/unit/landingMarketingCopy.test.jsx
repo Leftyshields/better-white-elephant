@@ -17,6 +17,7 @@ describe('landingMarketingCopy', () => {
     expect(HOME_SEO_TITLE).toBe('Virtual White Elephant for Remote Teams');
     expect(LANDING_COPY.primaryCta).toBe('Host a free game');
     expect(LANDING_COPY.secondaryCta).toBe('See how it works');
+    expect(LANDING_COPY.microline).toBe('Free. You and your guests sign in with Google.');
     expect(LANDING_COPY.heroHeadline).toContain('Virtual White Elephant for remote teams');
     expect(LANDING_COPY.demoToastFrozen).toContain('frozen');
   });
@@ -26,6 +27,17 @@ describe('landingMarketingCopy', () => {
     const setup = FEATURE_CARDS.find((c) => c.title === 'Easy Setup');
     expect(setup?.body).toContain('gift card builds itself');
     expect(setup?.body).not.toMatch(/scraping/i);
+  });
+
+  it('describes Auto-Pilot logistics with accurate address timing and retention', () => {
+    const autopilot = FEATURE_CARDS.find((c) => c.title === 'Auto-Pilot Logistics');
+    expect(autopilot?.body).toBe(
+      'Before the game, you add a shipping address. When the game ends, we email it to the person mailing your gift. We delete it from our records 30 days later.',
+    );
+    const featureCopy = FEATURE_CARDS.map((c) => c.body).join(' ');
+    expect(featureCopy).not.toMatch(/nobody else sees it/i);
+    expect(featureCopy).not.toMatch(/only the person/i);
+    expect(featureCopy).not.toMatch(/goes privately/i);
   });
 });
 

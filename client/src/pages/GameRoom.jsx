@@ -492,10 +492,15 @@ export function GameRoom({ partyId }) {
                 )}
                 {/* Boomerang Badge */}
                 {(party?.config?.returnToStart || state.gameState?.isBoomerangPhase) && (
-                  <div className="bg-indigo-500/20 text-indigo-300 text-[10px] uppercase tracking-wider px-2 py-1 rounded-full border border-indigo-500/30">
-                    {state.gameState?.isBoomerangPhase
-                      ? 'Boomerang round'
-                      : 'Boomerang is on: you can swap even if you already have a gift.'}
+                  <div className="flex flex-col items-start gap-1">
+                    <div className="bg-indigo-500/20 text-indigo-300 text-xs font-semibold px-2 py-1 rounded-full border border-indigo-500/30">
+                      {state.gameState?.isBoomerangPhase ? 'Boomerang round' : 'Boomerang is on'}
+                    </div>
+                    {!state.gameState?.isBoomerangPhase && (
+                      <p className="text-xs text-indigo-200/90 leading-snug">
+                        You can swap even if you already have a gift.
+                      </p>
+                    )}
                   </div>
                 )}
               </div>

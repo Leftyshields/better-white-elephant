@@ -157,7 +157,7 @@ export function Profile() {
         <div className="border-t border-white/10 pt-6">
           <h2 className="text-xl font-bold mb-4 text-white">Shipping Address</h2>
           <p className="text-sm text-slate-400 mb-4">
-            This address will be used when you win a gift. Gift submitters will be able to see this address to send you your prize.
+            When the game ends, we email this address to the person mailing your gift. We delete it from our records 30 days later.
           </p>
 
           <div className="space-y-4">

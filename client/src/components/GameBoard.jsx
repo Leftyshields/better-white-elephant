@@ -626,10 +626,8 @@ export function GameBoard({ partyId, onEndTurn }) {
       return (
         <div className="min-h-screen flex items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black py-12">
           <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
-            <h2 className="text-2xl font-bold mb-4 text-red-600">Still loading</h2>
-            <p className="text-gray-600 mb-4">
-              We&apos;re still loading the game. Refresh if this doesn&apos;t clear.
-            </p>
+            <h2 className="text-2xl font-bold mb-4 text-red-600">Couldn&apos;t load the game</h2>
+            <p className="text-gray-600 mb-4">Refresh the page and try again.</p>
             {isAdmin && (
               <p className="text-sm text-gray-500 mb-6">
                 As the host, you can reset the party status back to Lobby to start a new game.
@@ -1233,10 +1231,15 @@ export function GameBoard({ partyId, onEndTurn }) {
                 )}
                 {/* Boomerang Badge */}
                 {(party?.config?.returnToStart || gameState.isBoomerangPhase) && (
-                  <div className="bg-indigo-500/20 text-indigo-300 text-[10px] uppercase tracking-wider px-2 py-1 rounded-full border border-indigo-500/30">
-                    {gameState.isBoomerangPhase
-                      ? 'Boomerang round'
-                      : 'Boomerang is on: you can swap even if you already have a gift.'}
+                  <div className="flex flex-col items-start gap-1">
+                    <div className="bg-indigo-500/20 text-indigo-300 text-xs font-semibold px-2 py-1 rounded-full border border-indigo-500/30">
+                      {gameState.isBoomerangPhase ? 'Boomerang round' : 'Boomerang is on'}
+                    </div>
+                    {!gameState.isBoomerangPhase && (
+                      <p className="text-xs text-indigo-200/90 leading-snug">
+                        You can swap even if you already have a gift.
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
