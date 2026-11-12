@@ -38,7 +38,8 @@ describe('winner shipping address client access', () => {
     expect(giftToSend).toContain('SHIPPING_ADDRESS_WINNER_NOT_SHARED_GIFT_TO_SEND');
     expect(viewModal).toContain('SHIPPING_ADDRESS_WINNER_NOT_SHARED_VIEW_MODAL');
     expect(addressModal).toContain('SHIPPING_ADDRESS_CONSENT_REQUIRED_ADDRESS_MODAL');
-    expect(profile).toContain('SHIPPING_ADDRESS_CONSENT_REQUIRED_PROFILE');
+    expect(profile).not.toContain('SHIPPING_ADDRESS_CONSENT_REQUIRED_PROFILE');
+    expect(profile).toContain('SHIPPING_ADDRESS_CONSENT_WITHDRAW_PENDING_PROFILE');
 
     expect(giftToSend).not.toContain('missing address or consent');
     expect(viewModal).not.toContain('missing address or consent');

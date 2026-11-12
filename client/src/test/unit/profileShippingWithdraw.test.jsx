@@ -3,6 +3,11 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Profile } from '../../pages/Profile.jsx';
 import { deleteField } from 'firebase/firestore';
+import {
+  SHIPPING_ADDRESS_CONSENT_REQUIRED_PROFILE,
+  SHIPPING_ADDRESS_CONSENT_WITHDRAW_PENDING_PROFILE,
+  SHIPPING_ADDRESS_SAVED_NEEDS_CONSENT_PROFILE,
+} from '../../utils/shippingAddressCopy.js';
 
 const { updateDoc, getDoc, setDoc, mockUser } = vi.hoisted(() => ({
   updateDoc: vi.fn(),
@@ -97,6 +102,15 @@ describe('Profile consent withdrawal and address deletion', () => {
     setDoc.mockResolvedValue(undefined);
   });
 
+  it('never shows SHIPPING_ADDRESS_CONSENT_REQUIRED_PROFILE on Profile', async () => {
+    mockLoadedProfile({ address: completeAddress, consentAt: undefined });
+    await renderProfile();
+    fireEvent.click(await screen.findByRole('checkbox'));
+    expect(screen.queryByText(SHIPPING_ADDRESS_CONSENT_REQUIRED_PROFILE)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('checkbox'));
+    expect(screen.queryByText(SHIPPING_ADDRESS_CONSENT_REQUIRED_PROFILE)).not.toBeInTheDocument();
+  });
+
   it('allows unchecking consent and Save; removes stored consent', async () => {
     mockLoadedProfile({ address: completeAddress, consentAt: new Date() });
     await renderProfile();
@@ -106,6 +120,8 @@ describe('Profile consent withdrawal and address deletion', () => {
     expect(saveButton).not.toBeDisabled();
     fireEvent.click(consentBox);
     expect(consentBox).not.toBeChecked();
+    expect(screen.getByText(SHIPPING_ADDRESS_CONSENT_WITHDRAW_PENDING_PROFILE)).toBeInTheDocument();
+    expect(screen.queryByText(SHIPPING_ADDRESS_SAVED_NEEDS_CONSENT_PROFILE)).not.toBeInTheDocument();
 
     fireEvent.click(saveButton);
 
@@ -116,6 +132,48 @@ describe('Profile consent withdrawal and address deletion', () => {
     const payload = updateDoc.mock.calls[0][1];
     expect(payload.shippingAddress).toEqual(completeAddress);
     expect(payload.shippingAddressSenderShareConsentAt).toEqual(deleteField());
+
+    await waitFor(() => {
+      expect(screen.getByText(SHIPPING_ADDRESS_SAVED_NEEDS_CONSENT_PROFILE)).toBeInTheDocument();
+    });
+    expect(screen.queryByText(SHIPPING_ADDRESS_CONSENT_WITHDRAW_PENDING_PROFILE)).not.toBeInTheDocument();
+  });
+
+  it('shows withdraw-pending note after uncheck and hides it when consent is re-checked before save', async () => {
+    mockLoadedProfile({ address: completeAddress, consentAt: new Date() });
+    await renderProfile();
+
+    const consentBox = await screen.findByRole('checkbox');
+    fireEvent.click(consentBox);
+    expect(screen.getByText(SHIPPING_ADDRESS_CONSENT_WITHDRAW_PENDING_PROFILE)).toBeInTheDocument();
+
+    fireEvent.click(consentBox);
+    expect(screen.queryByText(SHIPPING_ADDRESS_CONSENT_WITHDRAW_PENDING_PROFILE)).not.toBeInTheDocument();
+  });
+
+  it('shows saved-needs-consent note for persisted address without consent and not withdraw-pending', async () => {
+    mockLoadedProfile({ address: completeAddress, consentAt: undefined });
+    await renderProfile();
+
+    expect(screen.getByText(SHIPPING_ADDRESS_SAVED_NEEDS_CONSENT_PROFILE)).toBeInTheDocument();
+    expect(screen.queryByText(SHIPPING_ADDRESS_CONSENT_WITHDRAW_PENDING_PROFILE)).not.toBeInTheDocument();
+  });
+
+  it('clears saved-needs-consent note after save with consent checked', async () => {
+    mockLoadedProfile({ address: completeAddress, consentAt: undefined });
+    await renderProfile();
+
+    expect(screen.getByText(SHIPPING_ADDRESS_SAVED_NEEDS_CONSENT_PROFILE)).toBeInTheDocument();
+    const consentBox = await screen.findByRole('checkbox');
+    fireEvent.click(consentBox);
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(updateDoc).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(screen.queryByText(SHIPPING_ADDRESS_SAVED_NEEDS_CONSENT_PROFILE)).not.toBeInTheDocument();
+    });
   });
 
   it('allows clearing address fields and Save; deletes stored address', async () => {

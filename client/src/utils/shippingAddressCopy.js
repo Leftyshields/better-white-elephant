@@ -19,3 +19,6 @@ export const SHIPPING_ADDRESS_CONSENT_REQUIRED_PROFILE =
 
 export const SHIPPING_ADDRESS_SAVED_NEEDS_CONSENT_PROFILE =
   "This address isn't shared with the person mailing your gift until you check the box and save.";
+
+export const SHIPPING_ADDRESS_CONSENT_WITHDRAW_PENDING_PROFILE =
+  'This address will no longer be shared with the person mailing your gift when you save.';

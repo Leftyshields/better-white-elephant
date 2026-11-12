@@ -24,10 +24,17 @@ describe('Profile shipping UX must-fixes', () => {
     expect(profile).not.toContain('saveDisabled = saving || (hasShippingFields && !shareConsent)');
   });
 
-  it('shows inline consent-required message instead of alert', () => {
-    expect(profile).toContain('SHIPPING_ADDRESS_CONSENT_REQUIRED_PROFILE');
-    expect(profile).toMatch(/hasShippingFields && !shareConsent[\s\S]*SHIPPING_ADDRESS_CONSENT_REQUIRED_PROFILE/);
-    expect(profile).not.toContain('alert(SHIPPING_ADDRESS_CONSENT_REQUIRED_PROFILE)');
+  it('does not show SHIPPING_ADDRESS_CONSENT_REQUIRED_PROFILE on Profile', () => {
+    expect(profile).not.toContain('SHIPPING_ADDRESS_CONSENT_REQUIRED_PROFILE');
+  });
+
+  it('shows optional in-progress withdraw note via shippingAddressCopy constant', () => {
+    expect(copyModule).toContain('SHIPPING_ADDRESS_CONSENT_WITHDRAW_PENDING_PROFILE');
+    expect(copyModule).toContain(
+      'This address will no longer be shared with the person mailing your gift when you save.',
+    );
+    expect(profile).toContain('SHIPPING_ADDRESS_CONSENT_WITHDRAW_PENDING_PROFILE');
+    expect(profile).toContain('showConsentWithdrawPendingNote');
   });
 
   it('shows honesty note only for loaded saved address without persisted consent', () => {

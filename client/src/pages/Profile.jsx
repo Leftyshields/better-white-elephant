@@ -7,7 +7,7 @@ import { useAuth } from '../hooks/useAuth.js';
 import { useNavigate } from 'react-router-dom';
 import { doc, getDoc, setDoc, updateDoc, deleteField } from 'firebase/firestore';
 import {
-  SHIPPING_ADDRESS_CONSENT_REQUIRED_PROFILE,
+  SHIPPING_ADDRESS_CONSENT_WITHDRAW_PENDING_PROFILE,
   SHIPPING_ADDRESS_SAVED_NEEDS_CONSENT_PROFILE,
   SHIPPING_ADDRESS_SENDER_SHARE_CONSENT_LABEL,
 } from '../utils/shippingAddressCopy.js';
@@ -46,9 +46,15 @@ export function Profile() {
   const [shareConsent, setShareConsent] = useState(false);
   const [showSavedAddressNeedsConsentNote, setShowSavedAddressNeedsConsentNote] = useState(false);
   const [hadPersistedShippingAddress, setHadPersistedShippingAddress] = useState(false);
+  const [hadGrantedSenderShareConsent, setHadGrantedSenderShareConsent] = useState(false);
 
   const hasShippingFields = hasCompleteShippingFields(address);
   const saveDisabled = saving;
+  const showConsentWithdrawPendingNote =
+    hasShippingFields &&
+    !shareConsent &&
+    !showSavedAddressNeedsConsentNote &&
+    hadGrantedSenderShareConsent;
 
   // Load user profile data
   useEffect(() => {
@@ -74,11 +80,13 @@ export function Profile() {
           const loadedHadConsent = Boolean(userData.shippingAddressSenderShareConsentAt);
           setShowSavedAddressNeedsConsentNote(loadedHadCompleteAddress && !loadedHadConsent);
           setHadPersistedShippingAddress(Boolean(userData.shippingAddress));
+          setHadGrantedSenderShareConsent(loadedHadConsent);
         } else {
           // Create user document if it doesn't exist
           setDisplayName(user.displayName || '');
           setShowSavedAddressNeedsConsentNote(false);
           setHadPersistedShippingAddress(false);
+          setHadGrantedSenderShareConsent(false);
           await setDoc(doc(db, 'users', user.uid), {
             displayName: user.displayName || '',
             email: user.email || '',
@@ -254,16 +262,22 @@ export function Profile() {
                 type="checkbox"
                 className="mt-1"
                 checked={shareConsent}
-                onChange={(e) => setShareConsent(e.target.checked)}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  if (checked) {
+                    setHadGrantedSenderShareConsent(true);
+                  }
+                  setShareConsent(checked);
+                }}
               />
               <span>{SHIPPING_ADDRESS_SENDER_SHARE_CONSENT_LABEL}</span>
             </label>
             {showSavedAddressNeedsConsentNote && (
               <p className="text-sm text-slate-300">{SHIPPING_ADDRESS_SAVED_NEEDS_CONSENT_PROFILE}</p>
             )}
-            {hasShippingFields && !shareConsent && (
-              <p className="text-sm text-amber-300" role="alert">
-                {SHIPPING_ADDRESS_CONSENT_REQUIRED_PROFILE}
+            {showConsentWithdrawPendingNote && (
+              <p className="text-sm text-slate-300">
+                {SHIPPING_ADDRESS_CONSENT_WITHDRAW_PENDING_PROFILE}
               </p>
             )}
           </div>
