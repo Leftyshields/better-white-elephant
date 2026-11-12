@@ -1,8 +1,11 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
+  define: {
+    __UX_PREVIEW__: mode === 'ux-preview',
+  },
   server: {
     port: 5173,
   },
@@ -21,6 +24,4 @@ export default defineConfig({
       ],
     },
   },
-});
-
-
+}));

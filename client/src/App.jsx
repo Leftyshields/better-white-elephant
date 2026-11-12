@@ -2,7 +2,7 @@
  * Main App Component
  */
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
-import { useEffect } from 'react';
+import { useEffect, lazy, Suspense } from 'react';
 import { Header } from './components/Header.jsx';
 import { Home } from './pages/Home.jsx';
 import { Party } from './pages/Party.jsx';
@@ -14,6 +14,11 @@ import { Contact } from './pages/Contact.jsx';
 import { trackPageView } from './utils/analytics.js';
 import { PartyModalProvider } from './contexts/PartyModalContext.jsx';
 import { SoundProvider } from './contexts/SoundContext.jsx';
+import { UX_PREVIEW_ENABLED } from './preview/previewFlag.js';
+
+const PreviewChrome = UX_PREVIEW_ENABLED
+  ? lazy(() => import('./preview/PreviewChrome.jsx').then((m) => ({ default: m.PreviewChrome })))
+  : null;
 
 // Component to track page views
 function PageViewTracker() {
@@ -35,6 +40,11 @@ function App() {
           <PageViewTracker />
           <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black pt-24">
             <Header />
+            {PreviewChrome ? (
+              <Suspense fallback={null}>
+                <PreviewChrome />
+              </Suspense>
+            ) : null}
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/party/:partyId" element={<Party />} />

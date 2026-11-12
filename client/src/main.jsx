@@ -7,6 +7,7 @@ import { HelmetProvider } from 'react-helmet-async';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App.jsx';
 import './index.css';
+import { UX_PREVIEW_ENABLED } from './preview/previewFlag.js';
 
 // Global error handlers to catch crashes
 window.addEventListener('error', (event) => {
@@ -30,14 +31,25 @@ const queryClient = new QueryClient({
   },
 });
 
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <HelmetProvider>
-        <App />
-      </HelmetProvider>
-    </QueryClientProvider>
-  </React.StrictMode>
-);
+function renderApp() {
+  ReactDOM.createRoot(document.getElementById('root')).render(
+    <React.StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <HelmetProvider>
+          <App />
+        </HelmetProvider>
+      </QueryClientProvider>
+    </React.StrictMode>
+  );
+}
+
+if (UX_PREVIEW_ENABLED) {
+  import('./preview/initPreviewFirebase.js').then(({ initPreviewFirebase }) => {
+    initPreviewFirebase();
+    renderApp();
+  });
+} else {
+  renderApp();
+}
 
 

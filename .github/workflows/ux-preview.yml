@@ -1,0 +1,98 @@
+name: UX Preview Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel_id:
+        description: Firebase Hosting preview channel id
+        required: false
+        default: ux-review
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-ux-preview:
+    name: Build and deploy UX preview channel
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install client dependencies
+        working-directory: ./client
+        run: npm ci || npm install
+
+      - name: Write preview env file
+        working-directory: ./client
+        env:
+          VITE_FIREBASE_API_KEY: ${{ secrets.UX_PREVIEW_VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.UX_PREVIEW_VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ secrets.UX_PREVIEW_VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.UX_PREVIEW_VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.UX_PREVIEW_VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ secrets.UX_PREVIEW_VITE_FIREBASE_APP_ID }}
+          VITE_SERVER_URL: ${{ secrets.UX_PREVIEW_VITE_SERVER_URL }}
+        run: |
+          cat > .env.ux-preview <<EOF
+          VITE_FIREBASE_API_KEY=${VITE_FIREBASE_API_KEY}
+          VITE_FIREBASE_AUTH_DOMAIN=${VITE_FIREBASE_AUTH_DOMAIN}
+          VITE_FIREBASE_PROJECT_ID=${VITE_FIREBASE_PROJECT_ID}
+          VITE_FIREBASE_STORAGE_BUCKET=${VITE_FIREBASE_STORAGE_BUCKET}
+          VITE_FIREBASE_MESSAGING_SENDER_ID=${VITE_FIREBASE_MESSAGING_SENDER_ID}
+          VITE_FIREBASE_APP_ID=${VITE_FIREBASE_APP_ID}
+          VITE_SERVER_URL=${VITE_SERVER_URL}
+          EOF
+
+      - name: Build UX preview client
+        working-directory: ./client
+        run: npm run build:ux-preview
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools@13
+
+      - name: Deploy Hosting preview channel (non-production project)
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/ux-preview-sa.json
+          FIREBASE_SA: ${{ secrets.UX_PREVIEW_FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$FIREBASE_SA" ]; then
+            echo "UX_PREVIEW_FIREBASE_SERVICE_ACCOUNT secret is not set. Skipping deploy."
+            exit 0
+          fi
+          printf '%s' "$FIREBASE_SA" > "$GOOGLE_APPLICATION_CREDENTIALS"
+          firebase hosting:channel:deploy "${{ github.event.inputs.channel_id || 'ux-review' }}" \
+            --config firebase.ux-preview.json \
+            --project better-white-elephant-ux-preview \
+            --expires 30d
+
+      - name: Detect preview seed credentials
+        id: seed_credentials
+        env:
+          UX_PREVIEW_SEED_PASSWORD: ${{ secrets.UX_PREVIEW_SEED_PASSWORD }}
+          UX_PREVIEW_FIREBASE_SERVICE_ACCOUNT: ${{ secrets.UX_PREVIEW_FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -n "$UX_PREVIEW_SEED_PASSWORD" ] && [ -n "$UX_PREVIEW_FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Preview seed skipped: UX_PREVIEW_SEED_PASSWORD and/or UX_PREVIEW_FIREBASE_SERVICE_ACCOUNT not set."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Seed preview Firestore and Auth users
+        if: steps.seed_credentials.outputs.present == 'true'
+        env:
+          UX_PREVIEW_SEED_PASSWORD: ${{ secrets.UX_PREVIEW_SEED_PASSWORD }}
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/ux-preview-sa.json
+          GCLOUD_PROJECT: better-white-elephant-ux-preview
+          FIREBASE_SA: ${{ secrets.UX_PREVIEW_FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          printf '%s' "$FIREBASE_SA" > "$GOOGLE_APPLICATION_CREDENTIALS"
+          npm install firebase-admin@^12.0.0 --no-save
+          node scripts/ux-preview/seed.mjs
