@@ -4,7 +4,7 @@
 import { Link } from 'react-router-dom';
 import { ShieldCheckIcon } from '@heroicons/react/24/outline';
 import { SEO } from '../components/SEO.jsx';
-import { LEGAL_LAST_UPDATED } from '../utils/landingMarketingCopy.js';
+import { PRIVACY_LAST_UPDATED } from '../utils/landingMarketingCopy.js';
 
 export function Privacy() {
   return (
@@ -25,7 +25,7 @@ export function Privacy() {
             </h1>
           </div>
           <p className="text-sm text-slate-400">
-            Last updated: {LEGAL_LAST_UPDATED}
+            Last updated: {PRIVACY_LAST_UPDATED}
           </p>
         </div>
 
