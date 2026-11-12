@@ -9,6 +9,7 @@ import { GameEngine } from '../engine.js';
 import redisClient from '../utils/redis.js';
 import { scrapeGiftMetadata } from '../utils/scraper.js';
 import { saveGameState, loadGameState, deleteGameState } from '../utils/game-state-persistence.js';
+import { fetchWinnerShippingAddressForSender } from '../utils/winner-shipping-address.js';
 
 const router = express.Router();
 
@@ -382,6 +383,32 @@ router.get('/state/:partyId', async (req, res) => {
   } catch (error) {
     console.error('Error fetching game state:', error);
     res.status(500).json({ error: 'Failed to fetch game state', message: error.message });
+  }
+});
+
+/**
+ * GET /api/game/winner-shipping-address/:partyId/:giftId
+ * Assigned sender (gift submitter) may read winner shipping address after game end.
+ */
+router.get('/winner-shipping-address/:partyId/:giftId', async (req, res) => {
+  try {
+    const userId = req.user?.uid;
+    const { partyId, giftId } = req.params;
+
+    const result = await fetchWinnerShippingAddressForSender(db, {
+      callerUid: userId,
+      partyId,
+      giftId,
+    });
+
+    if (result.status !== 200) {
+      return res.status(result.status).json({ error: result.error });
+    }
+
+    return res.json({ shippingAddress: result.shippingAddress });
+  } catch (error) {
+    console.error('Error fetching winner shipping address:', error);
+    res.status(500).json({ error: 'Failed to fetch shipping address', message: error.message });
   }
 });
 

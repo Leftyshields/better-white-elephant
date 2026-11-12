@@ -5,7 +5,8 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth.js';
 import { useNavigate } from 'react-router-dom';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, deleteField } from 'firebase/firestore';
+import { SHIPPING_ADDRESS_SENDER_SHARE_CONSENT_LABEL } from '../utils/shippingAddressCopy.js';
 import { updateProfile } from 'firebase/auth';
 import { auth, db } from '../utils/firebase.js';
 import { Button } from '../components/ui/Button.jsx';
@@ -27,6 +28,7 @@ export function Profile() {
     country: '',
   });
   const [successMessage, setSuccessMessage] = useState('');
+  const [shareConsent, setShareConsent] = useState(false);
 
   // Load user profile data
   useEffect(() => {
@@ -46,6 +48,7 @@ export function Profile() {
           if (userData.shippingAddress) {
             setAddress(userData.shippingAddress);
           }
+          setShareConsent(Boolean(userData.shippingAddressSenderShareConsentAt));
         } else {
           // Create user document if it doesn't exist
           setDisplayName(user.displayName || '');
@@ -73,6 +76,19 @@ export function Profile() {
     e.preventDefault();
     if (!user) return;
 
+    const hasShippingFields =
+      address.name?.trim() &&
+      address.street?.trim() &&
+      address.city?.trim() &&
+      address.state?.trim() &&
+      address.zip?.trim() &&
+      address.country?.trim();
+
+    if (hasShippingFields && !shareConsent) {
+      alert('You must agree to share your shipping address with the person who may mail your gift.');
+      return;
+    }
+
     setSaving(true);
     setSuccessMessage('');
     
@@ -82,13 +98,19 @@ export function Profile() {
         await updateProfile(auth.currentUser, { displayName });
       }
 
-      // Update Firestore user document
-      await updateDoc(doc(db, 'users', user.uid), {
+      const profileUpdate = {
         displayName: displayName || user.email || '',
         email: user.email || '',
-        shippingAddress: address,
         updatedAt: new Date(),
-      });
+      };
+
+      if (hasShippingFields) {
+        profileUpdate.shippingAddress = address;
+        profileUpdate.shippingAddressSenderShareConsentAt = shareConsent ? new Date() : deleteField();
+      }
+
+      // Update Firestore user document
+      await updateDoc(doc(db, 'users', user.uid), profileUpdate);
 
       setSuccessMessage('Profile updated successfully!');
       setTimeout(() => setSuccessMessage(''), 3000);
@@ -201,6 +223,15 @@ export function Profile() {
                 placeholder="Country"
               />
             </div>
+            <label className="flex gap-3 items-start text-sm text-slate-300 cursor-pointer">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={shareConsent}
+                onChange={(e) => setShareConsent(e.target.checked)}
+              />
+              <span>{SHIPPING_ADDRESS_SENDER_SHARE_CONSENT_LABEL}</span>
+            </label>
           </div>
         </div>
 

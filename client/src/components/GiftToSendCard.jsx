@@ -3,15 +3,15 @@
  * Shows a gift you need to send with winner's shipping address
  */
 import { useState, useEffect } from 'react';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore';
-import { db } from '../utils/firebase.js';
 import { ClipboardDocumentIcon } from '@heroicons/react/24/outline';
 import { CheckIcon } from '@heroicons/react/24/solid';
 import { CheckBadgeIcon } from '@heroicons/react/24/solid';
+import { fetchWinnerShippingAddress } from '../utils/api.js';
 
 export function GiftToSendCard({ gift, winnerId, winnerName, userNames, userEmails, isSelfWin = false }) {
   const [address, setAddress] = useState(null);
   const [loadingAddress, setLoadingAddress] = useState(true);
+  const [addressUnavailable, setAddressUnavailable] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const formatAddressForCopy = (addr) => {
@@ -44,35 +44,39 @@ export function GiftToSendCard({ gift, winnerId, winnerName, userNames, userEmai
   };
 
   useEffect(() => {
-    if (!winnerId) {
+    if (!winnerId || isSelfWin || !gift?.partyId || !gift?.id) {
       setAddress(null);
+      setAddressUnavailable(false);
       setLoadingAddress(false);
       return;
     }
 
+    let cancelled = false;
     setLoadingAddress(true);
-    
-    // Subscribe to real-time updates for the winner's shipping address
-    const unsubscribe = onSnapshot(
-      doc(db, 'users', winnerId),
-      (userDoc) => {
-        if (userDoc.exists()) {
-          const userData = userDoc.data();
-          setAddress(userData.shippingAddress || null);
-        } else {
-          setAddress(null);
-        }
-        setLoadingAddress(false);
-      },
-      (error) => {
+    setAddressUnavailable(false);
+
+    fetchWinnerShippingAddress(gift.partyId, gift.id)
+      .then((data) => {
+        if (cancelled) return;
+        setAddress(data.shippingAddress || null);
+        setAddressUnavailable(!data.shippingAddress);
+      })
+      .catch((error) => {
+        if (cancelled) return;
         console.error('Error fetching address:', error);
         setAddress(null);
-        setLoadingAddress(false);
-      }
-    );
+        setAddressUnavailable(true);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoadingAddress(false);
+        }
+      });
 
-    return () => unsubscribe();
-  }, [winnerId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [winnerId, isSelfWin, gift?.partyId, gift?.id]);
 
   return (
     <div className="bg-slate-900/50 border border-slate-700 rounded-2xl p-6 hover:border-slate-600 transition-all relative">
@@ -155,7 +159,9 @@ export function GiftToSendCard({ gift, winnerId, winnerName, userNames, userEmai
                 </>
               ) : (
                 <p className="text-sm text-orange-400 italic font-mono">
-                  The winner hasn&apos;t added a shipping address yet.
+                  {addressUnavailable
+                    ? 'The winner has not shared a shipping address yet (missing address or consent).'
+                    : "The winner hasn't added a shipping address yet."}
                 </p>
               )}
             </div>
@@ -165,4 +171,3 @@ export function GiftToSendCard({ gift, winnerId, winnerName, userNames, userEmai
     </div>
   );
 }
-

@@ -8,6 +8,7 @@ import { Button } from './ui/Button.jsx';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../utils/firebase.js';
 import { useAuth } from '../hooks/useAuth.js';
+import { SHIPPING_ADDRESS_SENDER_SHARE_CONSENT_LABEL } from '../utils/shippingAddressCopy.js';
 
 export function AddressModal({ isOpen, onClose, giftTitle }) {
   const { user } = useAuth();
@@ -19,6 +20,7 @@ export function AddressModal({ isOpen, onClose, giftTitle }) {
     zip: '',
     country: '',
   });
+  const [shareConsent, setShareConsent] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -37,6 +39,7 @@ export function AddressModal({ isOpen, onClose, giftTitle }) {
           if (userData.shippingAddress) {
             setAddress(userData.shippingAddress);
           }
+          setShareConsent(Boolean(userData.shippingAddressSenderShareConsentAt));
         }
       } catch (error) {
         console.error('Error loading address:', error);
@@ -52,10 +55,16 @@ export function AddressModal({ isOpen, onClose, giftTitle }) {
     e.preventDefault();
     if (!user) return;
 
+    if (!shareConsent) {
+      alert('You must agree to share your shipping address with the person mailing your gift.');
+      return;
+    }
+
     setSaving(true);
     try {
       await updateDoc(doc(db, 'users', user.uid), {
         shippingAddress: address,
+        shippingAddressSenderShareConsentAt: new Date(),
         updatedAt: new Date(),
       });
       alert('Address saved! The gift submitter will be notified.');
@@ -68,6 +77,7 @@ export function AddressModal({ isOpen, onClose, giftTitle }) {
         zip: '',
         country: '',
       });
+      setShareConsent(false);
     } catch (error) {
       console.error('Error saving address:', error);
       alert('Failed to save address: ' + error.message);
@@ -133,11 +143,21 @@ export function AddressModal({ isOpen, onClose, giftTitle }) {
             required
           />
         </div>
+        <label className="flex gap-3 items-start mt-4 text-sm text-gray-700 cursor-pointer">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={shareConsent}
+            onChange={(e) => setShareConsent(e.target.checked)}
+            required
+          />
+          <span>{SHIPPING_ADDRESS_SENDER_SHARE_CONSENT_LABEL}</span>
+        </label>
         <div className="flex gap-3 justify-end mt-6">
           <Button variant="secondary" onClick={onClose} type="button">
             Cancel
           </Button>
-          <Button type="submit" disabled={saving}>
+          <Button type="submit" disabled={saving || !shareConsent}>
             {saving ? 'Saving...' : 'Save Address'}
           </Button>
         </div>
@@ -146,5 +166,3 @@ export function AddressModal({ isOpen, onClose, giftTitle }) {
     </Modal>
   );
 }
-
-

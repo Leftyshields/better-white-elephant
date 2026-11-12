@@ -1153,7 +1153,8 @@ export function GameBoard({ partyId, onEndTurn }) {
               setShowAddressViewModal(false);
               setSelectedWinnerAddress(null);
             }}
-            winnerId={selectedWinnerAddress.winnerId}
+            partyId={selectedWinnerAddress.partyId}
+            giftId={selectedWinnerAddress.giftId}
             winnerName={selectedWinnerAddress.winnerName}
             giftTitle={selectedWinnerAddress.giftTitle}
           />
