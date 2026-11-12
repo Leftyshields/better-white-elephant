@@ -157,7 +157,7 @@ export function Profile() {
         <div className="border-t border-white/10 pt-6">
           <h2 className="text-xl font-bold mb-4 text-white">Shipping Address</h2>
           <p className="text-sm text-slate-400 mb-4">
-            When the game ends, we email this address to the person mailing your gift. We delete it from our records 30 days later.
+            Add this before the game. After the game, the person mailing your gift uses it to ship.
           </p>
 
           <div className="space-y-4">

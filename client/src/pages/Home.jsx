@@ -1,8 +1,18 @@
 /**
  * Home Page
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../hooks/useAuth.js';
+import {
+  OPEN_CREATE_PARTY_AFTER_AUTH_KEY,
+  clearOpenCreatePartyAfterAuthUnlessGoogleSignInSucceeded,
+  useHostFreeGame,
+} from '../hooks/useHostFreeGame.js';
+
+export {
+  OPEN_CREATE_PARTY_AFTER_AUTH_KEY,
+  clearOpenCreatePartyAfterAuthUnlessGoogleSignInSucceeded,
+} from '../hooks/useHostFreeGame.js';
 import { Button } from '../components/ui/Button.jsx';
 import { Input } from '../components/ui/Input.jsx';
 import { Modal } from '../components/ui/Modal.jsx';
@@ -29,17 +39,16 @@ import {
   PARTIES_LOAD_ERROR,
 } from '../utils/partyUiCopy.js';
 
-export const OPEN_CREATE_PARTY_AFTER_AUTH_KEY = 'openCreatePartyAfterAuth';
-
-/** Clears host CTA session flag when Google sign-in did not complete (popup dismissed, etc.). */
-export function clearOpenCreatePartyAfterAuthUnlessGoogleSignInSucceeded(signInResult) {
-  if (!signInResult?.success) {
-    window.sessionStorage.removeItem(OPEN_CREATE_PARTY_AFTER_AUTH_KEY);
-  }
-}
-
 export function Home() {
-  const { user, signInWithGoogle, signInWithEmailAndPassword, signUpWithEmailAndPassword } = useAuth();
+  const { user, signInWithEmailAndPassword, signUpWithEmailAndPassword } = useAuth();
+  const {
+    authLoading,
+    dismissHostSignInNotice,
+    handleHostFreeGame,
+    hostSignInNotice,
+  } = useHostFreeGame();
+  const hostHeroButtonRef = useRef(null);
+  const hostParamHandledRef = useRef(false);
   const [partyDate, setPartyDate] = useState('');
   const [partyTitle, setPartyTitle] = useState('');
   const [myParties, setMyParties] = useState([]);
@@ -89,35 +98,43 @@ export function Home() {
         setShowCreatePartyModal(true);
       }
     }
-  }, [user, navigate]);
-
-  const handleHostFreeGame = useCallback(
-    async (analyticsSource = 'hero') => {
-      trackButtonClick(LANDING_COPY.primaryCta, analyticsSource);
-      window.sessionStorage.setItem(OPEN_CREATE_PARTY_AFTER_AUTH_KEY, '1');
-      const res = await signInWithGoogle();
-      if (!res?.success) {
-        if (res?.error) {
-          console.error('Sign in failed:', res.error);
-        }
-        clearOpenCreatePartyAfterAuthUnlessGoogleSignInSucceeded(res);
-      }
-    },
-    [signInWithGoogle],
-  );
+  }, [user, navigate, setShowCreatePartyModal]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (params.get('host') !== '1') {
+      hostParamHandledRef.current = false;
       return;
     }
+    if (authLoading) {
+      return;
+    }
+    if (hostParamHandledRef.current) {
+      return;
+    }
+    hostParamHandledRef.current = true;
+
     navigate('/', { replace: true });
+    window.scrollTo(0, 0);
+
     if (user) {
       setShowCreatePartyModal(true);
       return;
     }
-    void handleHostFreeGame('rules_cta');
-  }, [location.search, user, navigate, handleHostFreeGame, setShowCreatePartyModal]);
+
+    requestAnimationFrame(() => {
+      const el = hostHeroButtonRef.current;
+      if (!el) {
+        return;
+      }
+      if (typeof el.scrollIntoView === 'function') {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      if (typeof el.focus === 'function') {
+        el.focus({ preventScroll: true });
+      }
+    });
+  }, [location.search, user, authLoading, navigate, setShowCreatePartyModal]);
 
   // Subscribe to parties where user is admin OR participant
   useEffect(() => {
@@ -414,10 +431,27 @@ export function Home() {
               </p>
               
               {/* CTAs */}
+              {hostSignInNotice ? (
+                <p
+                  role="alert"
+                  className="text-amber-200 bg-amber-500/10 border border-amber-400/30 rounded-lg px-4 py-3 mb-4 max-w-xl mx-auto text-sm"
+                >
+                  {hostSignInNotice}{' '}
+                  <button
+                    type="button"
+                    className="underline text-amber-100"
+                    onClick={dismissHostSignInNotice}
+                  >
+                    Dismiss
+                  </button>
+                </p>
+              ) : null}
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-3">
                 <button
+                  ref={hostHeroButtonRef}
+                  id="host-free-game-cta"
                   type="button"
-                  onClick={handleHostFreeGame}
+                  onClick={() => void handleHostFreeGame('hero')}
                   className="px-8 py-4 text-lg font-semibold bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg hover:from-indigo-600 hover:to-purple-700 transition-all shadow-lg"
                 >
                   {LANDING_COPY.primaryCta}

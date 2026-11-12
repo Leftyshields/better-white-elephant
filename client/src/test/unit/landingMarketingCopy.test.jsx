@@ -29,12 +29,9 @@ describe('landingMarketingCopy', () => {
     expect(setup?.body).not.toMatch(/scraping/i);
   });
 
-  it('describes Auto-Pilot logistics with accurate address timing and retention', () => {
-    const autopilot = FEATURE_CARDS.find((c) => c.title === 'Auto-Pilot Logistics');
-    expect(autopilot?.body).toBe(
-      'Before the game, you add a shipping address. When the game ends, we email it to the person mailing your gift. We delete it from our records 30 days later.',
-    );
+  it('does not claim the product emails shipping addresses (interim until Copywriter strings)', () => {
     const featureCopy = FEATURE_CARDS.map((c) => c.body).join(' ');
+    expect(featureCopy).not.toMatch(/we email/i);
     expect(featureCopy).not.toMatch(/nobody else sees it/i);
     expect(featureCopy).not.toMatch(/only the person/i);
     expect(featureCopy).not.toMatch(/goes privately/i);

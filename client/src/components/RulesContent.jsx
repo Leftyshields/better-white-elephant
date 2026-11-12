@@ -1,7 +1,8 @@
 /**
  * Shared rules / how-to-play body (split pages differ only in H1 and route).
  */
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useHostFreeGame } from '../hooks/useHostFreeGame.js';
 import {
   UserGroupIcon,
   FireIcon,
@@ -13,6 +14,9 @@ import {
 import { LANDING_COPY } from '../utils/landingMarketingCopy.js';
 
 export function RulesContent({ pageHeading }) {
+  const navigate = useNavigate();
+  const { handleHostFreeGame } = useHostFreeGame();
+
   return (
     <div className="min-h-screen bg-slate-950">
       <div className="max-w-4xl mx-auto pt-24 pb-16 px-4">
@@ -96,7 +100,7 @@ export function RulesContent({ pageHeading }) {
               <h2 className="text-2xl font-bold text-white">After the game</h2>
             </div>
             <p className="text-slate-300 leading-relaxed">
-              Before the game, add a shipping address in your profile. When the game ends, we email it to the person mailing your gift. That person buys the gift and ships it. We delete it from our records 30 days later.
+              Before the game, add a shipping address in your profile. After the game, the person mailing your gift uses it to ship.
             </p>
           </div>
         </div>
@@ -198,7 +202,12 @@ export function RulesContent({ pageHeading }) {
 
         <div className="text-center">
           <Link
-            to="/?host=1"
+            to="/"
+            onClick={(event) => {
+              event.preventDefault();
+              navigate('/');
+              void handleHostFreeGame('rules_cta');
+            }}
             className="inline-block bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-lg px-12 py-4 rounded-full shadow-[0_0_30px_rgba(139,92,246,0.5)] hover:shadow-[0_0_40px_rgba(139,92,246,0.7)] transform hover:scale-105 transition-all duration-300"
           >
             {LANDING_COPY.primaryCta}
