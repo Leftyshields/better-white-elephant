@@ -12,6 +12,7 @@ import {
   isAbandonedPartyPastRetention,
   isEndedPartyPastRetention,
   partiesForAddressCleanupIterable,
+  partyStatusBlocksAddressDeletion,
   shouldRemoveShippingAddress,
 } from './dataRetentionLogic.js';
 import { commitOperationsInBatches } from './dataRetentionBatch.js';
@@ -369,19 +370,19 @@ export const sendContactEmail = onRequest(
   }
 );
 
-/** True if user is in any non-ENDED party other than excludePartyId. */
-async function userParticipatesInNotEndedParty(userId, excludePartyId) {
-  const memberships = await db.collectionGroup('participants')
-    .where(admin.firestore.FieldPath.documentId(), '==', userId)
-    .get();
+/**
+ * Participant docs live at parties/{partyId}/participants/{uid} with uid as doc id — no userId field.
+ * Uses direct gets (not collectionGroup + documentId(), which compares full document paths).
+ */
+async function userParticipatesInAddressBlockingParty(userId, excludePartyId, lobbyAndActivePartyDocs) {
+  for (const partyDoc of lobbyAndActivePartyDocs) {
+    if (partyDoc.id === excludePartyId) continue;
+    const party = partyDoc.data();
+    if (!partyStatusBlocksAddressDeletion(party?.status)) continue;
 
-  for (const memberDoc of memberships.docs) {
-    const partyRef = memberDoc.ref.parent?.parent;
-    if (!partyRef || partyRef.id === excludePartyId) continue;
-    const partySnap = await partyRef.get();
-    if (!partySnap.exists) continue;
-    const status = partySnap.data()?.status;
-    if (status && status !== 'ENDED') {
+    const participantSnap = await db.collection('parties').doc(partyDoc.id)
+      .collection('participants').doc(userId).get();
+    if (participantSnap.exists) {
       return true;
     }
   }
@@ -462,6 +463,16 @@ export const dataRetentionCleanup = onSchedule(
         thirtyDaysAgoTimestamp,
       );
 
+      const nonEndedPartiesSnap = await db.collection('parties')
+        .where('status', 'in', ['LOBBY', 'ACTIVE', 'CANCELLED'])
+        .limit(500)
+        .get();
+
+      const lobbyAndActivePartyDocs = nonEndedPartiesSnap.docs.filter((partyDoc) => {
+        const status = partyDoc.data()?.status;
+        return partyStatusBlocksAddressDeletion(status);
+      });
+
       // 2. Delete shipping addresses 30 days after game ends (before party docs are removed)
       const addressOperations = [];
       for (const partyDoc of partiesForAddressCleanupIterable(partiesForAddressCleanup)) {
@@ -479,7 +490,11 @@ export const dataRetentionCleanup = onSchedule(
           const userData = userDoc.data();
           if (!userData.shippingAddress) continue;
 
-          const userInNotEndedParty = await userParticipatesInNotEndedParty(userId, partyDoc.id);
+          const userInNotEndedParty = await userParticipatesInAddressBlockingParty(
+            userId,
+            partyDoc.id,
+            lobbyAndActivePartyDocs,
+          );
           if (shouldRemoveShippingAddress({
             hasShippingAddress: true,
             sourcePartyEndedBeforeCutoff: partyEndedBeforeCutoff,
@@ -557,11 +572,6 @@ export const dataRetentionCleanup = onSchedule(
       }
 
       // 5. Delete abandoned non-ENDED parties after 30 days without activity
-      const nonEndedPartiesSnap = await db.collection('parties')
-        .where('status', 'in', ['LOBBY', 'ACTIVE', 'CANCELLED'])
-        .limit(500)
-        .get();
-
       const staleAbandonedParties = nonEndedPartiesSnap.docs.filter((partyDoc) => {
         const party = partyDoc.data();
         return isAbandonedPartyPastRetention(party, thirtyDaysAgoTimestamp);

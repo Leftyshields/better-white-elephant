@@ -11,6 +11,7 @@ import {
   legacyAddressCleanupIterator,
   partiesForAddressCleanupIterable,
   shouldRemoveShippingAddress,
+  userInAddressBlockingParty,
 } from './dataRetentionLogic.js';
 
 function tsFromNow(nowMs, daysOffset) {
@@ -50,12 +51,46 @@ test('shipping address: removed 30+ days after game end without fulfillment fiel
   );
 });
 
-test('shipping address: not removed if user is in another non-ended party', () => {
+test('regression: collectionGroup documentId() matches full path, not participant uid', () => {
+  const uid = 'firebase-uid-alice';
+  const fullParticipantPath = `parties/party-42/participants/${uid}`;
+  assert.notEqual(fullParticipantPath, uid, 'documentId() equality against uid alone cannot find participant docs');
+});
+
+test('userInAddressBlockingParty: LOBBY/ACTIVE membership blocks; CANCELLED does not', () => {
+  assert.equal(
+    userInAddressBlockingParty(
+      [
+        { partyId: 'ended-source', status: 'ENDED', hasParticipant: true },
+        { partyId: 'other-lobby', status: 'LOBBY', hasParticipant: true },
+      ],
+      { excludePartyId: 'ended-source' },
+    ),
+    true,
+  );
+  assert.equal(
+    userInAddressBlockingParty(
+      [
+        { partyId: 'ended-source', status: 'ENDED', hasParticipant: true },
+        { partyId: 'cancelled-old', status: 'CANCELLED', hasParticipant: true },
+        { partyId: 'active-other', status: 'ACTIVE', hasParticipant: false },
+      ],
+      { excludePartyId: 'ended-source' },
+    ),
+    false,
+  );
+});
+
+test('shipping address: not removed if user is in another LOBBY/ACTIVE party', () => {
+  const userInNotEndedParty = userInAddressBlockingParty(
+    [{ partyId: 'p2', status: 'ACTIVE', hasParticipant: true }],
+    { excludePartyId: 'p1' },
+  );
   assert.equal(
     shouldRemoveShippingAddress({
       hasShippingAddress: true,
       sourcePartyEndedBeforeCutoff: true,
-      userInNotEndedParty: true,
+      userInNotEndedParty,
     }),
     false,
   );

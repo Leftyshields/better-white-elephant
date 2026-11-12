@@ -63,6 +63,32 @@ export function shouldRemoveShippingAddress({
   return true;
 }
 
+/** Party statuses that still need shipping addresses on file (CANCELLED does not). */
+export const ADDRESS_RETENTION_BLOCKING_STATUSES = new Set(['LOBBY', 'ACTIVE']);
+
+export function partyStatusBlocksAddressDeletion(status) {
+  return ADDRESS_RETENTION_BLOCKING_STATUSES.has(status);
+}
+
+/**
+ * Whether a user still has participant membership in another LOBBY/ACTIVE party.
+ * Participant uid is the Firestore document id under parties/{partyId}/participants/{uid}
+ * — not queryable via collectionGroup FieldPath.documentId() == uid (that compares full paths).
+ *
+ * @param {Array<{ partyId: string, status: string, hasParticipant: boolean }>} partyRows
+ * @param {{ excludePartyId: string }} options
+ */
+export function userInAddressBlockingParty(partyRows, { excludePartyId }) {
+  for (const row of partyRows) {
+    if (row.partyId === excludePartyId) continue;
+    if (!row.hasParticipant) continue;
+    if (partyStatusBlocksAddressDeletion(row.status)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Collect ENDED parties whose end time is on or before the cutoff (mirrors address/party passes).
  * @param {Array<{ data: () => object }>} partyDocs
