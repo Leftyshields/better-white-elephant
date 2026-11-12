@@ -415,7 +415,6 @@ async function queuePartySubtreeDeletes(partyId, partyRef, operations) {
  * - Game and Party Data: 30 days after game ends
  * - Fulfillment Information (Shipping Addresses): 30 days after game ends (unless user is in another active party)
  * - Gift Links: Duration of game + 30 days after game ends
- * - Analytics and Logs: 90 days
  * - Support Communications: 1 year after last communication
  */
 export const dataRetentionCleanup = onSchedule(
@@ -431,7 +430,6 @@ export const dataRetentionCleanup = onSchedule(
       deletedParties: 0,
       deletedShippingAddresses: 0,
       deletedGiftLinks: 0,
-      deletedAnalytics: 0,
       deletedSupportComm: 0,
       errors: [],
     };
@@ -573,24 +571,7 @@ export const dataRetentionCleanup = onSchedule(
         console.log(`✅ Deleted ${staleAbandonedParties.length} abandoned parties past 30-day retention`);
       }
 
-      // 6. Delete analytics and logs older than 90 days
-      // Note: This assumes analytics are stored in a collection with a timestamp field
-      const analyticsQuery = await db.collection('analytics')
-        .where('timestamp', '<=', admin.firestore.Timestamp.fromDate(ninetyDaysAgo))
-        .limit(500)
-        .get();
-
-      const analyticsBatch = db.batch();
-      analyticsQuery.docs.forEach((doc) => {
-        analyticsBatch.delete(doc.ref);
-        stats.deletedAnalytics++;
-      });
-      if (analyticsQuery.docs.length > 0) {
-        await analyticsBatch.commit();
-        console.log(`✅ Deleted ${stats.deletedAnalytics} expired analytics records`);
-      }
-
-      // 7. Delete support communications older than 1 year
+      // 6. Delete support communications older than 1 year
       const oneYearAgoForSupport = new Date(now.toMillis() - (365 * 24 * 60 * 60 * 1000));
       const supportCommQuery = await db.collection('support_communications')
         .where('lastUpdated', '<=', admin.firestore.Timestamp.fromDate(oneYearAgoForSupport))

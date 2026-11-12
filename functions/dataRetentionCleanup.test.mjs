@@ -3,6 +3,12 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+const functionsDir = join(dirname(fileURLToPath(import.meta.url)));
+const dataRetentionIndexSource = readFileSync(join(functionsDir, 'index.js'), 'utf8');
 import { dedupeOperationsByDocumentPath, getAllDocumentsFromQuery } from './dataRetentionBatch.js';
 import {
   MS_PER_DAY,
@@ -24,6 +30,12 @@ const NOW = Date.UTC(2026, 0, 15);
 const THIRTY_DAYS_AGO = tsFromNow(NOW, -30);
 const TWENTY_DAYS_AGO = tsFromNow(NOW, -20);
 const FORTY_DAYS_AGO = tsFromNow(NOW, -40);
+
+test('regression: dataRetentionCleanup does not delete Firestore analytics collection', () => {
+  assert.doesNotMatch(dataRetentionIndexSource, /collection\(['"]analytics['"]\)/);
+  assert.doesNotMatch(dataRetentionIndexSource, /deletedAnalytics/);
+  assert.doesNotMatch(dataRetentionIndexSource, /Analytics and Logs: 90 days/);
+});
 
 test('regression: legacy .docs on plain array throws (unfixed address loop)', () => {
   const partiesForAddressCleanup = [
