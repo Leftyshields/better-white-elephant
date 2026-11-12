@@ -44,8 +44,17 @@ describe('Profile shipping UX must-fixes', () => {
     expect(profile).toMatch(/hasShippingFields[\s\S]*setShowSavedAddressNeedsConsentNote\(!shareConsent\)/);
   });
 
-  it('allows clearing address on save when fields empty', () => {
-    expect(profile).toMatch(/else \{[\s\S]*shippingAddress = deleteField\(\)/);
+  it('includes incomplete and delete-confirm copy constants', () => {
+    expect(copyModule).toContain('SHIPPING_ADDRESS_INCOMPLETE_PROFILE');
+    expect(copyModule).toContain('SHIPPING_ADDRESS_DELETE_CONFIRM_PROFILE');
+    expect(copyModule).not.toContain('SHIPPING_ADDRESS_CONSENT_REQUIRED_PROFILE');
+  });
+
+  it('requires delete confirmation before deleteField on cleared saved address', () => {
+    expect(profile).toContain('showDeleteAddressConfirm');
+    expect(profile).toContain('deleteAddress: true');
+    expect(profile).toContain('areAllShippingFieldsEmpty');
+    expect(profile).toContain('showAddressIncompleteError');
   });
 });
 

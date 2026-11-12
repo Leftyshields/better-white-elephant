@@ -4,8 +4,14 @@ import { MemoryRouter } from 'react-router-dom';
 import { Profile } from '../../pages/Profile.jsx';
 import { deleteField } from 'firebase/firestore';
 import {
-  SHIPPING_ADDRESS_CONSENT_REQUIRED_PROFILE,
+  PROFILE_SAVE_SUCCESS_MESSAGE,
+  SHIPPING_ADDRESS_CONSENT_REQUIRED_ADDRESS_MODAL,
   SHIPPING_ADDRESS_CONSENT_WITHDRAW_PENDING_PROFILE,
+  SHIPPING_ADDRESS_DELETE_CONFIRM_ACTION_PROFILE,
+  SHIPPING_ADDRESS_DELETE_CONFIRM_PROFILE,
+  SHIPPING_ADDRESS_DELETE_SUCCESS_PROFILE,
+  SHIPPING_ADDRESS_INCOMPLETE_PROFILE,
+  SHIPPING_ADDRESS_SAVE_UNCHECKED_SUCCESS_PROFILE,
   SHIPPING_ADDRESS_SAVED_NEEDS_CONSENT_PROFILE,
 } from '../../utils/shippingAddressCopy.js';
 
@@ -102,13 +108,13 @@ describe('Profile consent withdrawal and address deletion', () => {
     setDoc.mockResolvedValue(undefined);
   });
 
-  it('never shows SHIPPING_ADDRESS_CONSENT_REQUIRED_PROFILE on Profile', async () => {
+  it('never shows consent-required must-agree copy on Profile', async () => {
     mockLoadedProfile({ address: completeAddress, consentAt: undefined });
     await renderProfile();
     fireEvent.click(await screen.findByRole('checkbox'));
-    expect(screen.queryByText(SHIPPING_ADDRESS_CONSENT_REQUIRED_PROFILE)).not.toBeInTheDocument();
+    expect(screen.queryByText(SHIPPING_ADDRESS_CONSENT_REQUIRED_ADDRESS_MODAL)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('checkbox'));
-    expect(screen.queryByText(SHIPPING_ADDRESS_CONSENT_REQUIRED_PROFILE)).not.toBeInTheDocument();
+    expect(screen.queryByText(SHIPPING_ADDRESS_CONSENT_REQUIRED_ADDRESS_MODAL)).not.toBeInTheDocument();
   });
 
   it('allows unchecking consent and Save; removes stored consent', async () => {
@@ -137,6 +143,7 @@ describe('Profile consent withdrawal and address deletion', () => {
       expect(screen.getByText(SHIPPING_ADDRESS_SAVED_NEEDS_CONSENT_PROFILE)).toBeInTheDocument();
     });
     expect(screen.queryByText(SHIPPING_ADDRESS_CONSENT_WITHDRAW_PENDING_PROFILE)).not.toBeInTheDocument();
+    expect(screen.getByText(SHIPPING_ADDRESS_SAVE_UNCHECKED_SUCCESS_PROFILE)).toBeInTheDocument();
   });
 
   it('does not show withdraw-pending when consent was never saved (check then uncheck)', async () => {
@@ -213,7 +220,7 @@ describe('Profile consent withdrawal and address deletion', () => {
     });
   });
 
-  it('allows clearing address fields and Save; deletes stored address', async () => {
+  it('shows delete confirm when all fields cleared; deletes only after confirm', async () => {
     mockLoadedProfile({ address: completeAddress, consentAt: new Date() });
     await renderProfile();
 
@@ -226,8 +233,14 @@ describe('Profile consent withdrawal and address deletion', () => {
     fireEvent.change(screen.getByPlaceholderText('12345'), { target: { value: '' } });
     fireEvent.change(screen.getByPlaceholderText('Country'), { target: { value: '' } });
 
-    expect(saveButton).not.toBeDisabled();
     fireEvent.click(saveButton);
+
+    await waitFor(() => {
+      expect(screen.getByText(SHIPPING_ADDRESS_DELETE_CONFIRM_PROFILE)).toBeInTheDocument();
+    });
+    expect(updateDoc).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: SHIPPING_ADDRESS_DELETE_CONFIRM_ACTION_PROFILE }));
 
     await waitFor(() => {
       expect(updateDoc).toHaveBeenCalled();
@@ -236,6 +249,72 @@ describe('Profile consent withdrawal and address deletion', () => {
     const payload = updateDoc.mock.calls[0][1];
     expect(payload.shippingAddress).toEqual(deleteField());
     expect(payload.shippingAddressSenderShareConsentAt).toEqual(deleteField());
+    expect(screen.getByText(SHIPPING_ADDRESS_DELETE_SUCCESS_PROFILE)).toBeInTheDocument();
+  });
+
+  it('cancel on delete confirm does not delete the address', async () => {
+    mockLoadedProfile({ address: completeAddress, consentAt: new Date() });
+    await renderProfile();
+
+    fireEvent.change(screen.getByPlaceholderText('12345'), { target: { value: '' } });
+    fireEvent.change(screen.getByPlaceholderText('Country'), { target: { value: '' } });
+    fireEvent.change(screen.getByPlaceholderText('Enter your full name'), { target: { value: '' } });
+    fireEvent.change(screen.getByPlaceholderText('123 Main St'), { target: { value: '' } });
+    fireEvent.change(screen.getByPlaceholderText('City'), { target: { value: '' } });
+    fireEvent.change(screen.getByPlaceholderText('State'), { target: { value: '' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    await screen.findByText(SHIPPING_ADDRESS_DELETE_CONFIRM_PROFILE);
+
+    const cancelButtons = screen.getAllByRole('button', { name: /^cancel$/i });
+    fireEvent.click(cancelButtons[cancelButtons.length - 1]);
+
+    expect(updateDoc).not.toHaveBeenCalled();
+  });
+
+  it('incomplete saved address (e.g. blank ZIP) does not delete or call updateDoc', async () => {
+    mockLoadedProfile({ address: completeAddress, consentAt: new Date() });
+    await renderProfile();
+
+    fireEvent.change(screen.getByPlaceholderText('12345'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(SHIPPING_ADDRESS_INCOMPLETE_PROFILE)).toBeInTheDocument();
+    });
+    expect(updateDoc).not.toHaveBeenCalled();
+  });
+
+  it('shows default success message on save with consent checked', async () => {
+    mockLoadedProfile({ address: completeAddress, consentAt: undefined });
+    await renderProfile();
+
+    fireEvent.click(await screen.findByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(updateDoc).toHaveBeenCalled();
+    });
+    expect(screen.getByText(PROFILE_SAVE_SUCCESS_MESSAGE)).toBeInTheDocument();
+  });
+
+  it('shows unchecked-address success on first complete save without consent', async () => {
+    mockLoadedProfile({ address: undefined, consentAt: undefined });
+    await renderProfile();
+
+    fireEvent.change(screen.getByPlaceholderText('Enter your full name'), { target: { value: completeAddress.name } });
+    fireEvent.change(screen.getByPlaceholderText('123 Main St'), { target: { value: completeAddress.street } });
+    fireEvent.change(screen.getByPlaceholderText('City'), { target: { value: completeAddress.city } });
+    fireEvent.change(screen.getByPlaceholderText('State'), { target: { value: completeAddress.state } });
+    fireEvent.change(screen.getByPlaceholderText('12345'), { target: { value: completeAddress.zip } });
+    fireEvent.change(screen.getByPlaceholderText('Country'), { target: { value: completeAddress.country } });
+
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(updateDoc).toHaveBeenCalled();
+    });
+    expect(screen.getByText(SHIPPING_ADDRESS_SAVE_UNCHECKED_SUCCESS_PROFILE)).toBeInTheDocument();
   });
 
   it('keeps Save enabled for display-name-only when address fields are empty', async () => {

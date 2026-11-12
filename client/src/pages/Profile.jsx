@@ -7,7 +7,14 @@ import { useAuth } from '../hooks/useAuth.js';
 import { useNavigate } from 'react-router-dom';
 import { doc, getDoc, setDoc, updateDoc, deleteField } from 'firebase/firestore';
 import {
+  PROFILE_SAVE_SUCCESS_MESSAGE,
   SHIPPING_ADDRESS_CONSENT_WITHDRAW_PENDING_PROFILE,
+  SHIPPING_ADDRESS_DELETE_CANCEL_PROFILE,
+  SHIPPING_ADDRESS_DELETE_CONFIRM_ACTION_PROFILE,
+  SHIPPING_ADDRESS_DELETE_CONFIRM_PROFILE,
+  SHIPPING_ADDRESS_DELETE_SUCCESS_PROFILE,
+  SHIPPING_ADDRESS_INCOMPLETE_PROFILE,
+  SHIPPING_ADDRESS_SAVE_UNCHECKED_SUCCESS_PROFILE,
   SHIPPING_ADDRESS_SAVED_NEEDS_CONSENT_PROFILE,
   SHIPPING_ADDRESS_SENDER_SHARE_CONSENT_LABEL,
 } from '../utils/shippingAddressCopy.js';
@@ -15,17 +22,21 @@ import { updateProfile } from 'firebase/auth';
 import { auth, db } from '../utils/firebase.js';
 import { Button } from '../components/ui/Button.jsx';
 import { Input } from '../components/ui/Input.jsx';
+import { Modal } from '../components/ui/Modal.jsx';
 import { LockClosedIcon } from '@heroicons/react/24/outline';
 
+const SHIPPING_FIELD_KEYS = ['name', 'street', 'city', 'state', 'zip', 'country'];
+
 function hasCompleteShippingFields(address) {
-  return !!(
-    address.name?.trim() &&
-    address.street?.trim() &&
-    address.city?.trim() &&
-    address.state?.trim() &&
-    address.zip?.trim() &&
-    address.country?.trim()
-  );
+  return SHIPPING_FIELD_KEYS.every((key) => Boolean(address[key]?.trim()));
+}
+
+function hasAnyShippingFieldFilled(address) {
+  return SHIPPING_FIELD_KEYS.some((key) => Boolean(address[key]?.trim()));
+}
+
+function areAllShippingFieldsEmpty(address) {
+  return SHIPPING_FIELD_KEYS.every((key) => !address[key]?.trim());
 }
 
 export function Profile() {
@@ -47,6 +58,8 @@ export function Profile() {
   const [showSavedAddressNeedsConsentNote, setShowSavedAddressNeedsConsentNote] = useState(false);
   const [hadPersistedShippingAddress, setHadPersistedShippingAddress] = useState(false);
   const [hadGrantedSenderShareConsent, setHadGrantedSenderShareConsent] = useState(false);
+  const [showAddressIncompleteError, setShowAddressIncompleteError] = useState(false);
+  const [showDeleteAddressConfirm, setShowDeleteAddressConfirm] = useState(false);
 
   const hasShippingFields = hasCompleteShippingFields(address);
   const saveDisabled = saving;
@@ -55,6 +68,11 @@ export function Profile() {
     !shareConsent &&
     !showSavedAddressNeedsConsentNote &&
     hadGrantedSenderShareConsent;
+
+  const updateAddressField = (partial) => {
+    setShowAddressIncompleteError(false);
+    setAddress((prev) => ({ ...prev, ...partial }));
+  };
 
   // Load user profile data
   useEffect(() => {
@@ -107,15 +125,13 @@ export function Profile() {
     }
   }, [user, authLoading, navigate]);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const persistProfile = async ({ deleteAddress = false } = {}) => {
     if (!user) return;
 
     setSaving(true);
     setSuccessMessage('');
-    
+
     try {
-      // Update Firebase Auth display name
       if (displayName && displayName !== user.displayName) {
         await updateProfile(auth.currentUser, { displayName });
       }
@@ -126,29 +142,34 @@ export function Profile() {
         updatedAt: new Date(),
       };
 
-      if (hasShippingFields) {
+      let successMsg = PROFILE_SAVE_SUCCESS_MESSAGE;
+
+      if (deleteAddress) {
+        profileUpdate.shippingAddress = deleteField();
+        profileUpdate.shippingAddressSenderShareConsentAt = deleteField();
+        successMsg = SHIPPING_ADDRESS_DELETE_SUCCESS_PROFILE;
+      } else if (hasShippingFields) {
         profileUpdate.shippingAddress = address;
         profileUpdate.shippingAddressSenderShareConsentAt = shareConsent
           ? new Date()
           : deleteField();
-      } else if (hadPersistedShippingAddress) {
-        profileUpdate.shippingAddress = deleteField();
-        profileUpdate.shippingAddressSenderShareConsentAt = deleteField();
-        setHadPersistedShippingAddress(false);
+        if (!shareConsent) {
+          successMsg = SHIPPING_ADDRESS_SAVE_UNCHECKED_SUCCESS_PROFILE;
+        }
       }
 
-      // Update Firestore user document
       await updateDoc(doc(db, 'users', user.uid), profileUpdate);
 
-      if (hasShippingFields) {
-        setShowSavedAddressNeedsConsentNote(!shareConsent);
-        setHadGrantedSenderShareConsent(shareConsent);
-      } else {
+      if (deleteAddress) {
         setShowSavedAddressNeedsConsentNote(false);
         setHadGrantedSenderShareConsent(false);
+        setHadPersistedShippingAddress(false);
+      } else if (hasShippingFields) {
+        setShowSavedAddressNeedsConsentNote(!shareConsent);
+        setHadGrantedSenderShareConsent(shareConsent);
       }
 
-      setSuccessMessage('Profile updated successfully!');
+      setSuccessMessage(successMsg);
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (error) {
       console.error('Error updating profile:', error);
@@ -156,6 +177,33 @@ export function Profile() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!user) return;
+
+    setShowAddressIncompleteError(false);
+
+    const anyFilled = hasAnyShippingFieldFilled(address);
+    const allEmpty = areAllShippingFieldsEmpty(address);
+
+    if (hadPersistedShippingAddress && anyFilled && !hasShippingFields) {
+      setShowAddressIncompleteError(true);
+      return;
+    }
+
+    if (hadPersistedShippingAddress && allEmpty) {
+      setShowDeleteAddressConfirm(true);
+      return;
+    }
+
+    await persistProfile();
+  };
+
+  const handleConfirmDeleteAddress = async () => {
+    setShowDeleteAddressConfirm(false);
+    await persistProfile({ deleteAddress: true });
   };
 
   if (authLoading || loading) {
@@ -222,26 +270,26 @@ export function Profile() {
             <Input
               label="Full Name"
               value={address.name}
-              onChange={(e) => setAddress({ ...address, name: e.target.value })}
+              onChange={(e) => updateAddressField({ name: e.target.value })}
               placeholder="Enter your full name"
             />
             <Input
               label="Street Address"
               value={address.street}
-              onChange={(e) => setAddress({ ...address, street: e.target.value })}
+              onChange={(e) => updateAddressField({ street: e.target.value })}
               placeholder="123 Main St"
             />
             <div className="grid grid-cols-2 gap-4">
               <Input
                 label="City"
                 value={address.city}
-                onChange={(e) => setAddress({ ...address, city: e.target.value })}
+                onChange={(e) => updateAddressField({ city: e.target.value })}
                 placeholder="City"
               />
               <Input
                 label="State/Province"
                 value={address.state}
-                onChange={(e) => setAddress({ ...address, state: e.target.value })}
+                onChange={(e) => updateAddressField({ state: e.target.value })}
                 placeholder="State"
               />
             </div>
@@ -249,13 +297,13 @@ export function Profile() {
               <Input
                 label="ZIP/Postal Code"
                 value={address.zip}
-                onChange={(e) => setAddress({ ...address, zip: e.target.value })}
+                onChange={(e) => updateAddressField({ zip: e.target.value })}
                 placeholder="12345"
               />
               <Input
                 label="Country"
                 value={address.country}
-                onChange={(e) => setAddress({ ...address, country: e.target.value })}
+                onChange={(e) => updateAddressField({ country: e.target.value })}
                 placeholder="Country"
               />
             </div>
@@ -268,6 +316,11 @@ export function Profile() {
               />
               <span>{SHIPPING_ADDRESS_SENDER_SHARE_CONSENT_LABEL}</span>
             </label>
+            {showAddressIncompleteError && (
+              <p className="text-sm text-amber-300" role="alert">
+                {SHIPPING_ADDRESS_INCOMPLETE_PROFILE}
+              </p>
+            )}
             {showSavedAddressNeedsConsentNote && (
               <p className="text-sm text-slate-300">{SHIPPING_ADDRESS_SAVED_NEEDS_CONSENT_PROFILE}</p>
             )}
@@ -298,6 +351,30 @@ export function Profile() {
         </div>
       </form>
       </div>
+
+      <Modal
+        isOpen={showDeleteAddressConfirm}
+        onClose={() => setShowDeleteAddressConfirm(false)}
+      >
+        <p className="text-sm text-slate-300 mb-6">{SHIPPING_ADDRESS_DELETE_CONFIRM_PROFILE}</p>
+        <div className="flex gap-3 justify-end">
+          <Button
+            type="button"
+            onClick={() => setShowDeleteAddressConfirm(false)}
+            className="text-slate-400 hover:text-white bg-transparent border border-slate-700 hover:border-slate-600"
+          >
+            {SHIPPING_ADDRESS_DELETE_CANCEL_PROFILE}
+          </Button>
+          <Button
+            type="button"
+            onClick={handleConfirmDeleteAddress}
+            disabled={saving}
+            className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-purple-500/20"
+          >
+            {SHIPPING_ADDRESS_DELETE_CONFIRM_ACTION_PROFILE}
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }
