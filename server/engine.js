@@ -80,6 +80,18 @@ export class GameEngine {
   }
 
   /**
+   * Boomerang phase only applies when returnToStart is enabled and we're in the second half of the queue.
+   * @returns {boolean}
+   */
+  isInBoomerangPhase() {
+    const returnToStart = this.config?.returnToStart || false;
+    if (!returnToStart) {
+      return false;
+    }
+    return this.currentTurnIndex >= (this.turnOrder?.length || 0);
+  }
+
+  /**
    * Generate turn queue (helper method for backwards compatibility)
    * @param {Array} turnOrder - The initial shuffled turn order (array of player IDs)
    * @param {boolean} returnToStart - Whether boomerang rule is active
@@ -304,9 +316,7 @@ export class GameEngine {
         console.warn(`⚠️ Queue exhausted (index: ${this.currentTurnIndex}, queue length: ${this.turnQueue.length}) but wrapped gifts remain. Allowing players to pick wrapped gifts.`);
       }
     } else {
-      // Determine if we're in boomerang phase
-      const isBoomerangPhase = this.isBoomerangPhase || 
-        (this.currentTurnIndex >= (this.turnOrder?.length || 0));
+      const isBoomerangPhase = this.isInBoomerangPhase();
       
       if (isBoomerangPhase) {
         // Boomerang Phase: Use skip logic (players with gifts can still act via swap)
@@ -642,8 +652,7 @@ export class GameEngine {
    */
   advanceTurnWithAutoSkip() {
     // In Standard Phase, check if current player has a gift and can't act
-    const isBoomerangPhase = this.isBoomerangPhase || 
-      (this.currentTurnIndex >= (this.turnOrder?.length || 0));
+    const isBoomerangPhase = this.isInBoomerangPhase();
     
     // Only auto-skip in Standard Phase
     if (isBoomerangPhase) {
@@ -708,8 +717,7 @@ export class GameEngine {
    * @returns {string|null} Next valid player ID or null if none found
    */
   findNextValidPlayer() {
-    const isBoomerangPhase = this.isBoomerangPhase || 
-      (this.currentTurnIndex >= (this.turnOrder?.length || 0));
+    const isBoomerangPhase = this.isInBoomerangPhase();
     
     // currentTurnIndex was already advanced by the caller (pickGift / endTurn)
     let searchIndex = this.currentTurnIndex || 0;
@@ -769,8 +777,7 @@ export class GameEngine {
     const playerHasGift = this.playerHasGift(skippingPlayerId);
     
     // Determine if we're in boomerang phase
-    const isBoomerangPhase = this.isBoomerangPhase || 
-      (this.currentTurnIndex >= (this.turnOrder?.length || 0));
+    const isBoomerangPhase = this.isInBoomerangPhase();
     
     // Check if this is Player 1's Final Turn (bookend exception)
     const isLastIndex = this.currentTurnIndex === (this.turnQueue.length - 1);
@@ -899,9 +906,7 @@ export class GameEngine {
         console.warn(`⚠️ Queue exhausted (index: ${this.currentTurnIndex}, queue length: ${this.turnQueue.length}) but wrapped gifts remain. Allowing players to pick wrapped gifts.`);
       }
     } else {
-      // Determine if we're in boomerang phase
-      const isBoomerangPhase = this.isBoomerangPhase || 
-        (this.currentTurnIndex >= (this.turnOrder?.length || 0));
+      const isBoomerangPhase = this.isInBoomerangPhase();
       
       if (isBoomerangPhase) {
         // Boomerang Phase: Use skip logic (players with gifts can still act via swap)
@@ -954,10 +959,8 @@ export class GameEngine {
     // Ensure active player is calculated correctly before returning state
     const activePlayer = this.calculateActivePlayer();
     
-    // CRITICAL: Calculate isBoomerangPhase dynamically based on current turn index
-    // This ensures the phase is correctly updated when the turn advances
-    // Boomerang phase begins when currentTurnIndex >= turnOrder.length (second half of queue)
-    const computedBoomerangPhase = this.currentTurnIndex >= (this.turnOrder?.length || 0);
+    // CRITICAL: Calculate isBoomerangPhase dynamically (only when returnToStart is enabled)
+    const computedBoomerangPhase = this.isInBoomerangPhase();
     // Update stored value for consistency
     this.isBoomerangPhase = computedBoomerangPhase;
     
