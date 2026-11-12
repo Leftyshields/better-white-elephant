@@ -212,8 +212,7 @@ export function Header() {
                   onClick={signInWithGoogle}
                   className="text-sm text-slate-300 font-medium hover:text-white transition-colors md:flex md:items-center md:gap-2 md:px-4 md:py-2 md:bg-white/10 md:backdrop-blur-md md:text-white md:border md:border-white/20 md:rounded-md md:hover:bg-white/20"
                 >
-                  <span className="md:hidden">Log In</span>
-                  <span className="hidden md:inline">Sign in</span>
+                  Sign in
                 </button>
               )}
             </div>

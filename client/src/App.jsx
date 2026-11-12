@@ -8,6 +8,7 @@ import { Home } from './pages/Home.jsx';
 import { Party } from './pages/Party.jsx';
 import { Profile } from './pages/Profile.jsx';
 import { Rules } from './pages/Rules.jsx';
+import { HowToPlay } from './pages/HowToPlay.jsx';
 import { Terms } from './pages/Terms.jsx';
 import { Privacy } from './pages/Privacy.jsx';
 import { Contact } from './pages/Contact.jsx';
@@ -40,6 +41,7 @@ function App() {
               <Route path="/party/:partyId" element={<Party />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/rules" element={<Rules />} />
+              <Route path="/how-to-play" element={<HowToPlay />} />
               <Route path="/terms" element={<Terms />} />
               <Route path="/privacy" element={<Privacy />} />
               <Route path="/contact" element={<Contact />} />
