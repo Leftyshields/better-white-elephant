@@ -15,6 +15,7 @@ import { trackCreateParty, trackSignUp, trackLogin, trackButtonClick, trackGameA
 import { usePartyModal } from '../contexts/PartyModalContext.jsx';
 import { Footer } from '../components/Footer.jsx';
 import { SEO } from '../components/SEO.jsx';
+import { Snowflakes } from '../components/Snowflakes.jsx';
 
 export function Home() {
   const { user, signInWithGoogle, signInWithEmailAndPassword, signUpWithEmailAndPassword } = useAuth();
@@ -349,84 +350,7 @@ export function Home() {
         description="Host seamless, real-time White Elephant gift exchanges for remote teams. Works with Zoom, Teams, or Meet. Zero-hassle setup, auto-pilot logistics."
         url="/"
       />
-      {/* Snow Animation Layers - Fixed to viewport, starts from navbar */}
-      <div className="fixed inset-0 overflow-visible pointer-events-none z-[5]">
-        {/* Layer 1: Fastest, most visible */}
-        {[...Array(50)].map((_, i) => {
-          const randomDelay = Math.random() * 1; // Reduced to 1s max delay
-          const randomTop = Math.random() * 120 - 20; // Start some snowflakes already visible (can be negative or positive)
-          const baseOpacity = 0.6 + Math.random() * 0.2;
-          return (
-            <div
-              key={`snow-1-${i}`}
-              className="absolute animate-snow-fall snowflake-mobile"
-              style={{
-                left: `${(i * 2) % 100}%`,
-                top: `${randomTop}%`,
-                fontSize: `${Math.random() * 8 + 10}px`,
-                opacity: baseOpacity,
-                animationDelay: `${randomDelay}s`,
-                animationDuration: `${15 + Math.random() * 10}s`,
-                color: '#ffffff',
-                textShadow: '0 0 4px rgba(255, 255, 255, 0.8), 0 0 8px rgba(255, 255, 255, 0.4)',
-                filter: 'brightness(1.5) drop-shadow(0 0 2px rgba(255, 255, 255, 0.8))',
-              }}
-            >
-              ❄
-            </div>
-          );
-        })}
-        {/* Layer 2: Medium speed */}
-        {[...Array(40)].map((_, i) => {
-          const randomDelay = Math.random() * 1; // Reduced to 1s max delay
-          const randomTop = Math.random() * 120 - 20; // Start some snowflakes already visible
-          const baseOpacity = 0.4 + Math.random() * 0.2;
-          return (
-            <div
-              key={`snow-2-${i}`}
-              className="absolute animate-snow-fall snowflake-mobile"
-              style={{
-                left: `${(i * 2.5) % 100}%`,
-                top: `${randomTop}%`,
-                fontSize: `${Math.random() * 6 + 8}px`,
-                opacity: baseOpacity,
-                animationDelay: `${randomDelay}s`,
-                animationDuration: `${20 + Math.random() * 10}s`,
-                color: '#ffffff',
-                textShadow: '0 0 4px rgba(255, 255, 255, 0.6), 0 0 8px rgba(255, 255, 255, 0.3)',
-                filter: 'brightness(1.5) drop-shadow(0 0 2px rgba(255, 255, 255, 0.6))',
-              }}
-            >
-              ❄
-            </div>
-          );
-        })}
-        {/* Layer 3: Slowest, most subtle */}
-        {[...Array(30)].map((_, i) => {
-          const randomDelay = Math.random() * 1; // Reduced to 1s max delay
-          const randomTop = Math.random() * 120 - 20; // Start some snowflakes already visible
-          const baseOpacity = 0.2 + Math.random() * 0.2;
-          return (
-            <div
-              key={`snow-3-${i}`}
-              className="absolute animate-snow-fall snowflake-mobile"
-              style={{
-                left: `${(i * 3.33) % 100}%`,
-                top: `${randomTop}%`,
-                fontSize: `${Math.random() * 4 + 6}px`,
-                opacity: baseOpacity,
-                animationDelay: `${randomDelay}s`,
-                animationDuration: `${25 + Math.random() * 10}s`,
-                color: '#ffffff',
-                textShadow: '0 0 4px rgba(255, 255, 255, 0.4), 0 0 8px rgba(255, 255, 255, 0.2)',
-                filter: 'brightness(1.5) drop-shadow(0 0 2px rgba(255, 255, 255, 0.4))',
-              }}
-            >
-              ❄
-            </div>
-          );
-        })}
-      </div>
+      <Snowflakes variant="landing" />
       <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black relative overflow-hidden">
         {/* Hero Section */}
         <div className="relative overflow-hidden">
@@ -777,34 +701,7 @@ export function Home() {
       description="Host seamless, real-time White Elephant gift exchanges for remote teams. Works with Zoom, Teams, or Meet. Zero-hassle setup, auto-pilot logistics."
       url="/"
     />
-    {/* Subtle Snowflakes Animation - Fixed to viewport, starts from navbar */}
-    <div className="fixed inset-0 overflow-visible pointer-events-none z-[5]">
-      {[...Array(40)].map((_, i) => {
-        const size = Math.random() * 12 + 8;
-        const opacity = Math.random() * 0.3 + 0.2;
-        const randomDelay = Math.random() * 1; // Reduced to 1s max delay
-        const randomTop = Math.random() * 120 - 20; // Start some snowflakes already visible
-        return (
-          <div
-            key={i}
-            className="absolute animate-float snowflake-mobile"
-            style={{
-              left: `${Math.random() * 100}%`,
-              top: `${randomTop}%`,
-              fontSize: `${size}px`,
-              opacity: opacity,
-              animationDelay: `${randomDelay}s`,
-              animationDuration: `${10 + Math.random() * 8}s`,
-              color: '#ffffff',
-              textShadow: '0 0 4px rgba(255, 255, 255, 0.6), 0 0 8px rgba(255, 255, 255, 0.3)',
-              filter: 'brightness(1.5) drop-shadow(0 0 2px rgba(255, 255, 255, 0.6))',
-            }}
-          >
-            ❄
-          </div>
-        );
-      })}
-    </div>
+    <Snowflakes variant="signedIn" />
     <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black relative flex flex-col">
       {/* My Parties Section */}
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 z-10 pt-4">
