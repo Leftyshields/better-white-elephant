@@ -48,5 +48,6 @@ describe('winner shipping address client access', () => {
     );
     expect(copyModule).not.toContain('[COPYWRITER PLACEHOLDER]');
     expect(copyModule).not.toContain('TODO(Copywriter)');
+    expect(copyModule).toContain('SHIPPING_ADDRESS_SAVED_NEEDS_CONSENT_PROFILE');
   });
 });

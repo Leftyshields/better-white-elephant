@@ -146,7 +146,7 @@ export function AddressModal({ isOpen, onClose, giftTitle }) {
             required
           />
         </div>
-        <label className="flex gap-3 items-start mt-4 text-sm text-gray-700 cursor-pointer">
+        <label className="flex gap-3 items-start mt-4 text-sm text-slate-300 cursor-pointer">
           <input
             type="checkbox"
             className="mt-1"

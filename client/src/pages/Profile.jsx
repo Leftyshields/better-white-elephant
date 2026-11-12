@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { doc, getDoc, setDoc, updateDoc, deleteField } from 'firebase/firestore';
 import {
   SHIPPING_ADDRESS_CONSENT_REQUIRED_PROFILE,
+  SHIPPING_ADDRESS_SAVED_NEEDS_CONSENT_PROFILE,
   SHIPPING_ADDRESS_SENDER_SHARE_CONSENT_LABEL,
 } from '../utils/shippingAddressCopy.js';
 import { updateProfile } from 'firebase/auth';
@@ -15,6 +16,17 @@ import { auth, db } from '../utils/firebase.js';
 import { Button } from '../components/ui/Button.jsx';
 import { Input } from '../components/ui/Input.jsx';
 import { LockClosedIcon } from '@heroicons/react/24/outline';
+
+function hasCompleteShippingFields(address) {
+  return !!(
+    address.name?.trim() &&
+    address.street?.trim() &&
+    address.city?.trim() &&
+    address.state?.trim() &&
+    address.zip?.trim() &&
+    address.country?.trim()
+  );
+}
 
 export function Profile() {
   const { user, loading: authLoading } = useAuth();
@@ -32,6 +44,10 @@ export function Profile() {
   });
   const [successMessage, setSuccessMessage] = useState('');
   const [shareConsent, setShareConsent] = useState(false);
+  const [showSavedAddressNeedsConsentNote, setShowSavedAddressNeedsConsentNote] = useState(false);
+
+  const hasShippingFields = hasCompleteShippingFields(address);
+  const saveDisabled = saving || (hasShippingFields && !shareConsent);
 
   // Load user profile data
   useEffect(() => {
@@ -52,9 +68,14 @@ export function Profile() {
             setAddress(userData.shippingAddress);
           }
           setShareConsent(Boolean(userData.shippingAddressSenderShareConsentAt));
+          const loadedAddress = userData.shippingAddress || {};
+          const loadedHadCompleteAddress = hasCompleteShippingFields(loadedAddress);
+          const loadedHadConsent = Boolean(userData.shippingAddressSenderShareConsentAt);
+          setShowSavedAddressNeedsConsentNote(loadedHadCompleteAddress && !loadedHadConsent);
         } else {
           // Create user document if it doesn't exist
           setDisplayName(user.displayName || '');
+          setShowSavedAddressNeedsConsentNote(false);
           await setDoc(doc(db, 'users', user.uid), {
             displayName: user.displayName || '',
             email: user.email || '',
@@ -79,16 +100,7 @@ export function Profile() {
     e.preventDefault();
     if (!user) return;
 
-    const hasShippingFields =
-      address.name?.trim() &&
-      address.street?.trim() &&
-      address.city?.trim() &&
-      address.state?.trim() &&
-      address.zip?.trim() &&
-      address.country?.trim();
-
     if (hasShippingFields && !shareConsent) {
-      alert(SHIPPING_ADDRESS_CONSENT_REQUIRED_PROFILE);
       return;
     }
 
@@ -114,6 +126,10 @@ export function Profile() {
 
       // Update Firestore user document
       await updateDoc(doc(db, 'users', user.uid), profileUpdate);
+
+      if (hasShippingFields && shareConsent) {
+        setShowSavedAddressNeedsConsentNote(false);
+      }
 
       setSuccessMessage('Profile updated successfully!');
       setTimeout(() => setSuccessMessage(''), 3000);
@@ -235,6 +251,14 @@ export function Profile() {
               />
               <span>{SHIPPING_ADDRESS_SENDER_SHARE_CONSENT_LABEL}</span>
             </label>
+            {showSavedAddressNeedsConsentNote && (
+              <p className="text-sm text-slate-300">{SHIPPING_ADDRESS_SAVED_NEEDS_CONSENT_PROFILE}</p>
+            )}
+            {hasShippingFields && !shareConsent && (
+              <p className="text-sm text-amber-300" role="alert">
+                {SHIPPING_ADDRESS_CONSENT_REQUIRED_PROFILE}
+              </p>
+            )}
           </div>
         </div>
 
@@ -249,7 +273,7 @@ export function Profile() {
           </Button>
           <Button 
             type="submit" 
-            disabled={saving}
+            disabled={saveDisabled}
             className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-purple-500/20 hover:scale-[1.02] transition-transform disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
           >
             {saving ? 'Saving...' : 'Save Changes'}
@@ -260,4 +284,3 @@ export function Profile() {
     </div>
   );
 }
-

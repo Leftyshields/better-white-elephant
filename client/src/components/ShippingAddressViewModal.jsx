@@ -65,7 +65,13 @@ export function ShippingAddressViewModal({ isOpen, onClose, partyId, giftId, win
             {address.country && <p>{address.country}</p>}
           </div>
         ) : (
-          <p className="text-gray-500 italic">
+          <p
+            className={
+              unavailable
+                ? 'text-sm text-slate-300 italic'
+                : 'text-gray-500 italic'
+            }
+          >
             {unavailable
               ? SHIPPING_ADDRESS_WINNER_NOT_SHARED_VIEW_MODAL
               : 'Winner has not provided their shipping address yet.'}

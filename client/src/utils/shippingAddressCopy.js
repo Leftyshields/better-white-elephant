@@ -16,3 +16,6 @@ export const SHIPPING_ADDRESS_CONSENT_REQUIRED_ADDRESS_MODAL =
 
 export const SHIPPING_ADDRESS_CONSENT_REQUIRED_PROFILE =
   'You must agree to share your shipping address only with the person mailing your gift.';
+
+export const SHIPPING_ADDRESS_SAVED_NEEDS_CONSENT_PROFILE =
+  "This address isn't shared with the person mailing your gift until you check the box and save.";
