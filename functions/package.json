@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "test": "node --test dataRetentionCleanup.test.mjs",
     "build": "echo 'No build step required'",
     "serve": "firebase emulators:start --only functions",
     "shell": "firebase functions:shell",
