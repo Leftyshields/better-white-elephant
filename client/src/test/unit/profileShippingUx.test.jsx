@@ -47,6 +47,9 @@ describe('Profile shipping UX must-fixes', () => {
   it('includes incomplete and delete-confirm copy constants', () => {
     expect(copyModule).toContain('SHIPPING_ADDRESS_INCOMPLETE_PROFILE');
     expect(copyModule).toContain('SHIPPING_ADDRESS_INCOMPLETE_SHARE_OFF_PROFILE');
+    expect(copyModule).toContain(
+      'The address you entered was incomplete, so your saved address was left unchanged. It is no longer shared with the person mailing your gift.',
+    );
     expect(copyModule).toContain('SHIPPING_ADDRESS_DELETE_CONFIRM_PROFILE');
     expect(copyModule).not.toContain('SHIPPING_ADDRESS_CONSENT_REQUIRED_PROFILE');
   });
