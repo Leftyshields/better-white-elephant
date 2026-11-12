@@ -1,8 +1,6 @@
 /**
  * Sender-scoped access to a winner's shipping address after game end.
  */
-import { partyConverter, giftConverter } from './firestore-converters.js';
-
 const SHIPPING_ADDRESS_KEYS = ['name', 'street', 'city', 'state', 'zip', 'country'];
 
 function pickShippingAddress(raw) {
@@ -37,12 +35,63 @@ function hasSenderShareConsent(userData) {
   return false;
 }
 
+function resolveWinnerFromGameState(gameState, giftId) {
+  if (!gameState || !giftId) {
+    return null;
+  }
+  if (gameState.finalOwnership && gameState.finalOwnership[giftId]) {
+    return gameState.finalOwnership[giftId];
+  }
+  const unwrapped = gameState.unwrappedGifts;
+  if (!unwrapped) {
+    return null;
+  }
+  if (Array.isArray(unwrapped)) {
+    for (const entry of unwrapped) {
+      if (!Array.isArray(entry) || entry.length < 2) {
+        continue;
+      }
+      const [gid, giftData] = entry;
+      if (gid === giftId && giftData?.ownerId) {
+        return giftData.ownerId;
+      }
+    }
+    return null;
+  }
+  if (typeof unwrapped === 'object' && unwrapped[giftId]?.ownerId) {
+    return unwrapped[giftId].ownerId;
+  }
+  return null;
+}
+
+async function participantExists(db, partyId, userId) {
+  const doc = await db
+    .collection('parties')
+    .doc(partyId)
+    .collection('participants')
+    .doc(userId)
+    .get();
+  return doc.exists;
+}
+
 /**
  * @param {import('firebase-admin/firestore').Firestore} db
  * @param {{ callerUid: string, partyId: string, giftId: string }} params
+ * @param {{ loadGameState?: (partyId: string) => Promise<object|null>, loadFulfillmentSnapshot?: (partyId: string) => Promise<object|null> }} [deps]
  * @returns {Promise<{ status: number, error?: string, shippingAddress?: object }>}
  */
-export async function fetchWinnerShippingAddressForSender(db, { callerUid, partyId, giftId }) {
+export async function fetchWinnerShippingAddressForSender(
+  db,
+  { callerUid, partyId, giftId },
+  deps = {},
+) {
+  const loadState =
+    deps.loadGameState ??
+    (await import('./game-state-persistence.js')).loadGameState;
+  const loadFulfillment =
+    deps.loadFulfillmentSnapshot ??
+    (await import('./shipping-fulfillment-snapshot.js')).loadShippingFulfillmentSnapshot;
+
   if (!callerUid) {
     return { status: 401, error: 'Authentication required' };
   }
@@ -65,28 +114,42 @@ export async function fetchWinnerShippingAddressForSender(db, { callerUid, party
     return { status: 404, error: 'Party not found' };
   }
 
-  const party = partyConverter.fromFirestore(partyDoc);
-  if (party.status !== 'ENDED') {
+  const gameState = await loadState(partyId);
+  if (!gameState || gameState.phase !== 'ENDED') {
     return { status: 403, error: 'Game has not ended' };
   }
 
-  const giftDoc = await db.collection('gifts').doc(giftId).get();
-  if (!giftDoc.exists) {
-    return { status: 404, error: 'Gift not found' };
+  const fulfillment = await loadFulfillment(partyId);
+  if (!fulfillment || !fulfillment[giftId]) {
+    return { status: 403, error: 'Gift fulfillment record not found' };
   }
 
-  const gift = giftConverter.fromFirestore(giftDoc);
-  if (gift.partyId !== partyId) {
-    return { status: 403, error: 'Gift does not belong to this party' };
+  const { submitterId, winnerId } = fulfillment[giftId];
+  if (!submitterId || !winnerId) {
+    return { status: 403, error: 'Gift fulfillment record not found' };
   }
 
-  if (gift.submitterId !== callerUid) {
+  if (submitterId !== callerUid) {
     return { status: 403, error: 'Only the assigned sender can view this address' };
   }
 
-  const winnerId = gift.winnerId;
-  if (!winnerId) {
-    return { status: 404, error: 'Winner not assigned for this gift' };
+  const gameStateWinner = resolveWinnerFromGameState(gameState, giftId);
+  if (gameStateWinner && gameStateWinner !== winnerId) {
+    return { status: 403, error: 'Gift winner does not match game outcome' };
+  }
+
+  const giftDoc = await db.collection('gifts').doc(giftId).get();
+  if (!giftDoc.exists || giftDoc.data()?.partyId !== partyId) {
+    return { status: 404, error: 'Gift not found' };
+  }
+
+  const [callerIsParticipant, winnerIsParticipant] = await Promise.all([
+    participantExists(db, partyId, callerUid),
+    participantExists(db, partyId, winnerId),
+  ]);
+
+  if (!callerIsParticipant || !winnerIsParticipant) {
+    return { status: 403, error: 'Invalid party participation' };
   }
 
   if (winnerId === callerUid) {

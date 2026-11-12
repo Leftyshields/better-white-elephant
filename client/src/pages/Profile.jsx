@@ -45,9 +45,10 @@ export function Profile() {
   const [successMessage, setSuccessMessage] = useState('');
   const [shareConsent, setShareConsent] = useState(false);
   const [showSavedAddressNeedsConsentNote, setShowSavedAddressNeedsConsentNote] = useState(false);
+  const [hadPersistedShippingAddress, setHadPersistedShippingAddress] = useState(false);
 
   const hasShippingFields = hasCompleteShippingFields(address);
-  const saveDisabled = saving || (hasShippingFields && !shareConsent);
+  const saveDisabled = saving;
 
   // Load user profile data
   useEffect(() => {
@@ -61,7 +62,7 @@ export function Profile() {
       try {
         // Load from Firestore
         const userDoc = await getDoc(doc(db, 'users', user.uid));
-        if (userDoc.exists()) {
+        if (userDoc.exists) {
           const userData = userDoc.data();
           setDisplayName(user.displayName || userData.displayName || '');
           if (userData.shippingAddress) {
@@ -72,10 +73,12 @@ export function Profile() {
           const loadedHadCompleteAddress = hasCompleteShippingFields(loadedAddress);
           const loadedHadConsent = Boolean(userData.shippingAddressSenderShareConsentAt);
           setShowSavedAddressNeedsConsentNote(loadedHadCompleteAddress && !loadedHadConsent);
+          setHadPersistedShippingAddress(Boolean(userData.shippingAddress));
         } else {
           // Create user document if it doesn't exist
           setDisplayName(user.displayName || '');
           setShowSavedAddressNeedsConsentNote(false);
+          setHadPersistedShippingAddress(false);
           await setDoc(doc(db, 'users', user.uid), {
             displayName: user.displayName || '',
             email: user.email || '',
@@ -100,10 +103,6 @@ export function Profile() {
     e.preventDefault();
     if (!user) return;
 
-    if (hasShippingFields && !shareConsent) {
-      return;
-    }
-
     setSaving(true);
     setSuccessMessage('');
     
@@ -121,13 +120,21 @@ export function Profile() {
 
       if (hasShippingFields) {
         profileUpdate.shippingAddress = address;
-        profileUpdate.shippingAddressSenderShareConsentAt = shareConsent ? new Date() : deleteField();
+        profileUpdate.shippingAddressSenderShareConsentAt = shareConsent
+          ? new Date()
+          : deleteField();
+      } else if (hadPersistedShippingAddress) {
+        profileUpdate.shippingAddress = deleteField();
+        profileUpdate.shippingAddressSenderShareConsentAt = deleteField();
+        setHadPersistedShippingAddress(false);
       }
 
       // Update Firestore user document
       await updateDoc(doc(db, 'users', user.uid), profileUpdate);
 
-      if (hasShippingFields && shareConsent) {
+      if (hasShippingFields) {
+        setShowSavedAddressNeedsConsentNote(!shareConsent);
+      } else {
         setShowSavedAddressNeedsConsentNote(false);
       }
 

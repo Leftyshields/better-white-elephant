@@ -536,7 +536,10 @@ io.on('connection', (socket) => {
         const { redisTtlSecondsForPartyStatus } = await import('./utils/game-state-persistence.js');
         finalState.state.config = config;
         finalState.state.partyId = partyId;
+        finalState.state.finalOwnership = finalOwnership;
         await saveGameState(partyId, finalState.state, redisTtlSecondsForPartyStatus('ENDED'));
+        const { saveShippingFulfillmentSnapshot } = await import('./utils/shipping-fulfillment-snapshot.js');
+        await saveShippingFulfillmentSnapshot(partyId, finalOwnership, db);
         
         io.to(`party:${partyId}`).emit('game-ended', finalState);
       }

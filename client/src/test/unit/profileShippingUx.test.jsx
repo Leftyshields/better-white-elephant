@@ -17,10 +17,11 @@ describe('Profile shipping UX must-fixes', () => {
     );
   });
 
-  it('disables Save when full address without consent; uses hasShippingFields at render time', () => {
+  it('Save is only disabled while saving (not when consent unchecked)', () => {
     expect(profile).toContain('const hasShippingFields = hasCompleteShippingFields(address)');
-    expect(profile).toContain('saveDisabled = saving || (hasShippingFields && !shareConsent)');
+    expect(profile).toContain('const saveDisabled = saving');
     expect(profile).toContain('disabled={saveDisabled}');
+    expect(profile).not.toContain('saveDisabled = saving || (hasShippingFields && !shareConsent)');
   });
 
   it('shows inline consent-required message instead of alert', () => {
@@ -33,12 +34,11 @@ describe('Profile shipping UX must-fixes', () => {
     expect(profile).toContain('showSavedAddressNeedsConsentNote');
     expect(profile).toContain('SHIPPING_ADDRESS_SAVED_NEEDS_CONSENT_PROFILE');
     expect(profile).toContain('loadedHadCompleteAddress && !loadedHadConsent');
-    expect(profile).toMatch(/hasShippingFields && shareConsent[\s\S]*setShowSavedAddressNeedsConsentNote\(false\)/);
+    expect(profile).toMatch(/hasShippingFields[\s\S]*setShowSavedAddressNeedsConsentNote\(!shareConsent\)/);
   });
 
-  it('allows display-name-only save path without requiring address fields', () => {
-    expect(profile).toMatch(/if \(hasShippingFields\) \{[\s\S]*profileUpdate\.shippingAddress/);
-    expect(profile).toContain('saveDisabled = saving || (hasShippingFields && !shareConsent)');
+  it('allows clearing address on save when fields empty', () => {
+    expect(profile).toMatch(/else \{[\s\S]*shippingAddress = deleteField\(\)/);
   });
 });
 

@@ -9,6 +9,7 @@ import { GameEngine } from '../engine.js';
 import redisClient from '../utils/redis.js';
 import { scrapeGiftMetadata } from '../utils/scraper.js';
 import { saveGameState, loadGameState, deleteGameState } from '../utils/game-state-persistence.js';
+import { saveShippingFulfillmentSnapshot } from '../utils/shipping-fulfillment-snapshot.js';
 import { fetchWinnerShippingAddressForSender } from '../utils/winner-shipping-address.js';
 
 const router = express.Router();
@@ -324,7 +325,9 @@ router.post('/end', async (req, res) => {
 
     // Save ended state to both Redis and Firestore
     finalState.state.config = gameState.config;
+    finalState.state.finalOwnership = finalOwnership;
     await saveGameState(partyId, finalState.state);
+    await saveShippingFulfillmentSnapshot(partyId, finalOwnership, db);
 
     // Stop bot refresh simulation when game ends
     const { stopBotRefreshSimulation } = await import('../utils/bot-utils.js');
