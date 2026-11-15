@@ -1,5 +1,8 @@
 import { GameEngine } from '../engine.js';
 
+export const END_TURN_SOCKET_ERROR =
+  'You can only skip on your own turn while the game is running.';
+
 /**
  * Returns an error message when end-turn must be rejected, or null when the sender may proceed.
  * Does not mutate game state.
@@ -14,11 +17,11 @@ export function getEndTurnRejectionReason(gameState, userId) {
   }
 
   if (gameState.phase !== 'ACTIVE') {
-    return 'Cannot end turn: invalid action';
+    return END_TURN_SOCKET_ERROR;
   }
 
   if (!userId) {
-    return 'Cannot end turn: invalid action';
+    return END_TURN_SOCKET_ERROR;
   }
 
   const config = gameState.config || { maxSteals: 3, returnToStart: false };
@@ -29,7 +32,7 @@ export function getEndTurnRejectionReason(gameState, userId) {
   const activePlayerId = engine.currentPlayerId;
 
   if (!activePlayerId || userId !== activePlayerId) {
-    return 'Cannot end turn: invalid action';
+    return END_TURN_SOCKET_ERROR;
   }
 
   return null;

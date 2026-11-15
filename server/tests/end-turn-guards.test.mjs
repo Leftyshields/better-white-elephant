@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildStandardState } from './helpers/test-store.mjs';
-import { getEndTurnRejectionReason } from '../utils/end-turn-guards.js';
+import {
+  END_TURN_SOCKET_ERROR,
+  getEndTurnRejectionReason,
+} from '../utils/end-turn-guards.js';
 
 test('getEndTurnRejectionReason: rejects ENDED game without mutating state', () => {
   const state = buildStandardState({
@@ -26,7 +29,7 @@ test('getEndTurnRejectionReason: rejects non-ACTIVE game', () => {
   });
   state.phase = 'LOBBY';
 
-  assert.equal(getEndTurnRejectionReason(state, 'p1'), 'Cannot end turn: invalid action');
+  assert.equal(getEndTurnRejectionReason(state, 'p1'), END_TURN_SOCKET_ERROR);
 });
 
 test('getEndTurnRejectionReason: rejects sender who is not the active player', () => {
@@ -36,7 +39,7 @@ test('getEndTurnRejectionReason: rejects sender who is not the active player', (
     wrappedGifts: ['g1'],
   });
 
-  assert.equal(getEndTurnRejectionReason(state, 'p2'), 'Cannot end turn: invalid action');
+  assert.equal(getEndTurnRejectionReason(state, 'p2'), END_TURN_SOCKET_ERROR);
 });
 
 test('getEndTurnRejectionReason: allows active player during ACTIVE game', () => {
@@ -58,6 +61,6 @@ test('getEndTurnRejectionReason: active player is currentVictim during steal cha
   state.currentVictim = 'p3';
   state.currentPlayerId = 'p3';
 
-  assert.equal(getEndTurnRejectionReason(state, 'p2'), 'Cannot end turn: invalid action');
+  assert.equal(getEndTurnRejectionReason(state, 'p2'), END_TURN_SOCKET_ERROR);
   assert.equal(getEndTurnRejectionReason(state, 'p3'), null);
 });
