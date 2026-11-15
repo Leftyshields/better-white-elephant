@@ -49,7 +49,7 @@ export function PartyInviteLanding({ partyId }) {
             } catch (error) {
               // If permission denied or other error, just use default
               console.warn('Could not fetch host name (may require auth):', error.message);
-              setHostName('Party Host');
+              setHostName('Name not shared');
             }
           }
         } else {
