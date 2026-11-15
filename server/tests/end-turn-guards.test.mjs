@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildStandardState } from './helpers/test-store.mjs';
 import {
+  END_TURN_GAME_ALREADY_ENDED,
   END_TURN_SOCKET_ERROR,
   getEndTurnRejectionReason,
 } from '../utils/end-turn-guards.js';
@@ -17,7 +18,7 @@ test('getEndTurnRejectionReason: rejects ENDED game without mutating state', () 
 
   const reason = getEndTurnRejectionReason(state, 'p1');
 
-  assert.equal(reason, 'Game has already ended');
+  assert.equal(reason, END_TURN_GAME_ALREADY_ENDED);
   assert.deepEqual(state, before);
 });
 
