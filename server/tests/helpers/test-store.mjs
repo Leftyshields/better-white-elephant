@@ -13,7 +13,15 @@ export function createTestStore() {
       return state ? structuredClone(state) : null;
     },
     async saveGameState(partyId, state) {
-      gameStates.set(partyId, structuredClone(state));
+      const copy = structuredClone(state);
+      gameStates.set(partyId, copy);
+      const stamped = {
+        ...copy,
+        partyId,
+        stateVersion: copy.stateVersion ?? 1,
+        updatedAt: copy.updatedAt ?? new Date().toISOString(),
+      };
+      redis.set(`game:${partyId}`, JSON.stringify(stamped));
     },
     reset() {
       gameStates.clear();

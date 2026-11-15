@@ -23,9 +23,10 @@ export const connectRedis = async () => {
   return client;
 };
 
-// Auto-connect on first use
-connectRedis().catch((err) => {
-  console.error('Failed to connect to Redis:', err);
-});
+if (process.env.REDIS_AUTO_CONNECT !== 'false') {
+  connectRedis().catch((err) => {
+    console.error('Failed to connect to Redis:', err);
+  });
+}
 
 export default client;

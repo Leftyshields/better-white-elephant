@@ -297,42 +297,22 @@ export async function endBotTurn(partyId, io) {
       return;
     }
     
-    // Load game state (from Redis or Firestore)
-    const gameState = await loadGameState(partyId);
-    if (!gameState) {
-      return;
-    }
-    
-    // CRITICAL: Validate partyId matches
-    if (gameState.partyId && gameState.partyId !== partyId) {
-      console.error(`❌ CRITICAL: partyId mismatch in endBotTurn! Parameter: ${partyId}, gameState.partyId: ${gameState.partyId}`);
-      return;
-    }
-    
-    // Ensure partyId is set
-    gameState.partyId = partyId;
-
-    if (gameState.phase === 'ENDED') {
-      return;
-    }
-    
-    if (gameState.phase !== 'ACTIVE') {
-      return;
+    const { executeEndActiveTurn, isGameStateConflictError } = await import('./game-turn-handler.mjs');
+    let newState;
+    try {
+      ({ newState } = await executeEndActiveTurn(partyId));
+    } catch (error) {
+      if (isGameStateConflictError(error)) {
+        return;
+      }
+      if (error.message === 'Game has already ended' || error.message === 'Game not found') {
+        return;
+      }
+      throw error;
     }
 
-    const { GameEngine } = await import('../engine.js');
-    const config = gameState.config || { maxSteals: 3, returnToStart: false };
-    const engine = new GameEngine(gameState, config);
+    const config = newState.config || { maxSteals: 3, returnToStart: false };
 
-    const newState = engine.endTurn();
-    newState.config = gameState.config;
-    // CRITICAL: Ensure partyId is preserved
-    newState.partyId = partyId;
-
-    // Save to both Redis and Firestore
-    await saveGameState(partyId, newState);
-
-    // Broadcast update
     io.to(`party:${partyId}`).emit('game-updated', newState);
 
     // If game ended, persist winners to Firestore
@@ -561,23 +541,18 @@ export async function checkAndMakeBotMove(partyId, gameState, io) {
 
         console.log(`🤖 Bot ${currentPlayerId} making move: ${decision.action} on gift ${decision.giftId} (attempt ${attempts + 1}/${MAX_MOVE_ATTEMPTS})`);
 
-        // Execute bot move with error handling
-        const { GameEngine } = await import('../engine.js');
-        const config = currentState.config || { maxSteals: 3, returnToStart: false };
-        const engine = new GameEngine(currentState, config);
-
+        const { executePickGift, executeStealGift, isGameStateConflictError } = await import('./game-turn-handler.mjs');
+        let newState;
         try {
           if (decision.action === 'pick') {
-            // Validate gift exists in wrapped gifts
             if (!currentState.wrappedGifts.includes(decision.giftId)) {
               console.error(`❌ Bot ${currentPlayerId} tried to pick gift ${decision.giftId} that doesn't exist in wrapped gifts`);
               botMoveAttempts.delete(attemptKey);
               await endBotTurn(partyId, io);
               return;
             }
-            engine.pickGift(decision.giftId, currentPlayerId);
+            ({ newState } = await executePickGift(partyId, decision.giftId, currentPlayerId));
           } else if (decision.action === 'steal') {
-            // Validate gift exists and is stealable
             const unwrappedMap = new Map(currentState.unwrappedGifts);
             const gift = unwrappedMap.get(decision.giftId);
             if (!gift) {
@@ -592,9 +567,15 @@ export async function checkAndMakeBotMove(partyId, gameState, io) {
               await endBotTurn(partyId, io);
               return;
             }
-        engine.stealGift(decision.giftId, currentPlayerId);
-      }
-    } catch (moveError) {
+            ({ newState } = await executeStealGift(partyId, decision.giftId, currentPlayerId));
+          } else {
+            throw new Error(`Unsupported bot action: ${decision.action}`);
+          }
+        } catch (moveError) {
+          if (isGameStateConflictError(moveError)) {
+            console.log(`⚠️ Bot ${currentPlayerId} move lost atomic race — skipping (${decision.action})`);
+            return;
+          }
       console.error(`❌ Bot ${currentPlayerId} move failed:`, moveError.message);
       console.error(`   Attempted: ${decision.action} on gift ${decision.giftId}`);
       botMoveAttempts.delete(attemptKey);
@@ -641,16 +622,8 @@ export async function checkAndMakeBotMove(partyId, gameState, io) {
       return;
     }
     
-    // Reset attempt counter on successful move
     botMoveAttempts.delete(attemptKey);
 
-    const newState = engine.getState();
-    newState.config = currentState.config;
-
-    // Save to both Redis and Firestore
-    await saveGameState(partyId, newState);
-
-    // Broadcast update
     io.to(`party:${partyId}`).emit('game-updated', newState);
 
         // pickGift already advanced the queue — schedule the next active player (do not endBotTurn)
@@ -754,23 +727,18 @@ export async function forceBotMove(partyId, io) {
 
     console.log(`🤖 [FORCED] Bot ${currentPlayerId} making move: ${decision.action} on gift ${decision.giftId}`);
 
-    // Execute bot move immediately (no delay)
-    const { GameEngine } = await import('../engine.js');
-    const config = gameState.config || { maxSteals: 3, returnToStart: false };
-    const engine = new GameEngine(gameState, config);
-
+    const { executePickGift, executeStealGift, isGameStateConflictError } = await import('./game-turn-handler.mjs');
+    let newState;
     try {
       if (decision.action === 'pick') {
-        // Validate gift exists in wrapped gifts
         if (!gameState.wrappedGifts.includes(decision.giftId)) {
           console.error(`❌ Bot ${currentPlayerId} tried to pick gift ${decision.giftId} that doesn't exist in wrapped gifts`);
           botMoveAttempts.delete(attemptKey);
           await endBotTurn(partyId, io);
           return { success: false, error: 'Gift not in wrapped gifts' };
         }
-        engine.pickGift(decision.giftId, currentPlayerId);
+        ({ newState } = await executePickGift(partyId, decision.giftId, currentPlayerId));
       } else if (decision.action === 'steal') {
-        // Validate gift exists and is stealable
         const unwrappedMap = new Map(gameState.unwrappedGifts);
         const gift = unwrappedMap.get(decision.giftId);
         if (!gift) {
@@ -785,27 +753,20 @@ export async function forceBotMove(partyId, io) {
           await endBotTurn(partyId, io);
           return { success: false, error: 'Gift is frozen or owned by bot' };
         }
-        engine.stealGift(decision.giftId, currentPlayerId);
+        ({ newState } = await executeStealGift(partyId, decision.giftId, currentPlayerId));
       }
     } catch (moveError) {
+      if (isGameStateConflictError(moveError)) {
+        return { success: false, error: moveError.message, code: 'GAME_STATE_CONFLICT' };
+      }
       console.error(`❌ Bot ${currentPlayerId} move failed:`, moveError.message);
       botMoveAttempts.delete(attemptKey);
       await endBotTurn(partyId, io);
       return { success: false, error: moveError.message };
     }
 
-    // Reset attempt counter on successful move
     botMoveAttempts.delete(attemptKey);
 
-    const newState = engine.getState();
-    newState.config = gameState.config;
-    // CRITICAL: Ensure partyId is preserved
-    newState.partyId = partyId;
-
-    // Save to both Redis and Firestore
-    await saveGameState(partyId, newState);
-
-    // Broadcast update
     io.to(`party:${partyId}`).emit('game-updated', newState);
 
     if (decision.action === 'pick') {
@@ -927,21 +888,9 @@ export async function forceBotSteal(partyId, io) {
 
     console.log(`🤖 [FORCED STEAL] Bot ${currentPlayerId} stealing gift ${giftId}`);
 
-    // Execute steal
-    const { GameEngine } = await import('../engine.js');
-    const config = gameState.config || { maxSteals: 3, returnToStart: false };
-    const engine = new GameEngine(gameState, config);
-    engine.stealGift(giftId, currentPlayerId);
+    const { executeStealGift } = await import('./game-turn-handler.mjs');
+    const { newState } = await executeStealGift(partyId, giftId, currentPlayerId);
 
-    const newState = engine.getState();
-    newState.config = gameState.config;
-    // CRITICAL: Ensure partyId is preserved
-    newState.partyId = partyId;
-
-    // Save to both Redis and Firestore
-    await saveGameState(partyId, newState);
-
-    // Broadcast update
     io.to(`party:${partyId}`).emit('game-updated', newState);
 
     console.log(`✅ Bot ${currentPlayerId} stole - victim ${newState.currentVictim} is now active`);
@@ -1011,21 +960,9 @@ export async function forceBotSkip(partyId, io) {
 
     console.log(`🤖 [FORCED SKIP] Bot ${currentPlayerId} skipping turn`);
 
-    // Execute skip (end turn)
-    const { GameEngine } = await import('../engine.js');
-    const config = gameState.config || { maxSteals: 3, returnToStart: false };
-    const engine = new GameEngine(gameState, config);
-    engine.endTurn();
+    const { executeEndTurn } = await import('./game-turn-handler.mjs');
+    const { newState } = await executeEndTurn(partyId, currentPlayerId);
 
-    const newState = engine.getState();
-    newState.config = gameState.config;
-    // CRITICAL: Ensure partyId is preserved
-    newState.partyId = partyId;
-
-    // Save to both Redis and Firestore
-    await saveGameState(partyId, newState);
-
-    // Broadcast update
     io.to(`party:${partyId}`).emit('game-updated', newState);
 
     // Check if next player is a bot and trigger their move
@@ -1142,21 +1079,9 @@ export async function forceBotPick(partyId, io) {
 
     console.log(`🤖 [FORCED PICK] Bot ${currentPlayerId} picking gift ${giftId}`);
 
-    // Execute pick
-    const { GameEngine } = await import('../engine.js');
-    const config = gameState.config || { maxSteals: 3, returnToStart: false };
-    const engine = new GameEngine(gameState, config);
-    engine.pickGift(giftId, currentPlayerId);
+    const { executePickGift } = await import('./game-turn-handler.mjs');
+    const { newState } = await executePickGift(partyId, giftId, currentPlayerId);
 
-    const newState = engine.getState();
-    newState.config = gameState.config;
-    // CRITICAL: Ensure partyId is preserved
-    newState.partyId = partyId;
-
-    // Save to both Redis and Firestore
-    await saveGameState(partyId, newState);
-
-    // Broadcast update
     io.to(`party:${partyId}`).emit('game-updated', newState);
 
     scheduleAutoplayContinuation(partyId, newState, io, 'pick');

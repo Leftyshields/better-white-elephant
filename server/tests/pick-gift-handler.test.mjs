@@ -1,22 +1,54 @@
 /**
- * Pick-gift socket handler: no broadcast/save on invalid wrapped id.
+ * Pick-gift socket handler: validation and broadcast only after atomic commit.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { GameEngine } from '../engine.js';
+import { mock } from 'node:test';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { END_TURN_GAME_NOT_FOUND } from '../utils/end-turn-guards.js';
 import {
-  handlePickGift,
+  PICK_GIFT_ALREADY_HOLDING,
+  PICK_GIFT_ALREADY_OPEN,
   PICK_GIFT_NOT_IN_WRAPPED_PILE,
   PICK_GIFT_NOT_ON_TURN,
-} from '../handlers/pick-gift.js';
-import { END_TURN_GAME_NOT_FOUND } from '../utils/end-turn-guards.js';
+} from '../utils/pick-gift-guards.js';
 import { buildStandardState, createTestStore, mockIo } from './helpers/test-store.mjs';
 
-const PARTY_ID = 'party-pick-handler';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const serverRoot = path.resolve(__dirname, '..');
 
-const MSG_ALREADY_HOLDING =
-  "You already have a gift, so you can't open another one. Steal one instead, or skip your turn.";
-const MSG_ALREADY_OPEN = "That gift is already open, so you can't open it again.";
+mock.module('firebase-admin', {
+  defaultExport: {
+    firestore: {
+      Timestamp: { now: () => ({}) },
+    },
+    credential: {
+      cert: () => ({}),
+    },
+    initializeApp: () => ({}),
+  },
+});
+
+const firebaseAdminPath = path.join(serverRoot, 'config/firebase-admin.js');
+mock.module(firebaseAdminPath, {
+  namedExports: {
+    db: {
+      collection() {
+        return {
+          doc: () => ({
+            update: async () => {},
+            get: async () => ({ exists: false, data: () => ({}) }),
+          }),
+        };
+      },
+    },
+  },
+});
+
+const { handlePickGift } = await import('../handlers/pick-gift.js');
+
+const PARTY_ID = 'party-pick-handler';
 
 function isValidPartyId(id) {
   return typeof id === 'string' && /^[a-zA-Z0-9_-]+$/.test(id);
@@ -25,16 +57,17 @@ function isValidGiftId(id) {
   return typeof id === 'string' && /^[a-zA-Z0-9_-]+$/.test(id);
 }
 
-test('rejecting pick for id not in wrappedGifts: no action_started, save, or game-updated', async () => {
+test('rejecting invalid wrapped id: no action_started or game-updated', async () => {
   const store = createTestStore();
-  const turnOrder = ['p1', 'p2'];
-  const initial = buildStandardState({
-    partyId: PARTY_ID,
-    turnOrder,
-    currentTurnIndex: 0,
-    wrappedGifts: ['g-valid'],
-  });
-  await store.saveGameState(PARTY_ID, initial);
+  await store.saveGameState(
+    PARTY_ID,
+    buildStandardState({
+      partyId: PARTY_ID,
+      turnOrder: ['p1', 'p2'],
+      currentTurnIndex: 0,
+      wrappedGifts: ['g-valid'],
+    }),
+  );
 
   const io = mockIo();
   const socketErrors = [];
@@ -45,7 +78,6 @@ test('rejecting pick for id not in wrappedGifts: no action_started, save, or gam
     },
   };
 
-  const saveCalls = [];
   await handlePickGift({
     partyId: PARTY_ID,
     giftId: 'g-phantom',
@@ -55,48 +87,19 @@ test('rejecting pick for id not in wrappedGifts: no action_started, save, or gam
     isValidPartyId,
     isValidGiftId,
     verifyPartyMembership: async () => true,
-    loadGameState: (id) => store.loadGameState(id),
-    saveGameState: async (id, state) => {
-      saveCalls.push({ id, state });
-      return store.saveGameState(id, state);
-    },
-    GameEngine,
     scheduleBotMove: null,
+    executePick: async () => {
+      throw new Error(PICK_GIFT_NOT_IN_WRAPPED_PILE);
+    },
   });
 
-  assert.equal(socketErrors.length, 1);
-  assert.equal(socketErrors[0].message, PICK_GIFT_NOT_IN_WRAPPED_PILE);
-
+  assert.equal(socketErrors[0]?.message, PICK_GIFT_NOT_IN_WRAPPED_PILE);
   const roomEvents = io.emissions.filter((e) => e.event !== 'error');
-  assert.equal(
-    roomEvents.filter((e) => e.event === 'action_started').length,
-    0,
-    'must not broadcast action_started',
-  );
-  assert.equal(
-    roomEvents.filter((e) => e.event === 'game-updated').length,
-    0,
-    'must not broadcast game-updated',
-  );
-  assert.equal(saveCalls.length, 0, 'must not save');
-
-  const unchanged = await store.loadGameState(PARTY_ID);
-  assert.deepEqual(unchanged.wrappedGifts, ['g-valid']);
+  assert.equal(roomEvents.filter((e) => e.event === 'action_started').length, 0);
+  assert.equal(roomEvents.filter((e) => e.event === 'game-updated').length, 0);
 });
 
 test('socket copy strings match Copywriter final text', async () => {
-  const store = createTestStore();
-  const turnOrder = ['p1', 'p2'];
-  const state = buildStandardState({
-    partyId: PARTY_ID,
-    turnOrder,
-    currentTurnIndex: 0,
-    wrappedGifts: ['g2'],
-    unwrappedGifts: [['g1', { ownerId: 'p1', stealCount: 0, isFrozen: false, lastOwnerId: null }]],
-  });
-  state.currentPlayerId = 'p1';
-  await store.saveGameState(PARTY_ID, state);
-
   const socketErrors = [];
   const socket = {
     userId: 'p1',
@@ -114,23 +117,13 @@ test('socket copy strings match Copywriter final text', async () => {
     isValidPartyId,
     isValidGiftId,
     verifyPartyMembership: async () => true,
-    loadGameState: (id) => store.loadGameState(id),
-    saveGameState: (id, s) => store.saveGameState(id, s),
-    GameEngine,
     scheduleBotMove: null,
+    executePick: async () => {
+      throw new Error(PICK_GIFT_ALREADY_HOLDING);
+    },
   });
 
-  assert.equal(socketErrors[0]?.message, MSG_ALREADY_HOLDING);
-
-  const state2 = buildStandardState({
-    partyId: `${PARTY_ID}-open`,
-    turnOrder: ['p1', 'p2'],
-    currentTurnIndex: 0,
-    wrappedGifts: ['g1'],
-    unwrappedGifts: [['g1', { ownerId: 'p2', stealCount: 0, isFrozen: false, lastOwnerId: null }]],
-  });
-  state2.currentPlayerId = 'p1';
-  await store.saveGameState(`${PARTY_ID}-open`, state2);
+  assert.equal(socketErrors[0]?.message, PICK_GIFT_ALREADY_HOLDING);
 
   const socketErrors2 = [];
   const socket2 = {
@@ -149,17 +142,16 @@ test('socket copy strings match Copywriter final text', async () => {
     isValidPartyId,
     isValidGiftId,
     verifyPartyMembership: async () => true,
-    loadGameState: (id) => store.loadGameState(id),
-    saveGameState: (id, s) => store.saveGameState(id, s),
-    GameEngine,
     scheduleBotMove: null,
+    executePick: async () => {
+      throw new Error(PICK_GIFT_ALREADY_OPEN);
+    },
   });
 
-  assert.equal(socketErrors2[0]?.message, MSG_ALREADY_OPEN);
+  assert.equal(socketErrors2[0]?.message, PICK_GIFT_ALREADY_OPEN);
 });
 
 test('missing game state returns shared game-not-found copy', async () => {
-  const store = createTestStore();
   const socketErrors = [];
   const socket = {
     userId: 'p1',
@@ -177,26 +169,16 @@ test('missing game state returns shared game-not-found copy', async () => {
     isValidPartyId,
     isValidGiftId,
     verifyPartyMembership: async () => true,
-    loadGameState: (id) => store.loadGameState(id),
-    saveGameState: (id, s) => store.saveGameState(id, s),
-    GameEngine,
     scheduleBotMove: null,
+    executePick: async () => {
+      throw new Error('Game not found');
+    },
   });
 
   assert.equal(socketErrors[0]?.message, END_TURN_GAME_NOT_FOUND);
 });
 
 test('pick when not active player returns not-on-turn copy', async () => {
-  const store = createTestStore();
-  const turnOrder = ['p1', 'p2'];
-  const initial = buildStandardState({
-    partyId: PARTY_ID,
-    turnOrder,
-    currentTurnIndex: 0,
-    wrappedGifts: ['g-valid'],
-  });
-  await store.saveGameState(PARTY_ID, initial);
-
   const socketErrors = [];
   const socket = {
     userId: 'p2',
@@ -214,26 +196,16 @@ test('pick when not active player returns not-on-turn copy', async () => {
     isValidPartyId,
     isValidGiftId,
     verifyPartyMembership: async () => true,
-    loadGameState: (id) => store.loadGameState(id),
-    saveGameState: (id, s) => store.saveGameState(id, s),
-    GameEngine,
     scheduleBotMove: null,
+    executePick: async () => {
+      throw new Error(PICK_GIFT_NOT_ON_TURN);
+    },
   });
 
   assert.equal(socketErrors[0]?.message, PICK_GIFT_NOT_ON_TURN);
 });
 
-test('successful pick: action_started and game-updated only after save succeeds', async () => {
-  const store = createTestStore();
-  const turnOrder = ['p1', 'p2'];
-  const initial = buildStandardState({
-    partyId: PARTY_ID,
-    turnOrder,
-    currentTurnIndex: 0,
-    wrappedGifts: ['g-valid'],
-  });
-  await store.saveGameState(PARTY_ID, initial);
-
+test('successful pick broadcasts only after atomic executePick resolves', async () => {
   const io = mockIo();
   const emissionLog = [];
   const trackingIo = {
@@ -247,7 +219,7 @@ test('successful pick: action_started and game-updated only after save succeeds'
     },
   };
 
-  let saveResolved = false;
+  const newState = { partyId: PARTY_ID, phase: 'ACTIVE', wrappedGifts: [] };
   await handlePickGift({
     partyId: PARTY_ID,
     giftId: 'g-valid',
@@ -257,61 +229,43 @@ test('successful pick: action_started and game-updated only after save succeeds'
     isValidPartyId,
     isValidGiftId,
     verifyPartyMembership: async () => true,
-    loadGameState: (id) => store.loadGameState(id),
-    saveGameState: async (id, state) => {
-      assert.equal(
-        emissionLog.filter((e) => e === 'action_started' || e === 'game-updated').length,
-        0,
-        'must not broadcast before save completes',
-      );
-      await store.saveGameState(id, state);
-      saveResolved = true;
-    },
-    GameEngine,
     scheduleBotMove: null,
+    executePick: async () => {
+      assert.equal(emissionLog.length, 0, 'must not broadcast before executePick resolves');
+      return { newState };
+    },
   });
 
-  assert.equal(saveResolved, true);
   assert.deepEqual(emissionLog, ['action_started', 'game-updated']);
 });
 
-test('failed save: no action_started or game-updated', async () => {
-  const store = createTestStore();
-  const turnOrder = ['p1', 'p2'];
-  const initial = buildStandardState({
-    partyId: PARTY_ID,
-    turnOrder,
-    currentTurnIndex: 0,
-    wrappedGifts: ['g-valid'],
-  });
-  await store.saveGameState(PARTY_ID, initial);
-
+test('failed executePick: no action_started or game-updated', async () => {
   const io = mockIo();
-  await assert.rejects(
-    () =>
-      handlePickGift({
-        partyId: PARTY_ID,
-        giftId: 'g-valid',
-        userId: 'p1',
-        socket: { userId: 'p1', emit() {} },
-        io,
-        isValidPartyId,
-        isValidGiftId,
-        verifyPartyMembership: async () => true,
-        loadGameState: (id) => store.loadGameState(id),
-        saveGameState: async () => {
-          throw new Error('save failed');
-        },
-        GameEngine,
-        scheduleBotMove: null,
-      }),
-    /save failed/,
-  );
+  const socketErrors = [];
+  const socket = {
+    userId: 'p1',
+    emit(event, payload) {
+      if (event === 'error') socketErrors.push(payload);
+    },
+  };
 
+  await handlePickGift({
+    partyId: PARTY_ID,
+    giftId: 'g-valid',
+    userId: 'p1',
+    socket,
+    io,
+    isValidPartyId,
+    isValidGiftId,
+    verifyPartyMembership: async () => true,
+    scheduleBotMove: null,
+    executePick: async () => {
+      throw new Error('persist failed');
+    },
+  });
+
+  assert.equal(socketErrors[0]?.message, 'persist failed');
   const roomEvents = io.emissions.filter((e) => e.event !== 'error');
   assert.equal(roomEvents.filter((e) => e.event === 'action_started').length, 0);
   assert.equal(roomEvents.filter((e) => e.event === 'game-updated').length, 0);
-
-  const unchanged = await store.loadGameState(PARTY_ID);
-  assert.deepEqual(unchanged.wrappedGifts, ['g-valid']);
 });

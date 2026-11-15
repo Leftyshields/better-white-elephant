@@ -12,11 +12,13 @@ import {
   giftEntry,
   mockIo,
 } from './helpers/test-store.mjs';
+import { createAtomicRedis } from './helpers/atomic-test-redis.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const serverRoot = path.resolve(__dirname, '..');
 
 const store = createTestStore();
+const atomicRedis = createAtomicRedis(store);
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -60,18 +62,24 @@ mock.module(firebaseAdminPath, {
 });
 
 mock.module(redisPath, {
-  defaultExport: {
-    get: async (key) => store.redis.get(key) ?? null,
-    set: async (key, value) => {
-      store.redis.set(key, value);
-    },
-  },
+  defaultExport: atomicRedis,
 });
+
+const persistenceModule = await import(persistencePath);
 
 mock.module(persistencePath, {
   namedExports: {
-    loadGameState: (partyId) => store.loadGameState(partyId),
+    ...persistenceModule,
+    loadGameState: async (partyId) => {
+      const raw = await atomicRedis.get(`game:${partyId}`);
+      if (raw) {
+        return JSON.parse(raw);
+      }
+      return store.loadGameState(partyId);
+    },
     saveGameState: (partyId, state) => store.saveGameState(partyId, state),
+    saveGameStateToFirestore: async () => true,
+    resolvePartyTtlForGameState: async () => 86400,
   },
 });
 
