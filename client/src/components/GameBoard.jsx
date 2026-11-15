@@ -22,8 +22,6 @@ import { SimulationControls } from './dev/SimulationControls.jsx';
 import { GameFooter } from './GameFooter.jsx';
 import { apiRequest } from '../utils/api.js';
 import { trackGameAction } from '../utils/analytics.js';
-import { doc, updateDoc } from 'firebase/firestore';
-import { db } from '../utils/firebase.js';
 import { canPlayerSkipTurn } from '../utils/skipTurnEligibility.js';
 
 export function GameBoard({ partyId, onEndTurn }) {
@@ -615,17 +613,11 @@ export function GameBoard({ partyId, onEndTurn }) {
     console.log('GameBoard: Waiting for connection or gameState', { connected, hasGameState: !!gameState, gameStateTimeout });
     
     if (gameStateTimeout) {
-      const isAdmin = !!user && !!party && party.adminId === user.uid;
       return (
         <div className="min-h-screen flex items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black py-12">
           <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
             <h2 className="text-2xl font-bold mb-4 text-red-600">Couldn&apos;t load the game</h2>
             <p className="text-gray-600 mb-4">Refresh the page and try again.</p>
-            {isAdmin && (
-              <p className="text-sm text-gray-500 mb-6">
-                As the host, you can reset the party status back to Lobby to start a new game.
-              </p>
-            )}
             <div className="flex flex-col gap-3">
               <Button
                 onClick={() => window.location.reload()}
@@ -633,25 +625,6 @@ export function GameBoard({ partyId, onEndTurn }) {
               >
                 Retry
               </Button>
-              {isAdmin && (
-                <Button
-                  onClick={async () => {
-                    try {
-                      await updateDoc(doc(db, 'parties', partyId), {
-                        status: 'LOBBY',
-                        updatedAt: new Date(),
-                      });
-                      window.location.reload();
-                    } catch (error) {
-                      console.error('Error resetting party status:', error);
-                      alert('Failed to reset party status: ' + error.message);
-                    }
-                  }}
-                  className="w-full bg-yellow-500 hover:bg-yellow-600"
-                >
-                  Reset Party to Lobby
-                </Button>
-              )}
               <Button
                 onClick={() => navigate('/')}
                 className="w-full bg-gray-500 hover:bg-gray-600"

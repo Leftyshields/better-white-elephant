@@ -23,6 +23,62 @@ service cloud.firestore {
       return isAuthenticated() && 
              exists(/databases/$(database)/documents/parties/$(partyId)/participants/$(request.auth.uid));
     }
+
+  // Party is still in pre-game setup (client may edit gifts and lobby settings)
+    function partyIsLobby(partyId) {
+      return get(/databases/$(database)/documents/parties/$(partyId)).data.status == 'LOBBY';
+    }
+
+    // Public host label on party docs (invite landing — matches PR #91 validation)
+    function validHostDisplayName(name) {
+      return name is string
+        && name.matches('^\\S(.{0,62}\\S)?$')
+        && name.size() <= 64
+        && !name.matches('.*@.*');
+    }
+
+    function hostDisplayNameOkOnWrite() {
+      return !request.resource.data.keys().hasAny(['hostDisplayName'])
+        || validHostDisplayName(request.resource.data.hostDisplayName);
+    }
+
+    function partyServerFieldsUntouched() {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['gameState', 'gameStateUpdatedAt', 'endedAt', 'gameHistory', 'adminId', 'createdAt']);
+    }
+
+    function partyAdminUpdateAllowed() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return changed.hasOnly(['title', 'date', 'config', 'updatedAt', 'status', 'hostDisplayName'])
+        && partyServerFieldsUntouched()
+        && hostDisplayNameOkOnWrite()
+        && request.resource.data.status != 'ACTIVE'
+        && request.resource.data.status != 'ENDED'
+        && (
+          request.resource.data.status == resource.data.status
+          || (resource.data.status == 'LOBBY' && request.resource.data.status == 'CANCELLED')
+        );
+    }
+
+    function giftCreateValid() {
+      return request.resource.data.submitterId == request.auth.uid
+        && request.resource.data.winnerId == null
+        && request.resource.data.isFrozen == false
+        && request.resource.data.keys().hasOnly([
+          'partyId', 'submitterId', 'url', 'title', 'image', 'price',
+          'isFrozen', 'winnerId', 'createdAt', 'updatedAt'
+        ]);
+    }
+
+    function giftProtectedFieldsUnchanged() {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['submitterId', 'partyId', 'createdAt', 'winnerId', 'isFrozen', 'partyEndedAt']);
+    }
+
+    function giftSubmitterUpdateAllowed() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['url', 'title', 'image', 'price', 'updatedAt']);
+    }
     
     // Users collection
     match /users/{userId} {
@@ -44,12 +100,17 @@ service cloud.firestore {
       // Also allow authenticated users to read full party details
       allow read: if true;
       
-      // Only authenticated users can create parties
+      // Only authenticated users can create parties (must start in LOBBY; no server-owned fields)
       allow create: if isAuthenticated() && 
-                       request.resource.data.adminId == request.auth.uid;
+                       request.resource.data.adminId == request.auth.uid &&
+                       request.resource.data.status == 'LOBBY' &&
+                       hostDisplayNameOkOnWrite() &&
+                       !request.resource.data.keys().hasAny([
+                         'gameState', 'gameStateUpdatedAt', 'endedAt', 'gameHistory'
+                       ]);
       
-      // Only party admin can update party
-      allow update: if isPartyAdmin(partyId);
+      // Party admin: allowlisted lobby fields only; cannot set ACTIVE/ENDED or touch gameState
+      allow update: if isPartyAdmin(partyId) && partyAdminUpdateAllowed();
       
       // Only party admin can delete party, and only if it's ended or cancelled
       allow delete: if isPartyAdmin(partyId) && 
@@ -92,19 +153,23 @@ service cloud.firestore {
                      (isParticipant(resource.data.partyId) || 
                       get(/databases/$(database)/documents/parties/$(resource.data.partyId)).data.status == 'LOBBY');
       
-      // Users can create gifts - they'll be added as participants when they submit
-      // Allow if authenticated and submitting for themselves
+      // Create while party is LOBBY; submitterId must match auth and stay server-defaulted fields
       allow create: if isAuthenticated() && 
-                       request.resource.data.submitterId == request.auth.uid;
+                       giftCreateValid() &&
+                       partyIsLobby(request.resource.data.partyId);
       
-      // Users can update their own gifts (before game starts)
+      // Submitter may update gift metadata only while party is LOBBY (submitterId immutable)
       allow update: if isAuthenticated() && 
-                       (resource.data.submitterId == request.auth.uid || 
-                        isPartyAdmin(resource.data.partyId));
+                       resource.data.submitterId == request.auth.uid &&
+                       partyIsLobby(resource.data.partyId) &&
+                       giftProtectedFieldsUnchanged() &&
+                       giftSubmitterUpdateAllowed();
       
-      // Only admin can delete gifts
+      // Submitter or admin may delete gifts during lobby (Change Gift / remove participant)
       allow delete: if isAuthenticated() && 
-                       isPartyAdmin(resource.data.partyId);
+                       partyIsLobby(resource.data.partyId) &&
+                       (resource.data.submitterId == request.auth.uid ||
+                        isPartyAdmin(resource.data.partyId));
     }
     
     // Collection group query for participants - allows users to find parties where they are participants

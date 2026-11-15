@@ -305,8 +305,13 @@ export function PartyLobby({ partyId, onStartGame }) {
       };
 
       if (userGift) {
-        // Update existing gift
-        await updateDoc(doc(db, 'gifts', userGift.id), giftData);
+        await updateDoc(doc(db, 'gifts', userGift.id), {
+          url: giftData.url,
+          title: giftData.title,
+          image: giftData.image,
+          price: giftData.price,
+          updatedAt: giftData.updatedAt,
+        });
         console.log('Gift updated successfully');
       } else {
         // Create new gift
@@ -1374,7 +1379,13 @@ export function PartyLobby({ partyId, onStartGame }) {
                                       };
 
                                       if (userGift) {
-                                        await updateDoc(doc(db, 'gifts', userGift.id), giftData);
+                                        await updateDoc(doc(db, 'gifts', userGift.id), {
+                                          url: giftData.url,
+                                          title: giftData.title,
+                                          image: giftData.image,
+                                          price: giftData.price,
+                                          updatedAt: giftData.updatedAt,
+                                        });
                                       } else {
                                         await addDoc(collection(db, 'gifts'), giftData);
                                       }
