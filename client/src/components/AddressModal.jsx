@@ -13,18 +13,10 @@ import {
   SHIPPING_ADDRESS_SENDER_SHARE_CONSENT_LABEL,
 } from '../utils/shippingAddressCopy.js';
 
-const ADDRESS_FIELD_KEYS = ['name', 'street', 'city', 'state', 'zip', 'country'];
-
-function hasCompleteShippingFields(address) {
-  return ADDRESS_FIELD_KEYS.every((key) => Boolean(address[key]?.trim()));
-}
-
-function trimShippingAddress(address) {
-  return ADDRESS_FIELD_KEYS.reduce((acc, key) => {
-    acc[key] = address[key]?.trim() ?? '';
-    return acc;
-  }, {});
-}
+import {
+  hasCompleteShippingFields,
+  trimShippingAddress,
+} from '../utils/shippingAddressFields.js';
 
 export function AddressModal({ isOpen, onClose, giftTitle }) {
   const { user } = useAuth();

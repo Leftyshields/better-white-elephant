@@ -30,11 +30,10 @@ import { Input } from '../components/ui/Input.jsx';
 import { Modal } from '../components/ui/Modal.jsx';
 import { LockClosedIcon } from '@heroicons/react/24/outline';
 
-const SHIPPING_FIELD_KEYS = ['name', 'street', 'city', 'state', 'zip', 'country'];
-
-function hasCompleteShippingFields(address) {
-  return SHIPPING_FIELD_KEYS.every((key) => Boolean(address[key]?.trim()));
-}
+import {
+  SHIPPING_FIELD_KEYS,
+  hasCompleteShippingFields,
+} from '../utils/shippingAddressFields.js';
 
 function hasAnyShippingFieldFilled(address) {
   return SHIPPING_FIELD_KEYS.some((key) => Boolean(address[key]?.trim()));

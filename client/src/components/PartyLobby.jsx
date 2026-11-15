@@ -1,7 +1,7 @@
 /**
  * Party Lobby Component
  */
-import { useState, useEffect, useId } from 'react';
+import { useState, useEffect, useId, useRef, useCallback } from 'react';
 import { useAuth } from '../hooks/useAuth.js';
 import { useParty } from '../hooks/useParty.js';
 import { Button } from './ui/Button.jsx';
@@ -29,6 +29,11 @@ import {
 import { db } from '../utils/firebase.js';
 import { filterVisiblePendingInvites, canResendPartyInvite } from '../utils/pendingInvites.js';
 import { getStartGameFailureMessage, START_GAME_GENERIC_ERROR } from '../utils/startGameResponse.js';
+import { ShippingAddressStep } from './lobby/ShippingAddressStep.jsx';
+import { GuestReadyStep } from './lobby/GuestReadyStep.jsx';
+import { hasCompleteShippingFields } from '../utils/shippingAddressFields.js';
+import { focusLobbyStepHeading, lobbyStepHeadingId } from '../copy/lobbySetupStrings.js';
+import { LOBBY_STEP_STATUS } from './lobby/lobbyStepUtils.js';
 export function PartyLobby({ partyId, onStartGame }) {
   const { user } = useAuth();
   const { party, participants, pendingInvites, gifts, loading } = useParty(partyId);
@@ -56,15 +61,76 @@ export function PartyLobby({ partyId, onStartGame }) {
   const [editingRules, setEditingRules] = useState(false);
   const [savingRules, setSavingRules] = useState(false);
   const [openStep, setOpenStep] = useState(null); // Track which step is open
+  const [addressMissingForReady, setAddressMissingForReady] = useState(false);
+  const [addressEditing, setAddressEditing] = useState(false);
+  const [guestReadyError, setGuestReadyError] = useState('');
+  const [guestReadyPending, setGuestReadyPending] = useState(false);
+  const addressStepAnchorRef = useRef(null);
   const addPersonNameInputId = useId();
-
-  const isAdmin = !!user && !!party && party.adminId === user.uid;
-  const currentParticipant = participants.find((p) => p.id === user?.uid);
-  const userGift = gifts.find((g) => g.submitterId === user?.uid);
   const [adminShippingAddress, setAdminShippingAddress] = useState(null);
   const [loadingAdminAddress, setLoadingAdminAddress] = useState(false);
   const [userShippingAddress, setUserShippingAddress] = useState(null);
   const [loadingUserAddress, setLoadingUserAddress] = useState(false);
+
+  const isAdmin = !!user && !!party && party.adminId === user.uid;
+  const currentParticipant = participants.find((p) => p.id === user?.uid);
+  const userGift = gifts.find((g) => g.submitterId === user?.uid);
+
+  const activeShippingAddress = isAdmin ? adminShippingAddress : userShippingAddress;
+  const hasSavedShippingAddress = hasCompleteShippingFields(activeShippingAddress || {});
+
+  const focusAddressStep = useCallback(() => {
+    setAddressMissingForReady(true);
+    setOpenStep('address');
+    requestAnimationFrame(() => {
+      addressStepAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  }, []);
+
+  const markParticipantNotReady = useCallback(async () => {
+    if (!user || !currentParticipant?.ready) return;
+    try {
+      await updateDoc(doc(db, 'parties', partyId, 'participants', user.uid), {
+        ready: false,
+        updatedAt: new Date(),
+      });
+    } catch (error) {
+      console.error('Error clearing ready state:', { code: error.code, name: error.name });
+    }
+  }, [user, currentParticipant?.ready, partyId]);
+
+  const advanceAfterStep = useCallback(
+    (stepId, steps) => {
+      const idx = steps.findIndex((s) => s.id === stepId);
+      for (let i = idx + 1; i < steps.length; i += 1) {
+        if (!steps[i].completed) {
+          setOpenStep(steps[i].id);
+          setAddressEditing(false);
+          requestAnimationFrame(() => focusLobbyStepHeading(steps[i].id));
+          return;
+        }
+      }
+      setOpenStep(null);
+      setAddressEditing(false);
+    },
+    [],
+  );
+
+  const handleLobbyAddressSaved = useCallback(
+    async (savedAddress) => {
+      if (isAdmin) {
+        setAdminShippingAddress(savedAddress);
+      } else {
+        setUserShippingAddress(savedAddress);
+      }
+      setAddressMissingForReady(false);
+      setAddressEditing(false);
+      if (!savedAddress || !hasCompleteShippingFields(savedAddress)) {
+        await markParticipantNotReady();
+      }
+    },
+    [isAdmin, markParticipantNotReady],
+  );
 
   // Fetch user names and emails for participants
   useEffect(() => {
@@ -357,43 +423,46 @@ export function PartyLobby({ partyId, onStartGame }) {
     }
   };
 
-  const handleToggleReady = async () => {
+  const setGuestReady = async (ready) => {
     if (!user || !currentParticipant) return;
 
-    // Validate shipping address before allowing user to mark as ready
-    if (!currentParticipant.ready) {
-      // Only check when marking as ready (not when unmarking)
-      if (!userShippingAddress || !userShippingAddress.street || !userShippingAddress.city) {
-        alert('Add a shipping address in Profile before you mark yourself ready. The person who owes you a gift will need it.');
-        return;
-      }
-    }
+    setGuestReadyPending(true);
+    setGuestReadyError('');
 
     try {
-      const participantRef = doc(db, 'parties', partyId, 'participants', user.uid);
-      const newReadyState = !currentParticipant.ready;
-      
-      await updateDoc(participantRef, {
-        ready: newReadyState,
+      if (ready) {
+        if (!userGift) {
+          setOpenStep('gift');
+          requestAnimationFrame(() => focusLobbyStepHeading('gift'));
+          return;
+        }
+        if (!hasCompleteShippingFields(userShippingAddress || {})) {
+          focusAddressStep();
+          return;
+        }
+      }
+
+      await updateDoc(doc(db, 'parties', partyId, 'participants', user.uid), {
+        ready,
         updatedAt: new Date(),
       });
-      
-      // If marking as ready, close the step
-      if (newReadyState && !isAdmin) {
+
+      if (ready) {
         setOpenStep(null);
       }
     } catch (error) {
-      console.error('Error toggling ready state:', error);
-      alert('Failed to update ready state: ' + error.message);
+      console.error('Error updating ready state:', { code: error.code, name: error.name });
+      setGuestReadyError("We couldn't update your ready status. Try again.");
+    } finally {
+      setGuestReadyPending(false);
     }
   };
 
   const handleStartGame = async () => {
     if (!partyId) return;
 
-    // Validate admin has shipping address
-    if (!adminShippingAddress || !adminShippingAddress.street || !adminShippingAddress.city) {
-      alert('Please add your shipping address to your profile before starting the game. You can update it in your Profile page.');
+    if (!hasCompleteShippingFields(adminShippingAddress || {})) {
+      focusAddressStep();
       return;
     }
 
@@ -668,14 +737,22 @@ export function PartyLobby({ partyId, onStartGame }) {
       return participants.length + displayedInvites.length >= 2;
     })() },
     { id: 'gift', label: 'Submit your gift', completed: !!userGift },
+    { id: 'address', label: 'Your shipping address', completed: hasSavedShippingAddress },
     { id: 'ready', label: 'All participants ready', completed: (() => {
       const nonAdminParticipants = participants.filter((p) => p.status === 'GOING' && p.id !== party?.adminId);
       return nonAdminParticipants.length > 0 && nonAdminParticipants.every((p) => p.ready === true);
     })() },
   ] : [
     { id: 'gift', label: 'Submit your gift', completed: !!userGift },
-    { id: 'ready', label: 'Mark yourself as ready', completed: currentParticipant?.ready === true },
+    { id: 'address', label: 'Your shipping address', completed: hasSavedShippingAddress },
+    { id: 'ready', label: "I'm ready", completed: currentParticipant?.ready === true },
   ];
+
+  const guestGoingPeers = participants.filter(
+    (p) => p.status === 'GOING' && p.id !== party?.adminId,
+  );
+  const guestReadyPeerCount = guestGoingPeers.filter((p) => p.ready === true).length;
+  const guestReadyPeerTotal = guestGoingPeers.length;
 
   const completedSteps = setupSteps.filter(s => s.completed).length;
   const totalSteps = setupSteps.length;
@@ -1416,6 +1493,34 @@ export function PartyLobby({ partyId, onStartGame }) {
                       )}
                     </div>
                   );
+                case 'address':
+                  return (
+                    <div
+                      className="p-6"
+                      ref={addressStepAnchorRef}
+                      data-testid="lobby-address-step-panel"
+                    >
+                      <ShippingAddressStep
+                        stepStatus={
+                          hasSavedShippingAddress && !addressEditing
+                            ? LOBBY_STEP_STATUS.DONE
+                            : LOBBY_STEP_STATUS.ACTIVE
+                        }
+                        headingId={lobbyStepHeadingId('address')}
+                        savedAddress={activeShippingAddress}
+                        isEditing={addressEditing}
+                        onRequestEdit={() => {
+                          setAddressEditing(true);
+                          setOpenStep('address');
+                        }}
+                        onSaved={handleLobbyAddressSaved}
+                        onCleared={markParticipantNotReady}
+                        onAdvanceNext={() => advanceAfterStep('address', setupSteps)}
+                        showMissingForReady={addressMissingForReady}
+                        onClearMissingForReady={() => setAddressMissingForReady(false)}
+                      />
+                    </div>
+                  );
                 case 'ready':
                   if (isAdmin) {
                     const nonAdminParticipants = participants.filter((p) => p.status === 'GOING' && p.id !== party?.adminId);
@@ -1498,44 +1603,35 @@ export function PartyLobby({ partyId, onStartGame }) {
                 </div>
                     );
                   } else {
+                    const guestHasGift = Boolean(userGift);
+                    const guestHasAddress = hasSavedShippingAddress;
+                    let guestReadyStatus = LOBBY_STEP_STATUS.ACTIVE;
+                    if (!guestHasGift || !guestHasAddress) {
+                      guestReadyStatus = LOBBY_STEP_STATUS.LOCKED;
+                    } else if (currentParticipant?.ready === true) {
+                      guestReadyStatus = LOBBY_STEP_STATUS.DONE;
+                    }
                     return (
                       <div className="p-6">
-                        {currentParticipant?.ready === true ? (
-                          <div className="bg-green-500/10 border-2 border-green-500/30 rounded-lg p-4">
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className="text-green-400 font-semibold">✓ You're Ready!</span>
-                            </div>
-                            <p className="text-sm text-slate-300 mb-4">
-                              You've marked yourself as ready. Waiting for other participants and the host to start the game.
-                            </p>
-                            <Button
-                              variant="secondary"
-                              onClick={handleToggleReady}
-                              className="w-full sm:w-auto"
-                            >
-                              Mark as Not Ready
-                            </Button>
-                          </div>
-                        ) : (
-                          <div className="space-y-3">
-                            <p className="text-slate-300">
-                              Once you've submitted your gift, mark yourself as ready to let the host know you're prepared for the game.
-                            </p>
-                            <Button
-                              onClick={handleToggleReady}
-                              disabled={!userGift}
-                              className="w-full sm:w-auto"
-                            >
-                              I'm Ready!
-                            </Button>
-                            {!userGift && (
-                              <p className="text-sm text-slate-400">
-                                Please submit your gift first before marking yourself as ready.
-                              </p>
-                    )}
-                  </div>
-                  )}
-                </div>
+                        <GuestReadyStep
+                          stepStatus={guestReadyStatus}
+                          headingId={lobbyStepHeadingId('ready')}
+                          hasGift={guestHasGift}
+                          hasAddress={guestHasAddress}
+                          isReady={currentParticipant?.ready === true}
+                          readyPeerCount={guestReadyPeerCount}
+                          readyPeerTotal={guestReadyPeerTotal}
+                          actionError={guestReadyError}
+                          actionPending={guestReadyPending}
+                          onMarkReady={() => setGuestReady(true)}
+                          onUndoReady={() => setGuestReady(false)}
+                          onFocusGiftStep={() => {
+                            setOpenStep('gift');
+                            requestAnimationFrame(() => focusLobbyStepHeading('gift'));
+                          }}
+                          onFocusAddressStep={focusAddressStep}
+                        />
+                      </div>
                     );
                   }
                 default:
@@ -1610,7 +1706,7 @@ export function PartyLobby({ partyId, onStartGame }) {
                 const displayedInvites = filterVisiblePendingInvites(pendingInvites, participants);
                 const totalParticipants = participants.length + displayedInvites.length;
                 
-                const hasShippingAddress = adminShippingAddress && adminShippingAddress.street && adminShippingAddress.city;
+                const hasShippingAddress = hasCompleteShippingFields(adminShippingAddress || {});
                 const hasGift = !!userGift;
                 const canStart = allReady && totalParticipants >= 2 && hasShippingAddress && hasGift;
                 
@@ -1714,65 +1810,32 @@ export function PartyLobby({ partyId, onStartGame }) {
             </>
           ) : (
             currentParticipant && currentParticipant.status === 'GOING' && (
-              <>
-                {(() => {
-                  const hasShippingAddress = userShippingAddress && userShippingAddress.street && userShippingAddress.city;
-                  const canBeReady = userGift && hasShippingAddress;
-                  
-                  return (
-                    <div className="text-center space-y-4">
-                      <h3 className="text-2xl font-bold text-white mb-2">
-                        {currentParticipant.ready ? "You're Ready!" : "Mark Yourself Ready"}
-                      </h3>
-                      
-                      {!canBeReady && (
-                        <div className="bg-slate-950/50 rounded-lg p-4 mb-4 space-y-2 text-left">
-                          <p className="font-semibold text-white mb-2">Complete these steps first:</p>
-                          <ul className="space-y-1 text-sm text-slate-300">
-                            <li className="flex items-center gap-2">
-                              {userGift ? (
-                                <span className="text-green-400">✓</span>
-                              ) : (
-                                <span className="text-slate-500">○</span>
-                              )}
-                              <span className={userGift ? 'text-slate-300' : ''}>Submit your gift</span>
-                            </li>
-                            <li className="flex items-center gap-2">
-                              {hasShippingAddress ? (
-                                <span className="text-green-400">✓</span>
-                              ) : (
-                                <span className="text-slate-500">○</span>
-                              )}
-                              <span className={hasShippingAddress ? 'text-slate-300' : ''}>Add your shipping address</span>
-                            </li>
-                          </ul>
-                        </div>
-                      )}
-                      
-                      {canBeReady && currentParticipant.ready && (
-                        <div className="bg-green-500/10 border-2 border-green-500/30 rounded-lg p-4 mb-4">
-                          <p className="text-green-400 font-semibold">You&apos;re ready. Waiting for the host to start the game.</p>
-                        </div>
-                      )}
-                      
-                      <Button
-                        onClick={handleToggleReady}
-                        variant={currentParticipant.ready === true ? "secondary" : "primary"}
-                        className="px-12 py-4 text-xl font-bold shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                        disabled={!canBeReady}
-                      >
-                        {currentParticipant.ready === true ? "✓ I'm Ready!" : "🎉 Let's Party!"}
-                      </Button>
-                      
-                      {canBeReady && !currentParticipant.ready && (
-                        <p className="text-sm text-slate-300 mt-3">
-                          Click the button above when you're ready for the game to start!
-                        </p>
-                      )}
-                    </div>
-                  );
-                })()}
-              </>
+              <div className="p-2">
+                <GuestReadyStep
+                  stepStatus={
+                    !userGift || !hasSavedShippingAddress
+                      ? LOBBY_STEP_STATUS.LOCKED
+                      : currentParticipant.ready
+                        ? LOBBY_STEP_STATUS.DONE
+                        : LOBBY_STEP_STATUS.ACTIVE
+                  }
+                  headingId={lobbyStepHeadingId('ready-footer')}
+                  hasGift={Boolean(userGift)}
+                  hasAddress={hasSavedShippingAddress}
+                  isReady={currentParticipant.ready === true}
+                  readyPeerCount={guestReadyPeerCount}
+                  readyPeerTotal={guestReadyPeerTotal}
+                  actionError={guestReadyError}
+                  actionPending={guestReadyPending}
+                  onMarkReady={() => setGuestReady(true)}
+                  onUndoReady={() => setGuestReady(false)}
+                  onFocusGiftStep={() => {
+                    setOpenStep('gift');
+                    requestAnimationFrame(() => focusLobbyStepHeading('gift'));
+                  }}
+                  onFocusAddressStep={focusAddressStep}
+                />
+              </div>
             )
           )}
         </div>

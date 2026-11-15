@@ -18,7 +18,8 @@ describe('Profile shipping UX must-fixes', () => {
   });
 
   it('Save is only disabled while saving (not when consent unchecked)', () => {
-    expect(profile).toContain('const hasShippingFields = hasCompleteShippingFields(address)');
+    expect(profile).toContain('hasCompleteShippingFields(address)');
+    expect(profile).toContain("from '../utils/shippingAddressFields.js'");
     expect(profile).toContain('const saveDisabled = saving');
     expect(profile).toContain('disabled={saveDisabled}');
     expect(profile).not.toContain('saveDisabled = saving || (hasShippingFields && !shareConsent)');
