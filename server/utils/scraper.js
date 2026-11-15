@@ -3,6 +3,7 @@
  * Uses Apify Amazon scraper for Amazon URLs, cheerio for others
  */
 import * as cheerio from 'cheerio';
+import { resolveGiftTitle } from './gift-url-metadata.js';
 
 const APIFY_API_TOKEN = process.env.APIFY_API_TOKEN;
 const APIFY_ACTOR_ID = 'junglee~free-amazon-product-scraper'; // Use ~ instead of / for API
@@ -145,7 +146,7 @@ async function scrapeAmazonWithApify(url) {
 
     // Map Apify response to our format
     const result = {
-      title: product.title || 'Amazon Product',
+      title: resolveGiftTitle(product.title || 'Amazon Product', url),
       image: product.thumbnailImage || null,
       price: product.price ? `${product.price.currency || '$'}${product.price.value}` : null,
       // Include additional data that might be useful
@@ -169,8 +170,8 @@ async function scrapeAmazonWithApify(url) {
  * @returns {Promise<{title: string, image: string, price: string|null}>}
  */
 export async function scrapeGiftMetadata(url) {
+  let fullUrl = url;
   try {
-    console.log('[Scraper] Starting scrape for URL:', url);
     
     // Validate URL
     if (!url || typeof url !== 'string') {
@@ -178,9 +179,9 @@ export async function scrapeGiftMetadata(url) {
     }
 
     // Ensure URL has protocol
-    const fullUrl = url.startsWith('http') ? url : `https://${url}`;
-    console.log('[Scraper] Normalized URL:', fullUrl);
+    fullUrl = url.startsWith('http') ? url : `https://${url}`;
     const urlObj = new URL(fullUrl);
+    console.log('[Scraper] Starting scrape for host:', urlObj.hostname);
     
     // SSRF Protection: Only allow http and https protocols
     if (urlObj.protocol !== 'http:' && urlObj.protocol !== 'https:') {
@@ -383,16 +384,16 @@ export async function scrapeGiftMetadata(url) {
       }
     }
 
-    return {
-      title: title.trim(),
+  return {
+      title: resolveGiftTitle(title, fullUrl) || 'Untitled Gift',
       image: imageUrl,
       price: price || null,
     };
   } catch (error) {
     console.error('[Scraper] Error:', error.message, error.stack);
-    // Return fallback values but include error info
+    const resolvedTitle = resolveGiftTitle(null, fullUrl);
     return {
-      title: 'Gift',
+      title: resolvedTitle || 'Gift',
       image: null,
       price: null,
       error: error.message || 'Failed to scrape URL',

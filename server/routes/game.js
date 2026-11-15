@@ -436,8 +436,13 @@ router.post('/scrape', async (req, res) => {
     }
     
     const { url } = req.body;
-    console.log('[Scrape API] Received scrape request for URL:', url);
-    console.log('[Scrape API] APIFY_API_TOKEN configured:', !!process.env.APIFY_API_TOKEN);
+    let scrapeHost = 'unknown';
+    try {
+      scrapeHost = new URL(url).hostname;
+    } catch {
+      // validated below
+    }
+    console.log('[Scrape API] Received scrape request for host:', scrapeHost);
 
     if (!url || typeof url !== 'string') {
       return res.status(400).json({ error: 'Valid URL is required' });
