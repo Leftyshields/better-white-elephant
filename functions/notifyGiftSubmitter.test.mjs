@@ -7,6 +7,7 @@ import {
 } from './notifyGiftSubmitterLogic.js';
 import {
   GIFT_SUBMITTER_NOTIFY_NO_ADDRESS_SHARED_MESSAGE,
+  buildGiftSubmitterNoAddressOpening,
 } from './sendPartyInviteLogic.js';
 import {
   hasSenderShareConsent,
@@ -151,9 +152,12 @@ test('no consent sends no-address email to assigned sender only', async () => {
   assert.deepEqual(recipients, ['sender-1@example.com', 'sender-2@example.com']);
   assert.ok(
     sends.every((s) =>
-      s.html.includes("Your giftee hasn&#39;t shared a shipping address yet."),
+      s.html.includes("They haven&#39;t shared a shipping address yet."),
     ),
   );
+  assert.ok(sends.every((s) => s.subject === 'Your gift has a winner'));
+  assert.ok(sends.every((s) => s.html.includes('Winner ended up with your gift.')));
+  assert.ok(sends.every((s) => !s.html.includes('saved their shipping')));
   assert.ok(sends.every((s) => !s.html.includes('123 Main St')));
 });
 
@@ -257,4 +261,53 @@ test('logNotifyGiftSubmitterFailure omits PII from logs', () => {
   assert.doesNotMatch(logged, /@/);
   assert.doesNotMatch(logged, /Main St/);
   assert.doesNotMatch(logged, /winner/);
+});
+test('no-address opening falls back when winner name is empty', () => {
+  assert.equal(buildGiftSubmitterNoAddressOpening('', 'winner-1'), 'Someone ended up with your gift.');
+  assert.equal(buildGiftSubmitterNoAddressOpening('  ', 'winner-1'), 'Someone ended up with your gift.');
+  assert.equal(buildGiftSubmitterNoAddressOpening('Pat', 'winner-1'), 'Pat ended up with your gift.');
+});
+
+test('one failed send does not stop the remaining senders', async () => {
+  const sends = [];
+  const db = makeDbMock({
+    gifts: [
+      { id: 'gift-1', winnerId: 'winner-1', submitterId: 'sender-1', partyId: 'party-1' },
+      { id: 'gift-2', winnerId: 'winner-1', submitterId: 'sender-2', partyId: 'party-1' },
+    ],
+    users: {
+      'sender-1': { email: 'sender-1@example.com' },
+      'sender-2': { email: 'sender-2@example.com' },
+    },
+  });
+  const originalError = console.error;
+  const logged = [];
+  console.error = (...args) => logged.push(args);
+  try {
+    const result = await notifyGiftSubmittersForWinnerAddress(db, {
+      userId: 'winner-1',
+      winnerUser: { displayName: 'Winner' },
+      shippingAddressRaw: null,
+      emailMode: 'no_address_shared',
+      getResend: () => ({
+        emails: {
+          send: async (payload) => {
+            if (payload.to === 'sender-1@example.com') {
+              const err = new Error('boom sender-1@example.com');
+              err.code = 'send_failed';
+              throw err;
+            }
+            sends.push(payload);
+          },
+        },
+      }),
+      resolveFromEmail: () => 'noreply@example.com',
+    });
+    assert.equal(result.sentCount, 1);
+    assert.equal(result.failedCount, 1);
+    assert.deepEqual(sends.map((s) => s.to), ['sender-2@example.com']);
+    assert.ok(!JSON.stringify(logged).includes('@example.com'));
+  } finally {
+    console.error = originalError;
+  }
 });

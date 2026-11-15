@@ -167,9 +167,21 @@ export function buildInviteEmailHtml({
       `;
 }
 
-/** Placeholder until Copywriter finalizes gift-submitter “no address shared yet” copy. */
+/** Gift-submitter email when the winner has not shared a shipping address yet. */
+export const GIFT_SUBMITTER_NOTIFY_NO_ADDRESS_SHARED_SUBJECT = 'Your gift has a winner';
+export const GIFT_SUBMITTER_NOTIFY_NO_ADDRESS_SHARED_HEADING = 'Your gift has a winner';
+export const GIFT_SUBMITTER_NOTIFY_WITH_ADDRESS_SUBJECT = 'Shipping Address for Your Gift';
+export const GIFT_SUBMITTER_NOTIFY_NO_ADDRESS_SHARED_ANONYMOUS_OPENING = 'Someone ended up with your gift.';
 export const GIFT_SUBMITTER_NOTIFY_NO_ADDRESS_SHARED_MESSAGE =
-  "Your giftee hasn't shared a shipping address yet. We'll let you know when they do.";
+  "They haven't shared a shipping address yet. We'll let you know when they do.";
+
+export function buildGiftSubmitterNoAddressOpening(winnerDisplayName, winnerUid) {
+  const name = typeof winnerDisplayName === 'string' ? winnerDisplayName.trim() : '';
+  if (!name || isSyntheticPlayerDisplayName(name, winnerUid)) {
+    return GIFT_SUBMITTER_NOTIFY_NO_ADDRESS_SHARED_ANONYMOUS_OPENING;
+  }
+  return `${name} ended up with your gift.`;
+}
 
 export function buildGiftSubmitterNotifyHtml({ winnerDisplayName, shippingAddressJson }) {
   const safeName = escapeHtml(winnerDisplayName);
@@ -186,13 +198,14 @@ export function buildGiftSubmitterNotifyHtml({ winnerDisplayName, shippingAddres
             `;
 }
 
-export function buildGiftSubmitterNotifyNoAddressSharedHtml({ winnerDisplayName }) {
-  const safeName = escapeHtml(winnerDisplayName);
+export function buildGiftSubmitterNotifyNoAddressSharedHtml({ winnerDisplayName, winnerUid }) {
+  const safeHeading = escapeHtml(GIFT_SUBMITTER_NOTIFY_NO_ADDRESS_SHARED_HEADING);
+  const safeOpening = escapeHtml(buildGiftSubmitterNoAddressOpening(winnerDisplayName, winnerUid));
   const safeMessage = escapeHtml(GIFT_SUBMITTER_NOTIFY_NO_ADDRESS_SHARED_MESSAGE);
 
   return `
-              <h1>Shipping Address</h1>
-              <p>The winner of your gift, <strong>${safeName}</strong>, has saved their shipping details for the exchange.</p>
+              <h1>${safeHeading}</h1>
+              <p>${safeOpening}</p>
               <p>${safeMessage}</p>
             `;
 }

@@ -1,6 +1,8 @@
 import {
   buildGiftSubmitterNotifyHtml,
   buildGiftSubmitterNotifyNoAddressSharedHtml,
+  GIFT_SUBMITTER_NOTIFY_NO_ADDRESS_SHARED_SUBJECT,
+  GIFT_SUBMITTER_NOTIFY_WITH_ADDRESS_SUBJECT,
   hostDisplayNameForInvite,
 } from './sendPartyInviteLogic.js';
 import { hasSenderShareConsent, pickShippingAddress } from './winnerShippingAddressConsent.js';
@@ -87,6 +89,10 @@ export async function notifyGiftSubmittersForWinnerAddress(db, params) {
   const winnerDisplayName = hostDisplayNameForInvite(userId, winnerUser ?? {});
 
   let html;
+  const subject =
+    emailMode === 'with_address'
+      ? GIFT_SUBMITTER_NOTIFY_WITH_ADDRESS_SUBJECT
+      : GIFT_SUBMITTER_NOTIFY_NO_ADDRESS_SHARED_SUBJECT;
   if (emailMode === 'with_address') {
     const shippingAddress = pickShippingAddress(shippingAddressRaw);
     if (!shippingAddress || !hasSenderShareConsent(winnerUser)) {
@@ -97,10 +103,11 @@ export async function notifyGiftSubmittersForWinnerAddress(db, params) {
       shippingAddressJson: JSON.stringify(shippingAddress, null, 2),
     });
   } else {
-    html = buildGiftSubmitterNotifyNoAddressSharedHtml({ winnerDisplayName });
+    html = buildGiftSubmitterNotifyNoAddressSharedHtml({ winnerDisplayName, winnerUid: userId });
   }
 
   let sentCount = 0;
+  let failedCount = 0;
   for (const giftDoc of giftsSnapshot.docs) {
     const gift = giftDoc.data();
     const submitterId = gift?.submitterId;
@@ -114,14 +121,19 @@ export async function notifyGiftSubmittersForWinnerAddress(db, params) {
       continue;
     }
 
-    await resendClient.emails.send({
-      from: fromEmail,
-      to: submitter.email,
-      subject: 'Shipping Address for Your Gift',
-      html,
-    });
-    sentCount += 1;
+    try {
+      await resendClient.emails.send({
+        from: fromEmail,
+        to: submitter.email,
+        subject,
+        html,
+      });
+      sentCount += 1;
+    } catch (error) {
+      logNotifyGiftSubmitterFailure(error);
+      failedCount += 1;
+    }
   }
 
-  return { sentCount, emailMode };
+  return { sentCount, failedCount, emailMode };
 }
