@@ -32,4 +32,28 @@ describe('pendingInvites helpers', () => {
       )
     ).toBe(false);
   });
+
+  it('does not match join by invite doc id when emails differ (john.doe vs john-doe)', () => {
+    expect(
+      inviteMatchesJoiningUser(
+        { id: 'john_doe_example_com', email: 'john.doe@example.com', status: 'PENDING' },
+        'uid-1',
+        'john-doe@example.com'
+      )
+    ).toBe(false);
+    expect(
+      inviteMatchesJoiningUser(
+        { id: 'john_doe_example_com', email: 'john.doe@example.com', status: 'PENDING' },
+        'uid-1',
+        'john_doe@example.com'
+      )
+    ).toBe(false);
+    expect(
+      inviteMatchesJoiningUser(
+        { id: 'john_doe_example_com', email: 'john.doe@example.com', status: 'PENDING' },
+        'uid-1',
+        'john.doe@example.com'
+      )
+    ).toBe(true);
+  });
 });

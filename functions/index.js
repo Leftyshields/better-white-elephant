@@ -164,7 +164,12 @@ export const acceptInviteOnParticipantJoin = onDocumentCreated(
     const partyId = event.params.partyId;
     const participantId = event.params.participantId;
     try {
-      await markPendingInvitesAcceptedForParticipantJoin(db, partyId, participantId);
+      await markPendingInvitesAcceptedForParticipantJoin(
+        db,
+        admin.auth(),
+        partyId,
+        participantId
+      );
     } catch (error) {
       console.error(
         `acceptInviteOnParticipantJoin failed party=${partyId} participant=${participantId}:`,

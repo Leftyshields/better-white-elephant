@@ -5,13 +5,12 @@ import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { after, before, beforeEach, describe, it } from 'node:test';
-import assert from 'node:assert';
 import {
   initializeTestEnvironment,
   assertFails,
   assertSucceeds,
 } from '@firebase/rules-unit-testing';
-import { doc, setDoc, updateDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, getDoc, collection, getDocs } from 'firebase/firestore';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const RULES_PATH = resolve(__dirname, '../firestore.rules');
@@ -19,6 +18,7 @@ const PROJECT_ID = 'better-white-elephant-rules-test';
 
 const HOST_ID = 'host-admin-001';
 const INVITEE_ID = 'invitee-002';
+const STRANGER_ID = 'stranger-003';
 const PARTY_ID = 'party-rules-invite';
 
 /** @type {import('@firebase/rules-unit-testing').RulesTestEnvironment} */
@@ -77,5 +77,13 @@ describe('pendingInvites security', () => {
     await assertFails(
       updateDoc(ref, { status: 'ACCEPTED', userId: INVITEE_ID, updatedAt: new Date() })
     );
+  });
+
+  it('denies non-participant from reading or listing pendingInvites', async () => {
+    const db = authedDb(STRANGER_ID);
+    const ref = doc(db, 'parties', PARTY_ID, 'pendingInvites', 'invitee_example_com');
+    const invitesCol = collection(db, 'parties', PARTY_ID, 'pendingInvites');
+    await assertFails(getDoc(ref));
+    await assertFails(getDocs(invitesCol));
   });
 });

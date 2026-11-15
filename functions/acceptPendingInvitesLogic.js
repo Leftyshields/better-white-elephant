@@ -7,29 +7,38 @@ export {
   inviteMatchesJoiningUser,
   filterVisiblePendingInvites,
   canResendPartyInvite,
-} from '../lib/pendingInvitesLogic.mjs';
+} from './pendingInvitesLogic.js';
 
-import { inviteMatchesJoiningUser } from '../lib/pendingInvitesLogic.mjs';
+import { inviteMatchesJoiningUser } from './pendingInvitesLogic.js';
 
 /**
  * @param {import('firebase-admin/firestore').Firestore} db
+ * @param {import('firebase-admin/auth').Auth} auth
  * @param {string} partyId
  * @param {string} participantId
  */
-export async function markPendingInvitesAcceptedForParticipantJoin(db, partyId, participantId) {
+export async function markPendingInvitesAcceptedForParticipantJoin(
+  db,
+  auth,
+  partyId,
+  participantId
+) {
   if (!partyId || !participantId || participantId.startsWith('bot_')) {
     return { updated: 0 };
   }
 
   let userEmail = null;
   try {
-    const userDoc = await db.collection('users').doc(participantId).get();
-    if (userDoc.exists) {
-      const data = userDoc.data();
-      userEmail = typeof data?.email === 'string' ? data.email : null;
+    const userRecord = await auth.getUser(participantId);
+    if (userRecord.emailVerified === true && typeof userRecord.email === 'string') {
+      userEmail = userRecord.email;
     }
   } catch (error) {
-    console.warn(`acceptInviteOnJoin: could not load user ${participantId}:`, error.message);
+    console.warn(`acceptInviteOnJoin: could not load auth user ${participantId}:`, error.message);
+  }
+
+  if (!userEmail) {
+    return { updated: 0 };
   }
 
   const invitesRef = db.collection('parties').doc(partyId).collection('pendingInvites');
@@ -39,7 +48,6 @@ export async function markPendingInvitesAcceptedForParticipantJoin(db, partyId, 
   }
 
   const now = new Date();
-  const batch = db.batch();
   let updated = 0;
 
   for (const inviteDoc of invitesSnapshot.docs) {
@@ -47,18 +55,31 @@ export async function markPendingInvitesAcceptedForParticipantJoin(db, partyId, 
     if (!inviteMatchesJoiningUser(invite, participantId, userEmail)) {
       continue;
     }
-    batch.update(inviteDoc.ref, {
-      status: 'ACCEPTED',
-      userId: participantId,
-      acceptedAt: now,
-      updatedAt: now,
-    });
-    updated += 1;
+
+    try {
+      await inviteDoc.ref.update({
+        status: 'ACCEPTED',
+        userId: participantId,
+        acceptedAt: now,
+        updatedAt: now,
+      });
+      updated += 1;
+    } catch (error) {
+      const code = error?.code;
+      if (code === 5 || code === 'not-found' || code === 'NOT_FOUND') {
+        console.warn(
+          `acceptInviteOnJoin: invite ${inviteDoc.id} was removed before accept in party ${partyId}`
+        );
+        continue;
+      }
+      throw error;
+    }
   }
 
   if (updated > 0) {
-    await batch.commit();
-    console.log(`acceptInviteOnJoin: marked ${updated} invite(s) ACCEPTED for ${participantId} in party ${partyId}`);
+    console.log(
+      `acceptInviteOnJoin: marked ${updated} invite(s) ACCEPTED for ${participantId} in party ${partyId}`
+    );
   }
 
   return { updated };

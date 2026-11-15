@@ -1,5 +1,5 @@
 /**
- * Pending invite matching and host UI filters (pure functions, no Firebase).
+ * Pending invite matching and host UI filters (pure functions).
  */
 
 export function inviteDocIdFromEmail(email) {
@@ -10,7 +10,7 @@ export function inviteDocIdFromEmail(email) {
 /**
  * @param {Record<string, unknown>} invite
  * @param {string} userId
- * @param {string | null | undefined} userEmail
+ * @param {string | null | undefined} userEmail verified Auth email only
  */
 export function inviteMatchesJoiningUser(invite, userId, userEmail) {
   if (!invite || typeof invite !== 'object') return false;
@@ -21,11 +21,6 @@ export function inviteMatchesJoiningUser(invite, userId, userEmail) {
   if (!normalizedEmail) return false;
 
   if (typeof invite.email === 'string' && invite.email.trim().toLowerCase() === normalizedEmail) {
-    return true;
-  }
-
-  const inviteId = /** @type {{ id?: string }} */ (invite).id;
-  if (inviteId && inviteId === inviteDocIdFromEmail(normalizedEmail)) {
     return true;
   }
 
