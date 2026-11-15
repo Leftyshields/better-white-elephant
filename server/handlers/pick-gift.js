@@ -3,6 +3,7 @@
  */
 import { END_TURN_GAME_NOT_FOUND } from '../utils/end-turn-guards.js';
 import { executePickGift, isGameStateConflictError } from '../utils/game-turn-handler.mjs';
+import { clientSafeSocketGameErrorMessage } from '../utils/socket-error-copy.js';
 
 export {
   PICK_GIFT_NOT_ON_TURN,
@@ -47,13 +48,16 @@ export async function handlePickGift({
     }
   } catch (error) {
     if (isGameStateConflictError(error)) {
-      socket.emit('error', { message: error.message, code: 'GAME_STATE_CONFLICT' });
+      socket.emit('error', {
+        message: clientSafeSocketGameErrorMessage(error.message, 'GAME_STATE_CONFLICT'),
+        code: 'GAME_STATE_CONFLICT',
+      });
       return;
     }
     const message =
       error.message === 'Game not found' || error.message === 'Game state party ID mismatch'
         ? END_TURN_GAME_NOT_FOUND
-        : error.message;
+        : clientSafeSocketGameErrorMessage(error.message);
     socket.emit('error', { message });
   }
 }

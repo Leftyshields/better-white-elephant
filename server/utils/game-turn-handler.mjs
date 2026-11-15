@@ -5,8 +5,23 @@ import { GameEngine } from '../engine.js';
 import { runAtomicGameMutation, GameStateConflictError, isGameStateConflictError } from './atomic-game-action.mjs';
 import { assertPickGiftAllowed } from './pick-gift-guards.js';
 import { getEndTurnRejectionReason } from './end-turn-guards.js';
+import { isBot } from './bot-ids.js';
 
 export { GameStateConflictError, isGameStateConflictError };
+
+export class BotTurnStaleError extends Error {
+  constructor() {
+    super('Bot turn no longer active');
+    this.name = 'BotTurnStaleError';
+    this.code = 'BOT_TURN_STALE';
+  }
+}
+
+export function isBotTurnStaleError(error) {
+  return error?.code === 'BOT_TURN_STALE' || error instanceof BotTurnStaleError;
+}
+
+const GAME_NOT_READY_TO_END = 'GAME_NOT_READY_TO_END';
 
 function buildEngine(gameState, partyId) {
   const config = gameState.config || { maxSteals: 3, returnToStart: false };
@@ -77,8 +92,16 @@ export async function executeEndTurn(partyId, playerId, options = {}) {
   );
 }
 
-/** End turn for whoever is currently active (bot autoplay). */
-export async function executeEndActiveTurn(partyId, options = {}) {
+/**
+ * End turn only when the expected bot is still the active player (bot autoplay).
+ * @param {string} partyId
+ * @param {string} expectedBotPlayerId — bot that scheduled this end-turn
+ */
+export async function executeEndActiveTurn(partyId, expectedBotPlayerId, options = {}) {
+  if (!expectedBotPlayerId || !isBot(expectedBotPlayerId)) {
+    throw new BotTurnStaleError();
+  }
+
   return runAtomicGameMutation(
     partyId,
     (gameState) => {
@@ -86,6 +109,10 @@ export async function executeEndActiveTurn(partyId, options = {}) {
         throw new Error('Game has already ended');
       }
       const engine = buildEngine(gameState, partyId);
+      const activePlayer = engine.calculateActivePlayer();
+      if (activePlayer !== expectedBotPlayerId || !isBot(expectedBotPlayerId)) {
+        throw new BotTurnStaleError();
+      }
       engine.endTurn();
       const newState = engine.getState();
       newState.config = gameState.config;
@@ -94,4 +121,29 @@ export async function executeEndActiveTurn(partyId, options = {}) {
     },
     options,
   );
+}
+
+/** Atomically end the game when engine rules say it should finish. */
+export async function executeEndGameWhenReady(partyId, options = {}) {
+  return runAtomicGameMutation(
+    partyId,
+    (gameState) => {
+      if (gameState.phase === 'ENDED') {
+        throw new Error('Game has already ended');
+      }
+      const engine = buildEngine(gameState, partyId);
+      if (!engine.shouldGameEnd()) {
+        throw new Error(GAME_NOT_READY_TO_END);
+      }
+      const { state } = engine.endGame();
+      state.config = gameState.config;
+      state.partyId = partyId;
+      return state;
+    },
+    options,
+  );
+}
+
+export function isGameNotReadyToEndError(error) {
+  return error?.message === GAME_NOT_READY_TO_END;
 }

@@ -10,6 +10,7 @@ import {
   clampEndedRedisKeyTtl,
   resolveRedisTtlSeconds,
 } from './redis-game-ttl.mjs';
+import { attachReactionCount, deletePartyReactionCount } from './party-reaction-count.mjs';
 
 export {
   REDIS_TTL_ACTIVE_SECONDS,
@@ -212,7 +213,9 @@ export function validatePartyAndGameState(partyId, gameState) {
 
 export function prepareGameStateForSave(partyId, gameState) {
   validatePartyAndGameState(partyId, gameState);
-  const cleanedState = cleanForFirestore(gameState);
+  const stateForPersistence = { ...gameState };
+  delete stateForPersistence.reactionCount;
+  const cleanedState = cleanForFirestore(stateForPersistence);
   const redisState = cleanForRedis(cleanedState);
   return {
     cleanedState,
@@ -250,8 +253,10 @@ export async function saveGameStateToFirestore(partyId, cleanedState, logOptions
     return true;
   } catch (error) {
     if (compactFailure) {
+      const errorCode = error?.code ?? 'n/a';
+      const errorName = error?.name ?? 'Error';
       console.error(
-        `[game-state] Firestore write failed: partyId=${partyId} stateVersion=${cleanedState?.stateVersion ?? 'n/a'} error=${error.message}`,
+        `[game-state] Firestore write failed: partyId=${partyId} stateVersion=${cleanedState?.stateVersion ?? 'n/a'} errorCode=${errorCode} errorName=${errorName}`,
       );
       return false;
     }
@@ -352,7 +357,7 @@ export async function loadGameState(partyId) {
       console.log(`✅ Clamped Redis TTL to ${REDIS_TTL_ENDED_SECONDS}s for ended party ${partyId}`);
     }
 
-    return parsed;
+    return await attachReactionCount(partyId, parsed);
   }
   
   // Redis is empty - try to restore from Firestore
@@ -397,8 +402,8 @@ export async function loadGameState(partyId) {
         const redisState = cleanForRedis(convertedState);
         await redisClient.setEx(redisKey, restoreTtl, JSON.stringify(redisState));
         console.log(`✅ Restored game state to Redis for party ${partyId} (TTL: ${restoreTtl}s = ${restoreTtl / 86400} days)`);
-        
-        return convertedState;
+
+        return await attachReactionCount(partyId, convertedState);
       } else {
         console.log(`⚠️ Party ${partyId} status: ${partyData.status}, has gameState: ${!!partyData.gameState}`);
         if (partyData.status !== 'ACTIVE' && partyData.status !== 'ENDED') {
@@ -428,7 +433,8 @@ export async function deleteGameState(partyId) {
   
   // Delete from Redis
   await redisClient.del(redisKey);
-  
+  await deletePartyReactionCount(partyId);
+
   // Clear from Firestore
   try {
     await db.collection('parties').doc(partyId).update({

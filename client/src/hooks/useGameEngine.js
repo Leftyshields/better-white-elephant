@@ -169,9 +169,9 @@ export function useGameEngine(partyId) {
         });
       });
 
-      socket.on('error', ({ message }) => {
-        console.error('Socket error:', message);
-        
+      socket.on('error', ({ message, code }) => {
+        console.error('Socket error:', message, code);
+
         // Don't show error toast for expected game state errors
         // These are normal game conditions, not actual errors
         const isExpectedGameStateError = 
@@ -179,14 +179,21 @@ export function useGameEngine(partyId) {
           message.includes('Cannot steal gift: invalid action') ||
           message.includes('already acted this turn') ||
           message.includes('Cannot steal back');
+
+        const isTechnicalGameError =
+          code === 'GAME_STATE_CONFLICT' ||
+          message === 'Game state conflict; please retry' ||
+          message === 'Corrupted game state' ||
+          message === 'Mutation did not return game state';
         
         // Only show error toast for unexpected/critical errors
         if (!isExpectedGameStateError) {
           // Format user-friendly error messages
           let userFriendlyMessage = message;
-          
-          // Map technical error messages to user-friendly ones
-          if (message.includes('Game is not active')) {
+
+          if (isTechnicalGameError) {
+            userFriendlyMessage = "We're still loading the game. Refresh if this doesn't clear.";
+          } else if (message.includes('Game is not active')) {
             userFriendlyMessage = "The game hasn't started, or it has already ended.";
           } else if (
             message.includes('Cannot steal back') ||

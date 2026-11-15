@@ -14,6 +14,8 @@ import { auth, db } from './config/firebase-admin.js';
 import admin from 'firebase-admin';
 import { checkAndMakeBotMove } from './utils/bot-utils.js';
 import { handlePickGift } from './handlers/pick-gift.js';
+import { incrementPartyReactionCount } from './utils/party-reaction-count.mjs';
+import { clientSafeSocketGameErrorMessage } from './utils/socket-error-copy.js';
 
 dotenv.config();
 
@@ -326,10 +328,15 @@ io.on('connection', (socket) => {
     } catch (error) {
       console.error(`[Server] ❌ Error in steal-gift:`, error);
       if (isGameStateConflictError(error)) {
-        socket.emit('error', { message: error.message, code: 'GAME_STATE_CONFLICT' });
+        socket.emit('error', {
+          message: clientSafeSocketGameErrorMessage(error.message, 'GAME_STATE_CONFLICT'),
+          code: 'GAME_STATE_CONFLICT',
+        });
         return;
       }
-      socket.emit('error', { message: error.message });
+      socket.emit('error', {
+        message: clientSafeSocketGameErrorMessage(error.message),
+      });
     }
   });
 
@@ -459,10 +466,15 @@ io.on('connection', (socket) => {
       }
     } catch (error) {
       if (isGameStateConflictError(error)) {
-        socket.emit('error', { message: error.message, code: 'GAME_STATE_CONFLICT' });
+        socket.emit('error', {
+          message: clientSafeSocketGameErrorMessage(error.message, 'GAME_STATE_CONFLICT'),
+          code: 'GAME_STATE_CONFLICT',
+        });
         return;
       }
-      socket.emit('error', { message: error.message });
+      socket.emit('error', {
+        message: clientSafeSocketGameErrorMessage(error.message),
+      });
     }
   });
 
@@ -489,20 +501,11 @@ io.on('connection', (socket) => {
         socket.join(roomName);
       }
       
-      // Load game state and increment reaction count
-      const { loadGameState, saveGameState } = await import('./utils/game-state-persistence.js');
+      const { loadGameState } = await import('./utils/game-state-persistence.js');
       const gameState = await loadGameState(partyId);
-      
+
       if (gameState && gameState.phase === 'ACTIVE') {
-        // Increment reaction count in game state
-        const { GameEngine } = await import('./engine.js');
-        const config = gameState.config || { maxSteals: 3, returnToStart: false };
-        const engine = new GameEngine(gameState, config);
-        engine.reactionCount = (engine.reactionCount || 0) + 1;
-        const updatedState = engine.getState();
-        
-        // Save updated state (with incremented reaction count)
-        await saveGameState(partyId, updatedState);
+        await incrementPartyReactionCount(partyId);
       }
       
       // Broadcast reaction to all OTHER clients in the party room

@@ -4,10 +4,12 @@
 export function createTestStore() {
   const gameStates = new Map();
   const redis = new Map();
+  const counters = new Map();
 
   return {
     gameStates,
     redis,
+    counters,
     async loadGameState(partyId) {
       const state = gameStates.get(partyId);
       return state ? structuredClone(state) : null;
@@ -26,6 +28,7 @@ export function createTestStore() {
     reset() {
       gameStates.clear();
       redis.clear();
+      counters.clear();
     },
   };
 }

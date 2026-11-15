@@ -15,6 +15,9 @@ function buildConnection(store) {
       watchSnapshot = undefined;
     },
     async get(key) {
+      if (store.counters.has(key)) {
+        return String(store.counters.get(key));
+      }
       return store.redis.get(key) ?? null;
     },
     async setEx(key, _ttl, value) {
@@ -54,6 +57,12 @@ function buildConnection(store) {
     async ttl() {
       return 3600;
     },
+    async incr(key) {
+      const next = (store.counters.get(key) ?? 0) + 1;
+      store.counters.set(key, next);
+      return next;
+    },
+    async expire() {},
     async del(key) {
       store.redis.delete(key);
       const partyId = key.replace(/^game:/, '');
