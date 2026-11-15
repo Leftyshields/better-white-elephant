@@ -28,6 +28,7 @@ import {
 import { db } from '../utils/firebase.js';
 import { filterVisiblePendingInvites, canResendPartyInvite } from '../utils/pendingInvites.js';
 import { getStartGameFailureMessage, START_GAME_GENERIC_ERROR } from '../utils/startGameResponse.js';
+import { pickHostNameForInvite } from '../../../server/lib/display-names.js';
 
 export function PartyLobby({ partyId, onStartGame }) {
   const { user } = useAuth();
@@ -463,7 +464,11 @@ export function PartyLobby({ partyId, onStartGame }) {
         'https://us-central1-better-white-elephant.cloudfunctions.net/sendPartyInvite';
       
       // Get host name from user
-      const hostName = user?.displayName || user?.email?.split('@')[0] || 'Someone';
+      const hostName = pickHostNameForInvite(
+        user?.uid,
+        user?.displayName,
+        user?.email,
+      );
 
       const response = await fetch(functionUrl, {
         method: 'POST',
@@ -536,7 +541,11 @@ export function PartyLobby({ partyId, onStartGame }) {
           import.meta.env.VITE_FUNCTIONS_URL ||
           'https://us-central1-better-white-elephant.cloudfunctions.net/sendPartyInvite';
 
-        const hostName = user?.displayName || user?.email?.split('@')[0] || 'Someone';
+        const hostName = pickHostNameForInvite(
+          user?.uid,
+          user?.displayName,
+          user?.email,
+        );
 
         const emailResponse = await fetch(functionUrl, {
           method: 'POST',
@@ -1062,7 +1071,11 @@ export function PartyLobby({ partyId, onStartGame }) {
                                         const functionUrl =
                                           import.meta.env.VITE_FUNCTIONS_URL ||
                                           'https://us-central1-better-white-elephant.cloudfunctions.net/sendPartyInvite';
-                                        const hostName = user?.displayName || user?.email?.split('@')[0] || 'Someone';
+                                        const hostName = pickHostNameForInvite(
+                                          user?.uid,
+                                          user?.displayName,
+                                          user?.email,
+                                        );
                                         const response = await fetch(functionUrl, {
                                           method: 'POST',
                                           headers: { 'Content-Type': 'application/json' },

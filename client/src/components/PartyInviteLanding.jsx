@@ -10,6 +10,7 @@ import { db } from '../utils/firebase.js';
 import { trackParticipantJoin, trackError } from '../utils/analytics.js';
 import { GiftIcon } from '@heroicons/react/24/outline';
 import { Snowflakes } from './Snowflakes.jsx';
+import { pickDisplayName } from '../../../server/lib/display-names.js';
 
 export function PartyInviteLanding({ partyId }) {
   const { user, signInWithGoogle, loading: authLoading } = useAuth();
@@ -41,8 +42,9 @@ export function PartyInviteLanding({ partyId }) {
               const hostDoc = await getDoc(doc(db, 'users', data.adminId));
               if (hostDoc.exists()) {
                 const hostData = hostDoc.data();
-                // Only use displayName/email if available, don't access shippingAddress
-                setHostName(hostData.displayName || hostData.email || 'Party Host');
+                setHostName(
+                  pickDisplayName(data.adminId, hostData.displayName),
+                );
               } else {
                 setHostName('Party Host');
               }

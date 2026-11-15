@@ -21,6 +21,10 @@ import {
 } from '../utils/shippingAddressCopy.js';
 import { updateProfile } from 'firebase/auth';
 import { auth, db } from '../utils/firebase.js';
+import {
+  resolveSyncedFirestoreDisplayName,
+  sanitizeUserChosenDisplayName,
+} from '../../../server/lib/display-names.js';
 import { Button } from '../components/ui/Button.jsx';
 import { Input } from '../components/ui/Input.jsx';
 import { Modal } from '../components/ui/Modal.jsx';
@@ -100,7 +104,9 @@ export function Profile() {
         const userDoc = await getDoc(doc(db, 'users', user.uid));
         if (userDoc.exists()) {
           const userData = userDoc.data();
-          setDisplayName(user.displayName || userData.displayName || '');
+          setDisplayName(
+            resolveSyncedFirestoreDisplayName(user.displayName, userData.displayName),
+          );
           const loadedAddress = userData.shippingAddress || {};
           if (userData.shippingAddress) {
             setAddress(userData.shippingAddress);
@@ -114,12 +120,12 @@ export function Profile() {
           setHadGrantedSenderShareConsent(loadedHadConsent);
         } else {
           // Create user document if it doesn't exist
-          setDisplayName(user.displayName || '');
+          setDisplayName(resolveSyncedFirestoreDisplayName(user.displayName, ''));
           setShowSavedAddressNeedsConsentNote(false);
           setHadPersistedShippingAddress(false);
           setHadGrantedSenderShareConsent(false);
           await setDoc(doc(db, 'users', user.uid), {
-            displayName: user.displayName || '',
+            displayName: resolveSyncedFirestoreDisplayName(user.displayName, ''),
             email: user.email || '',
             createdAt: new Date(),
             updatedAt: new Date(),
@@ -148,7 +154,7 @@ export function Profile() {
 
     try {
       const profileUpdate = {
-        displayName: displayName || user.email || '',
+        displayName: sanitizeUserChosenDisplayName(displayName),
         email: user.email || '',
         updatedAt: new Date(),
         shippingAddressSenderShareConsentAt: deleteField(),
@@ -177,12 +183,13 @@ export function Profile() {
     setSuccessMessage('');
 
     try {
-      if (displayName && displayName !== user.displayName) {
-        await updateProfile(auth.currentUser, { displayName });
+      const safeDisplayName = sanitizeUserChosenDisplayName(displayName);
+      if (safeDisplayName && safeDisplayName !== user.displayName) {
+        await updateProfile(auth.currentUser, { displayName: safeDisplayName });
       }
 
       const profileUpdate = {
-        displayName: displayName || user.email || '',
+        displayName: safeDisplayName,
         email: user.email || '',
         updatedAt: new Date(),
       };
