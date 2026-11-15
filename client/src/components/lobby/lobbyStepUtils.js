@@ -8,14 +8,16 @@ export const LOBBY_STEP_STATUS = {
 };
 
 export function addressSummaryCity(shippingAddress) {
-  if (!shippingAddress?.city?.trim()) {
-    return '';
-  }
-  return shippingAddress.city.trim();
+  const city = String(shippingAddress?.city ?? '').trim();
+  return city;
 }
 
 export function isAddressStepDone(shippingAddress) {
   return hasCompleteShippingFields(shippingAddress || {});
+}
+
+export function isAddressStepReady(shippingAddress, hasSenderShareConsent) {
+  return isAddressStepDone(shippingAddress) && Boolean(hasSenderShareConsent);
 }
 
 export function guestReadyMissingKeys({ hasGift, hasAddress }) {
@@ -46,5 +48,5 @@ export function hostStartMissingToken(missingKey) {
 }
 
 export function areAllShippingFieldsEmpty(address) {
-  return SHIPPING_FIELD_KEYS.every((key) => !address?.[key]?.trim());
+  return SHIPPING_FIELD_KEYS.every((key) => !String(address?.[key] ?? '').trim());
 }

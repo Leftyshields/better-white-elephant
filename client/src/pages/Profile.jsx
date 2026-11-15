@@ -32,6 +32,7 @@ import { LockClosedIcon } from '@heroicons/react/24/outline';
 
 import {
   SHIPPING_FIELD_KEYS,
+  SHIPPING_FIELD_MAX_LENGTH,
   hasCompleteShippingFields,
 } from '../utils/shippingAddressFields.js';
 
@@ -334,12 +335,14 @@ export function Profile() {
               value={address.name}
               onChange={(e) => updateAddressField({ name: e.target.value })}
               placeholder="Enter your full name"
+              maxLength={SHIPPING_FIELD_MAX_LENGTH.name}
             />
             <Input
               label="Street Address"
               value={address.street}
               onChange={(e) => updateAddressField({ street: e.target.value })}
               placeholder="123 Main St"
+              maxLength={SHIPPING_FIELD_MAX_LENGTH.street}
             />
             <div className="grid grid-cols-2 gap-4">
               <Input
@@ -347,12 +350,14 @@ export function Profile() {
                 value={address.city}
                 onChange={(e) => updateAddressField({ city: e.target.value })}
                 placeholder="City"
+                maxLength={SHIPPING_FIELD_MAX_LENGTH.city}
               />
               <Input
                 label="State/Province"
                 value={address.state}
                 onChange={(e) => updateAddressField({ state: e.target.value })}
                 placeholder="State"
+                maxLength={SHIPPING_FIELD_MAX_LENGTH.state}
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -361,12 +366,14 @@ export function Profile() {
                 value={address.zip}
                 onChange={(e) => updateAddressField({ zip: e.target.value })}
                 placeholder="12345"
+                maxLength={SHIPPING_FIELD_MAX_LENGTH.zip}
               />
               <Input
                 label="Country"
                 value={address.country}
                 onChange={(e) => updateAddressField({ country: e.target.value })}
                 placeholder="Country"
+                maxLength={SHIPPING_FIELD_MAX_LENGTH.country}
               />
             </div>
             <label className="flex gap-3 items-start text-sm text-slate-300 cursor-pointer">

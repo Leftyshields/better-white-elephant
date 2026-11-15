@@ -29,7 +29,8 @@ describe('lobbySetupStrings', () => {
     );
   });
 
-  it('shows address consent as plain copy without bracket placeholders', () => {
-    expect(LOBBY_SETUP_STRINGS['address.consent']).not.toMatch(/\[COPY/);
+  it('has address error and UI slots from security review', () => {
+    expect(LOBBY_SETUP_STRINGS['address.error.load']).toBe("We couldn't load your address. Try again.");
+    expect(LOBBY_SETUP_STRINGS['guest.ready.error.update']).toBeTruthy();
   });
 });

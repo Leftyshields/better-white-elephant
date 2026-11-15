@@ -33,7 +33,9 @@ import { ShippingAddressStep } from './lobby/ShippingAddressStep.jsx';
 import { GuestReadyStep } from './lobby/GuestReadyStep.jsx';
 import { hasCompleteShippingFields } from '../utils/shippingAddressFields.js';
 import { focusLobbyStepHeading, lobbyStepHeadingId } from '../copy/lobbySetupStrings.js';
-import { LOBBY_STEP_STATUS } from './lobby/lobbyStepUtils.js';
+import { isAddressStepReady, LOBBY_STEP_STATUS } from './lobby/lobbyStepUtils.js';
+import { LOBBY_SETUP_STRINGS } from '../copy/lobbySetupStrings.js';
+import { normalizeShippingAddressFromStorage } from '../utils/shippingAddressFields.js';
 export function PartyLobby({ partyId, onStartGame }) {
   const { user } = useAuth();
   const { party, participants, pendingInvites, gifts, loading } = useParty(partyId);
@@ -68,8 +70,10 @@ export function PartyLobby({ partyId, onStartGame }) {
   const addressStepAnchorRef = useRef(null);
   const addPersonNameInputId = useId();
   const [adminShippingAddress, setAdminShippingAddress] = useState(null);
+  const [adminShippingConsent, setAdminShippingConsent] = useState(false);
   const [loadingAdminAddress, setLoadingAdminAddress] = useState(false);
   const [userShippingAddress, setUserShippingAddress] = useState(null);
+  const [userShippingConsent, setUserShippingConsent] = useState(false);
   const [loadingUserAddress, setLoadingUserAddress] = useState(false);
 
   const isAdmin = !!user && !!party && party.adminId === user.uid;
@@ -77,7 +81,8 @@ export function PartyLobby({ partyId, onStartGame }) {
   const userGift = gifts.find((g) => g.submitterId === user?.uid);
 
   const activeShippingAddress = isAdmin ? adminShippingAddress : userShippingAddress;
-  const hasSavedShippingAddress = hasCompleteShippingFields(activeShippingAddress || {});
+  const activeShippingConsent = isAdmin ? adminShippingConsent : userShippingConsent;
+  const hasSavedShippingAddress = isAddressStepReady(activeShippingAddress, activeShippingConsent);
 
   const focusAddressStep = useCallback(() => {
     setAddressMissingForReady(true);
@@ -117,16 +122,20 @@ export function PartyLobby({ partyId, onStartGame }) {
   );
 
   const handleLobbyAddressSaved = useCallback(
-    async (savedAddress) => {
+    async (savedAddress, hasConsent) => {
       if (isAdmin) {
         setAdminShippingAddress(savedAddress);
+        setAdminShippingConsent(Boolean(hasConsent));
       } else {
         setUserShippingAddress(savedAddress);
+        setUserShippingConsent(Boolean(hasConsent));
       }
       setAddressMissingForReady(false);
-      setAddressEditing(false);
-      if (!savedAddress || !hasCompleteShippingFields(savedAddress)) {
+      const readyForLobby = isAddressStepReady(savedAddress, hasConsent);
+      if (!readyForLobby) {
         await markParticipantNotReady();
+      } else {
+        setAddressEditing(false);
       }
     },
     [isAdmin, markParticipantNotReady],
@@ -180,13 +189,18 @@ export function PartyLobby({ partyId, onStartGame }) {
         const userDoc = await getDoc(doc(db, 'users', user.uid));
         if (userDoc.exists()) {
           const userData = userDoc.data();
-          setAdminShippingAddress(userData.shippingAddress || null);
+          setAdminShippingAddress(
+            normalizeShippingAddressFromStorage(userData.shippingAddress),
+          );
+          setAdminShippingConsent(Boolean(userData.shippingAddressSenderShareConsentAt));
         } else {
           setAdminShippingAddress(null);
+          setAdminShippingConsent(false);
         }
       } catch (error) {
-        console.error('Error fetching admin address:', error);
+        console.error('Error fetching admin address:', { code: error.code, name: error.name });
         setAdminShippingAddress(null);
+        setAdminShippingConsent(false);
       } finally {
         setLoadingAdminAddress(false);
       }
@@ -208,13 +222,18 @@ export function PartyLobby({ partyId, onStartGame }) {
         const userDoc = await getDoc(doc(db, 'users', user.uid));
         if (userDoc.exists()) {
           const userData = userDoc.data();
-          setUserShippingAddress(userData.shippingAddress || null);
+          setUserShippingAddress(
+            normalizeShippingAddressFromStorage(userData.shippingAddress),
+          );
+          setUserShippingConsent(Boolean(userData.shippingAddressSenderShareConsentAt));
         } else {
           setUserShippingAddress(null);
+          setUserShippingConsent(false);
         }
       } catch (error) {
-        console.error('Error fetching user address:', error);
+        console.error('Error fetching user address:', { code: error.code, name: error.name });
         setUserShippingAddress(null);
+        setUserShippingConsent(false);
       } finally {
         setLoadingUserAddress(false);
       }
@@ -436,7 +455,7 @@ export function PartyLobby({ partyId, onStartGame }) {
           requestAnimationFrame(() => focusLobbyStepHeading('gift'));
           return;
         }
-        if (!hasCompleteShippingFields(userShippingAddress || {})) {
+        if (!isAddressStepReady(userShippingAddress, userShippingConsent)) {
           focusAddressStep();
           return;
         }
@@ -452,7 +471,7 @@ export function PartyLobby({ partyId, onStartGame }) {
       }
     } catch (error) {
       console.error('Error updating ready state:', { code: error.code, name: error.name });
-      setGuestReadyError("We couldn't update your ready status. Try again.");
+      setGuestReadyError(LOBBY_SETUP_STRINGS['guest.ready.error.update']);
     } finally {
       setGuestReadyPending(false);
     }
@@ -461,7 +480,7 @@ export function PartyLobby({ partyId, onStartGame }) {
   const handleStartGame = async () => {
     if (!partyId) return;
 
-    if (!hasCompleteShippingFields(adminShippingAddress || {})) {
+    if (!isAddressStepReady(adminShippingAddress, adminShippingConsent)) {
       focusAddressStep();
       return;
     }
@@ -1508,6 +1527,7 @@ export function PartyLobby({ partyId, onStartGame }) {
                         }
                         headingId={lobbyStepHeadingId('address')}
                         savedAddress={activeShippingAddress}
+                        savedHasConsent={activeShippingConsent}
                         isEditing={addressEditing}
                         onRequestEdit={() => {
                           setAddressEditing(true);

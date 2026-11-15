@@ -4,6 +4,10 @@
  */
 export const LOBBY_SETUP_STRINGS = {
   'address.consent': 'Only the person picked to ship you a gift will see your address.',
+  'address.edit': 'Edit',
+  'address.error.load': "We couldn't load your address. Try again.",
+  'address.error.save': "We couldn't save your address. Try again.",
+  'address.loading': 'Loading...',
   'address.prefilled': "We filled this in from your profile. Fix anything that's off.",
   'address.summary': 'Shipping to {city}',
   'chip.invited': 'Invited',
@@ -21,6 +25,7 @@ export const LOBBY_SETUP_STRINGS = {
   'gift.summary_no_store': 'Your gift: {giftTitle}',
   'guest.ready.cta': "I'm ready",
   'guest.ready.done': "You're in! Hang tight while everyone else gets ready.",
+  'guest.ready.error.update': "We couldn't update your ready status. Try again.",
   'guest.ready.locked.address': "Add your shipping address before you're ready.",
   'guest.ready.locked.both': "Add your gift and shipping address before you're ready.",
   'guest.ready.locked.gift': "Add your gift before you're ready.",

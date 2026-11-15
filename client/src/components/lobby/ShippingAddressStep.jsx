@@ -11,22 +11,38 @@ import {
   formatLobbySetupString,
   LOBBY_SETUP_STRINGS,
 } from '../../copy/lobbySetupStrings.js';
-import { SHIPPING_ADDRESS_INCOMPLETE_PROFILE } from '../../utils/shippingAddressCopy.js';
+import {
+  SHIPPING_ADDRESS_INCOMPLETE_PROFILE,
+  SHIPPING_ADDRESS_SENDER_SHARE_CONSENT_LABEL,
+} from '../../utils/shippingAddressCopy.js';
 import {
   areAllShippingFieldsEmpty,
-  isAddressStepDone,
+  isAddressStepReady,
   LOBBY_STEP_STATUS,
 } from './lobbyStepUtils.js';
 import {
   hasCompleteShippingFields,
+  normalizeShippingAddressFromStorage,
+  SHIPPING_FIELD_MAX_LENGTH,
   trimShippingAddress,
 } from '../../utils/shippingAddressFields.js';
+
 const touchClass = 'min-h-11';
+
+const ADDRESS_INPUT_MAX = {
+  name: SHIPPING_FIELD_MAX_LENGTH.name,
+  street: SHIPPING_FIELD_MAX_LENGTH.street,
+  city: SHIPPING_FIELD_MAX_LENGTH.city,
+  state: SHIPPING_FIELD_MAX_LENGTH.state,
+  zip: SHIPPING_FIELD_MAX_LENGTH.zip,
+  country: SHIPPING_FIELD_MAX_LENGTH.country,
+};
 
 export function ShippingAddressStep({
   stepStatus,
   headingId,
   savedAddress,
+  savedHasConsent,
   isEditing,
   onRequestEdit,
   onSaved,
@@ -44,6 +60,7 @@ export function ShippingAddressStep({
     zip: '',
     country: '',
   });
+  const [shareConsent, setShareConsent] = useState(false);
   const [loadState, setLoadState] = useState('loading');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
@@ -62,9 +79,11 @@ export function ShippingAddressStep({
       if (userDoc.exists()) {
         const userData = userDoc.data();
         if (userData.shippingAddress) {
-          setAddress((prev) => ({ ...prev, ...userData.shippingAddress }));
-          setHadPrefillFromProfile(isAddressStepDone(userData.shippingAddress));
+          const normalized = normalizeShippingAddressFromStorage(userData.shippingAddress);
+          setAddress((prev) => ({ ...prev, ...(normalized || {}) }));
+          setHadPrefillFromProfile(hasCompleteShippingFields(normalized));
         }
+        setShareConsent(Boolean(userData.shippingAddressSenderShareConsentAt ?? null));
       }
       setLoadState('ready');
     } catch (error) {
@@ -77,7 +96,7 @@ export function ShippingAddressStep({
     reloadAddress();
   }, [user?.uid]);
 
-  const done = isAddressStepDone(savedAddress);
+  const done = isAddressStepReady(savedAddress, savedHasConsent);
   const showForm =
     stepStatus === LOBBY_STEP_STATUS.ACTIVE || isEditing || (!done && stepStatus !== LOBBY_STEP_STATUS.LOCKED);
 
@@ -102,11 +121,12 @@ export function ShippingAddressStep({
           updatedAt: new Date(),
         });
         onCleared?.();
-        onSaved?.(null);
+        onSaved?.(null, false);
         setHadPrefillFromProfile(false);
+        setShareConsent(false);
       } catch (error) {
         console.error('Error clearing lobby address:', { code: error.code, name: error.name });
-        setSaveError("We couldn't save your address. Try again.");
+        setSaveError(LOBBY_SETUP_STRINGS['address.error.save']);
       } finally {
         setSaving(false);
       }
@@ -125,33 +145,35 @@ export function ShippingAddressStep({
     try {
       await updateDoc(doc(db, 'users', user.uid), {
         shippingAddress: trimmedAddress,
-        shippingAddressSenderShareConsentAt: new Date(),
+        shippingAddressSenderShareConsentAt: shareConsent ? new Date() : deleteField(),
         updatedAt: new Date(),
       });
       const stillValid = hasCompleteShippingFields(trimmedAddress);
-      if (!stillValid) {
-        onCleared?.();
-      }
-      onSaved?.(stillValid ? trimmedAddress : null);
-      if (stillValid) {
+      const consentGranted = shareConsent && stillValid;
+      onSaved?.(stillValid ? trimmedAddress : null, consentGranted);
+      if (consentGranted) {
         onAdvanceNext?.();
       }
     } catch (error) {
       console.error('Error saving lobby address:', { code: error.code, name: error.name });
-      setSaveError("We couldn't save your address. Try again.");
+      setSaveError(LOBBY_SETUP_STRINGS['address.error.save']);
     } finally {
       setSaving(false);
     }
   };
 
   if (loadState === 'loading') {
-    return <p className="text-slate-400 text-sm min-h-11 flex items-center">Loading...</p>;
+    return (
+      <p className="text-slate-400 text-sm min-h-11 flex items-center">
+        {LOBBY_SETUP_STRINGS['address.loading']}
+      </p>
+    );
   }
 
   if (loadState === 'error') {
     return (
       <div className="space-y-3" role="alert">
-        <p className="text-sm text-amber-300">{LOBBY_SETUP_STRINGS['error.load']}</p>
+        <p className="text-sm text-amber-300">{LOBBY_SETUP_STRINGS['address.error.load']}</p>
         <Button type="button" onClick={reloadAddress} className={`${touchClass} w-full sm:w-auto`}>
           {LOBBY_SETUP_STRINGS['error.load.retry']}
         </Button>
@@ -160,7 +182,7 @@ export function ShippingAddressStep({
   }
 
   if (done && !isEditing && stepStatus === LOBBY_STEP_STATUS.DONE) {
-    const city = savedAddress?.city?.trim() || '';
+    const city = String(savedAddress?.city ?? '').trim();
     return (
       <div className="space-y-3" data-testid="lobby-address-done">
         <p className="text-sm text-slate-300" data-testid="lobby-address-summary">
@@ -173,7 +195,7 @@ export function ShippingAddressStep({
           className={`${touchClass} w-full sm:w-auto`}
           data-testid="lobby-address-edit"
         >
-          Edit
+          {LOBBY_SETUP_STRINGS['address.edit']}
         </Button>
       </div>
     );
@@ -188,7 +210,6 @@ export function ShippingAddressStep({
       <h3 id={headingId} tabIndex={-1} className="sr-only">
         Your shipping address
       </h3>
-      <p className="text-sm text-slate-400">{LOBBY_SETUP_STRINGS['address.consent']}</p>
 
       {hadPrefillFromProfile && (
         <p className="text-sm text-slate-400" data-testid="lobby-address-prefilled">
@@ -208,6 +229,7 @@ export function ShippingAddressStep({
         onChange={(e) => updateAddressField({ name: e.target.value })}
         placeholder="Enter your full name"
         className={touchClass}
+        maxLength={ADDRESS_INPUT_MAX.name}
       />
       <Input
         label="Street Address"
@@ -215,6 +237,7 @@ export function ShippingAddressStep({
         onChange={(e) => updateAddressField({ street: e.target.value })}
         placeholder="123 Main St"
         className={touchClass}
+        maxLength={ADDRESS_INPUT_MAX.street}
       />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Input
@@ -223,6 +246,7 @@ export function ShippingAddressStep({
           onChange={(e) => updateAddressField({ city: e.target.value })}
           placeholder="City"
           className={touchClass}
+          maxLength={ADDRESS_INPUT_MAX.city}
         />
         <Input
           label="State/Province"
@@ -230,6 +254,7 @@ export function ShippingAddressStep({
           onChange={(e) => updateAddressField({ state: e.target.value })}
           placeholder="State"
           className={touchClass}
+          maxLength={ADDRESS_INPUT_MAX.state}
         />
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -239,6 +264,7 @@ export function ShippingAddressStep({
           onChange={(e) => updateAddressField({ zip: e.target.value })}
           placeholder="12345"
           className={touchClass}
+          maxLength={ADDRESS_INPUT_MAX.zip}
         />
         <Input
           label="Country"
@@ -246,7 +272,25 @@ export function ShippingAddressStep({
           onChange={(e) => updateAddressField({ country: e.target.value })}
           placeholder="Country"
           className={touchClass}
+          maxLength={ADDRESS_INPUT_MAX.country}
         />
+      </div>
+
+      <div className="space-y-2">
+        <label className="flex gap-3 items-start text-sm text-slate-300 cursor-pointer min-h-11">
+          <input
+            type="checkbox"
+            className="mt-1 h-5 w-5 rounded border-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
+            checked={shareConsent}
+            onChange={(e) => setShareConsent(e.target.checked)}
+            data-testid="lobby-address-consent"
+            aria-describedby={`${headingId}-consent-helper`}
+          />
+          <span>{SHIPPING_ADDRESS_SENDER_SHARE_CONSENT_LABEL}</span>
+        </label>
+        <p id={`${headingId}-consent-helper`} className="text-sm text-slate-400 pl-8">
+          {LOBBY_SETUP_STRINGS['address.consent']}
+        </p>
       </div>
 
       {showIncompleteError && (

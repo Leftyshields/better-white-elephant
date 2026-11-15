@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ShippingAddressStep } from '../../components/lobby/ShippingAddressStep.jsx';
 import { LOBBY_STEP_STATUS } from '../../components/lobby/lobbyStepUtils.js';
+import { SHIPPING_ADDRESS_SENDER_SHARE_CONSENT_LABEL } from '../../utils/shippingAddressCopy.js';
 
 const { getDoc, updateDoc } = vi.hoisted(() => ({
   getDoc: vi.fn(),
@@ -57,16 +58,37 @@ describe('ShippingAddressStep', () => {
     await waitFor(() => {
       expect(screen.getByLabelText(/City/i)).toHaveValue('Austin');
     });
-    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
-    expect(screen.getByText(/Only the person picked to ship you a gift/i)).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: SHIPPING_ADDRESS_SENDER_SHARE_CONSENT_LABEL })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: SHIPPING_ADDRESS_SENDER_SHARE_CONSENT_LABEL })).not.toBeChecked();
   });
 
-  it('shows city-only summary when done', async () => {
+  it('prefills consent only when shippingAddressSenderShareConsentAt exists', async () => {
+    getDoc.mockResolvedValueOnce({
+      exists: () => true,
+      data: () => ({
+        shippingAddress: completeAddress,
+      }),
+    });
+    render(
+      <ShippingAddressStep
+        stepStatus={LOBBY_STEP_STATUS.ACTIVE}
+        headingId="lobby-step-heading-address"
+        savedAddress={null}
+        savedHasConsent={false}
+        isEditing={false}
+      />,
+    );
+    await waitFor(() => screen.getByTestId('lobby-address-save'));
+    expect(screen.getByRole('checkbox', { name: SHIPPING_ADDRESS_SENDER_SHARE_CONSENT_LABEL })).not.toBeChecked();
+  });
+
+  it('shows city-only summary when done with consent', async () => {
     render(
       <ShippingAddressStep
         stepStatus={LOBBY_STEP_STATUS.DONE}
         headingId="lobby-step-heading-address"
         savedAddress={completeAddress}
+        savedHasConsent
         isEditing={false}
       />,
     );
@@ -97,10 +119,40 @@ describe('ShippingAddressStep', () => {
     fireEvent.change(screen.getByLabelText(/State/i), { target: { value: 'TX' } });
     fireEvent.change(screen.getByLabelText(/ZIP/i), { target: { value: '78701' } });
     fireEvent.change(screen.getByLabelText(/Country/i), { target: { value: 'US' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: SHIPPING_ADDRESS_SENDER_SHARE_CONSENT_LABEL }));
     fireEvent.click(screen.getByTestId('lobby-address-save'));
     await waitFor(() => expect(updateDoc).toHaveBeenCalled());
     const payload = updateDoc.mock.calls[0][1];
     expect(payload.shippingAddress.city).toBe('Austin');
-    expect(onSaved).toHaveBeenCalled();
+    expect(payload.shippingAddressSenderShareConsentAt).toBeInstanceOf(Date);
+    expect(onSaved).toHaveBeenCalledWith(expect.objectContaining({ city: 'Austin' }), true);
+  });
+
+  it('does not set consent timestamp when checkbox is unchecked', async () => {
+    getDoc.mockResolvedValueOnce({
+      exists: () => true,
+      data: () => ({}),
+    });
+    render(
+      <ShippingAddressStep
+        stepStatus={LOBBY_STEP_STATUS.ACTIVE}
+        headingId="lobby-step-heading-address"
+        savedAddress={null}
+        savedHasConsent={false}
+        isEditing={false}
+      />,
+    );
+    await waitFor(() => screen.getByTestId('lobby-address-save'));
+    fireEvent.change(screen.getByLabelText(/Full Name/i), { target: { value: 'Pat' } });
+    fireEvent.change(screen.getByLabelText(/Street Address/i), { target: { value: '1 Main' } });
+    fireEvent.change(screen.getByLabelText(/City/i), { target: { value: 'Austin' } });
+    fireEvent.change(screen.getByLabelText(/State/i), { target: { value: 'TX' } });
+    fireEvent.change(screen.getByLabelText(/ZIP/i), { target: { value: '78701' } });
+    fireEvent.change(screen.getByLabelText(/Country/i), { target: { value: 'US' } });
+    fireEvent.click(screen.getByTestId('lobby-address-save'));
+    await waitFor(() => expect(updateDoc).toHaveBeenCalled());
+    const { deleteField } = await import('firebase/firestore');
+    const payload = updateDoc.mock.calls[0][1];
+    expect(payload.shippingAddressSenderShareConsentAt).toEqual(deleteField());
   });
 });
