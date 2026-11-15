@@ -2,6 +2,19 @@
  * Party-scoped batch user display lookup (no email / cross-party leakage).
  */
 
+export function looksLikeEmail(value) {
+  return typeof value === 'string' && value.includes('@');
+}
+
+function pickDisplayName(userId, ...candidates) {
+  for (const name of candidates) {
+    if (name && !looksLikeEmail(name)) {
+      return name;
+    }
+  }
+  return `Player ${userId.slice(0, 8)}`;
+}
+
 export function isValidPartyId(partyId) {
   return (
     typeof partyId === 'string' &&
@@ -123,17 +136,18 @@ export async function fetchDisplayProfilesForUserIds(db, auth, userIds) {
         }
       }
 
-      const displayName =
-        firestoreDisplayName ||
-        authDisplayName ||
-        `User ${userId.slice(0, 8)}`;
+      const displayName = pickDisplayName(
+        userId,
+        firestoreDisplayName,
+        authDisplayName,
+      );
 
       users[userId] = displayName;
       photos[userId] = avatarUrl || null;
       bots[userId] = isBotUser;
     } catch (error) {
       console.error(`batch-users: error fetching user ${userId}:`, error);
-      users[userId] = `User ${userId.slice(0, 8)}`;
+      users[userId] = `Player ${userId.slice(0, 8)}`;
       photos[userId] = null;
       bots[userId] = false;
     }

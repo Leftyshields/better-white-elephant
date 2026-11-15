@@ -16,6 +16,7 @@ function buildMockDb({
   callerIsAdmin = true,
   callerIsParticipant = true,
   partyExists = true,
+  userDocs = {},
 } = {}) {
   const docGets = [];
 
@@ -28,6 +29,7 @@ function buildMockDb({
       displayName: 'Stranger',
       email: 'stranger@secret.example',
     },
+    ...userDocs,
   };
 
   const parties = partyExists
@@ -195,4 +197,38 @@ test('batchUsersLookup fails closed when caller lacks party access', async () =>
     CO_PARTICIPANT_ID,
   ]);
   assert.deepEqual(result.users, {});
+});
+
+test('rejects email-shaped Firestore and Auth display names in response', async () => {
+  const db = buildMockDb({
+    userDocs: {
+      [CO_PARTICIPANT_ID]: {
+        displayName: 'legacy@signup.example',
+      },
+    },
+  });
+  const authWithEmailDisplayName = {
+    async getUser(userId) {
+      return {
+        uid: userId,
+        displayName:
+          userId === CO_PARTICIPANT_ID ? 'auth-display@example.com' : null,
+        photoURL: null,
+      };
+    },
+  };
+
+  const result = await batchUsersLookup(
+    db,
+    authWithEmailDisplayName,
+    CALLER_ID,
+    PARTY_ID,
+    [CO_PARTICIPANT_ID],
+  );
+
+  assert.equal(
+    result.users[CO_PARTICIPANT_ID],
+    `Player ${CO_PARTICIPANT_ID.slice(0, 8)}`,
+  );
+  assert.ok(!JSON.stringify(result).includes('@'));
 });
