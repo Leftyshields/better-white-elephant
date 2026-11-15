@@ -149,6 +149,118 @@ describe('client path: useAuth.js (PR #91) — hostDisplayName sync on hosted pa
   });
 });
 
+describe('validHostDisplayName — trim-equivalent rules (create + admin update)', () => {
+  const partyCreateBase = {
+    adminId: ADMIN_ID,
+    status: 'LOBBY',
+    config: { maxSteals: 3, returnToStart: false },
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  beforeEach(async () => {
+    await seedLobbyParty();
+  });
+
+  it('accepts a normal hostDisplayName on create', async () => {
+    const db = authedDb(ADMIN_ID);
+    await assertSucceeds(
+      addDoc(collection(db, 'parties'), {
+        ...partyCreateBase,
+        hostDisplayName: 'Jessica Host',
+      }),
+    );
+  });
+
+  it('rejects whitespace-only hostDisplayName on create', async () => {
+    const db = authedDb(ADMIN_ID);
+    await assertFails(
+      addDoc(collection(db, 'parties'), {
+        ...partyCreateBase,
+        hostDisplayName: '   ',
+      }),
+    );
+  });
+
+  it('rejects tab-only hostDisplayName on create', async () => {
+    const db = authedDb(ADMIN_ID);
+    await assertFails(
+      addDoc(collection(db, 'parties'), {
+        ...partyCreateBase,
+        hostDisplayName: '\t',
+      }),
+    );
+  });
+
+  it('rejects leading or trailing space on create', async () => {
+    const db = authedDb(ADMIN_ID);
+    await assertFails(
+      addDoc(collection(db, 'parties'), {
+        ...partyCreateBase,
+        hostDisplayName: ' Host Name',
+      }),
+    );
+    await assertFails(
+      addDoc(collection(db, 'parties'), {
+        ...partyCreateBase,
+        hostDisplayName: 'Host Name ',
+      }),
+    );
+  });
+
+  it('rejects hostDisplayName longer than 64 characters on create', async () => {
+    const db = authedDb(ADMIN_ID);
+    const longName = `A${'b'.repeat(64)}`;
+    await assertFails(
+      addDoc(collection(db, 'parties'), {
+        ...partyCreateBase,
+        hostDisplayName: longName,
+      }),
+    );
+  });
+
+  it('accepts a normal hostDisplayName on admin update', async () => {
+    const db = authedDb(ADMIN_ID);
+    await assertSucceeds(
+      updateDoc(doc(db, 'parties', PARTY_ID), {
+        hostDisplayName: 'Taylor Host',
+        updatedAt: new Date(),
+      }),
+    );
+  });
+
+  it('rejects whitespace-only hostDisplayName on admin update', async () => {
+    const db = authedDb(ADMIN_ID);
+    await assertFails(
+      updateDoc(doc(db, 'parties', PARTY_ID), {
+        hostDisplayName: '   ',
+        updatedAt: new Date(),
+      }),
+    );
+  });
+
+  it('rejects leading or trailing space on admin update', async () => {
+    const db = authedDb(ADMIN_ID);
+    await assertFails(
+      updateDoc(doc(db, 'parties', PARTY_ID), {
+        hostDisplayName: ' Taylor',
+        updatedAt: new Date(),
+      }),
+    );
+  });
+
+  it('rejects hostDisplayName longer than 64 characters on admin update', async () => {
+    const db = authedDb(ADMIN_ID);
+    const longName = `A${'b'.repeat(64)}`;
+    await assertFails(
+      updateDoc(doc(db, 'parties', PARTY_ID), {
+        hostDisplayName: longName,
+        updatedAt: new Date(),
+      }),
+    );
+  });
+});
+
 describe('client path: PartyManagement.jsx / PartyLobby.jsx — party admin updates', () => {
   beforeEach(async () => {
     await seedLobbyParty();

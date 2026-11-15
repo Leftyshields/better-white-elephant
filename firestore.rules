@@ -32,7 +32,7 @@ service cloud.firestore {
     // Public host label on party docs (invite landing — matches PR #91 validation)
     function validHostDisplayName(name) {
       return name is string
-        && name.size() > 0
+        && name.matches('^\\S(.{0,62}\\S)?$')
         && name.size() <= 64
         && !name.matches('.*@.*');
     }
