@@ -3,13 +3,14 @@ import assert from 'node:assert/strict';
 import {
   validateGameStartCounts,
   GAME_START_ERROR_CODES,
+  GAME_START_USER_MESSAGES,
 } from '../utils/game-start-validation.js';
 
 test('rejects start when there are more gifts than going participants', () => {
   const result = validateGameStartCounts({ participantCount: 3, giftCount: 5 });
   assert.equal(result.valid, false);
   assert.equal(result.code, GAME_START_ERROR_CODES.GIFT_PLAYER_COUNT_MISMATCH);
-  assert.match(result.error, /PLACEHOLDER/);
+  assert.equal(result.error, GAME_START_USER_MESSAGES.GIFT_PLAYER_COUNT_MISMATCH);
 });
 
 test('rejects start when there are fewer gifts than going participants', () => {
@@ -27,4 +28,5 @@ test('still rejects fewer than two participants', () => {
   const result = validateGameStartCounts({ participantCount: 1, giftCount: 1 });
   assert.equal(result.valid, false);
   assert.equal(result.code, GAME_START_ERROR_CODES.INSUFFICIENT_PARTICIPANTS);
+  assert.equal(result.error, GAME_START_USER_MESSAGES.INSUFFICIENT_PARTICIPANTS);
 });

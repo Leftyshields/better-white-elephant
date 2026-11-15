@@ -3,11 +3,10 @@ export const GAME_START_ERROR_CODES = {
   GIFT_PLAYER_COUNT_MISMATCH: 'GIFT_PLAYER_COUNT_MISMATCH',
 };
 
-/** User-facing copy; placeholders until Copywriter finalizes (see PR TODO-COPY). */
 export const GAME_START_USER_MESSAGES = {
-  INSUFFICIENT_PARTICIPANTS: 'Need at least 2 participants to start',
+  INSUFFICIENT_PARTICIPANTS: 'You need at least 2 players to start.',
   GIFT_PLAYER_COUNT_MISMATCH:
-    '[PLACEHOLDER] This party cannot start until the number of gifts matches the number of players who are going. Each player should bring one gift.',
+    "To start, you need one gift for each player who's going. Check who still needs to add a gift, or update who's going.",
 };
 
 /**
