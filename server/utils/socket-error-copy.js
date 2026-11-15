@@ -1,22 +1,14 @@
-/**
- * User-facing socket error text (must match client/src/utils/gameUserCopy.js literals).
- */
-export const SOCKET_GAME_STATE_RETRY_MESSAGE =
-  "We're still loading the game. Refresh if this doesn't clear.";
-
-const INTERNAL_TECHNICAL_MESSAGES = new Set([
-  'Game state conflict; please retry',
-  'Corrupted game state',
-  'Mutation did not return game state',
-]);
-
-/**
- * @param {string} message
- * @param {string} [code]
- */
-export function clientSafeSocketGameErrorMessage(message, code) {
-  if (code === 'GAME_STATE_CONFLICT' || INTERNAL_TECHNICAL_MESSAGES.has(message)) {
-    return SOCKET_GAME_STATE_RETRY_MESSAGE;
-  }
-  return message;
-}
+/** Re-export shared socket error copy (single source of truth). */
+export {
+  SOCKET_ACTION_FAILED_GENERIC_MESSAGE,
+  SOCKET_APPROVED_TOAST_MESSAGES,
+  SOCKET_CONNECTION_LOST_MESSAGE,
+  SOCKET_GAME_STATE_LOAD_FAILED_MESSAGE,
+  SOCKET_GAME_STATE_LOADING_MESSAGE,
+  SOCKET_GAME_STATE_RETRY_MESSAGE,
+  SOCKET_GAME_STATE_STALE_MOVE_MESSAGE,
+  CLIENT_SAFE_USER_MESSAGES,
+  RAW_SERVER_MESSAGE_ENTRIES,
+  clientSafeSocketGameErrorMessage,
+  formatSocketErrorForToast,
+} from '../shared/socket-error-copy.mjs';

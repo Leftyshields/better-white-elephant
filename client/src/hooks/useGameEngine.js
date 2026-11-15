@@ -12,6 +12,7 @@ import { auth } from '../utils/firebase.js';
 import { trackGameAction, trackGameComplete, trackError, trackEvent } from '../utils/analytics.js';
 import { SERVER_URL } from '../utils/config.js';
 import { canPlayerSkipTurn } from '../utils/skipTurnEligibility.js';
+import { planSocketGameErrorHandling } from '../utils/socketGameErrorToast.js';
 
 export function useGameEngine(partyId) {
   const { user } = useAuth();
@@ -24,6 +25,7 @@ export function useGameEngine(partyId) {
   const participantsRef = useRef(participants);
   const retryCountRef = useRef(0);
   const retryTimeoutRef = useRef(null);
+  const lastSocketToastRef = useRef({ message: null, atMs: 0 });
 
   // Keep refs in sync with latest values
   useEffect(() => {
@@ -170,51 +172,31 @@ export function useGameEngine(partyId) {
       });
 
       socket.on('error', ({ message, code }) => {
-        console.error('Socket error:', message, code);
+        const hasPendingPlayerAction = Boolean(pendingOptimisticUpdateRef.current);
+        const plan = planSocketGameErrorHandling({
+          message,
+          code,
+          hasPendingPlayerAction,
+          lastToastMessage: lastSocketToastRef.current.message,
+          lastToastAtMs: lastSocketToastRef.current.atMs,
+        });
 
-        // Don't show error toast for expected game state errors
-        // These are normal game conditions, not actual errors
-        const isExpectedGameStateError = 
-          message.includes('No stealable gifts available') ||
-          message.includes('Cannot steal gift: invalid action') ||
-          message.includes('already acted this turn') ||
-          message.includes('Cannot steal back');
-
-        const isTechnicalGameError =
-          code === 'GAME_STATE_CONFLICT' ||
-          message === 'Game state conflict; please retry' ||
-          message === 'Corrupted game state' ||
-          message === 'Mutation did not return game state';
-        
-        // Only show error toast for unexpected/critical errors
-        if (!isExpectedGameStateError) {
-          // Format user-friendly error messages
-          let userFriendlyMessage = message;
-
-          if (isTechnicalGameError) {
-            userFriendlyMessage = "We're still loading the game. Refresh if this doesn't clear.";
-          } else if (message.includes('Game is not active')) {
-            userFriendlyMessage = "The game hasn't started, or it has already ended.";
-          } else if (
-            message.includes('Cannot steal back') ||
-            message.includes('same turn')
-          ) {
-            userFriendlyMessage = "You can't steal that gift back on the same turn.";
-          } else if (message.includes('Socket not connected')) {
-            userFriendlyMessage = 'Connection lost. Please refresh the page.';
-          }
-          
-          dispatch(gameActions.errorReceived(userFriendlyMessage));
-        } else {
-          // For expected errors, just log and rollback but don't show toast
-          console.log('Expected game state condition (not showing error toast):', message);
+        if (plan.consoleLevel === 'error') {
+          console.error('Socket error:', code || plan.safePlayerCopy);
+        } else if (plan.consoleLevel === 'log') {
+          console.log('Expected game state condition (not showing error toast):', plan.safePlayerCopy);
         }
-        
-        // Track error (still track even if not shown)
-        trackError('socket_error', message, 'useGameEngine');
-        
-        // Rollback optimistic update on error (always rollback regardless of error type)
-        if (pendingOptimisticUpdateRef.current) {
+
+        if (plan.showToast && plan.toastMessage) {
+          lastSocketToastRef.current = { message: plan.toastMessage, atMs: Date.now() };
+          dispatch(gameActions.errorReceived(plan.toastMessage));
+        }
+
+        if (plan.trackAnalytics) {
+          trackError('socket_error', code || plan.safePlayerCopy, 'useGameEngine');
+        }
+
+        if (plan.rollbackOptimistic && pendingOptimisticUpdateRef.current) {
           dispatch({
             type: ActionTypes.ROLLBACK_OPTIMISTIC_UPDATE,
             payload: { snapshot: pendingOptimisticUpdateRef.current.snapshot },
