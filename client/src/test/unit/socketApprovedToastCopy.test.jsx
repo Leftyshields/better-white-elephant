@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   SOCKET_APPROVED_TOAST_MESSAGES,
   formatSocketErrorForToast,
-} from '../../../../shared/socket-error-copy.mjs';
+} from '../../../../server/shared/socket-error-copy.mjs';
 
 describe('socket approved toast copy', () => {
   it.each([...SOCKET_APPROVED_TOAST_MESSAGES])(

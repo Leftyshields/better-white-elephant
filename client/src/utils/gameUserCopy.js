@@ -7,7 +7,7 @@ import {
   SOCKET_GAME_STATE_LOAD_FAILED_MESSAGE,
   SOCKET_GAME_STATE_LOADING_MESSAGE,
   SOCKET_GAME_STATE_STALE_MOVE_MESSAGE,
-} from '../../../shared/socket-error-copy.mjs';
+} from '../../../server/shared/socket-error-copy.mjs';
 
 export const GAME_USER_COPY = {
   gameInactive: "The game hasn't started, or it has already ended.",

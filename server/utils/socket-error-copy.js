@@ -11,4 +11,4 @@ export {
   RAW_SERVER_MESSAGE_ENTRIES,
   clientSafeSocketGameErrorMessage,
   formatSocketErrorForToast,
-} from '../../shared/socket-error-copy.mjs';
+} from '../shared/socket-error-copy.mjs';

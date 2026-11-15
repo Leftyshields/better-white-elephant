@@ -1,5 +1,5 @@
 import { GAME_USER_COPY } from './gameUserCopy.js';
-import { formatSocketErrorForToast } from '../../../shared/socket-error-copy.mjs';
+import { formatSocketErrorForToast } from '../../../server/shared/socket-error-copy.mjs';
 
 export const PLAYER_ACTION_VALIDATION_TOAST_MESSAGES = new Set([
   GAME_USER_COPY.cannotStealGift,
