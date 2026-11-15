@@ -11,7 +11,7 @@ import { scrapeGiftMetadata } from '../utils/scraper.js';
 import { saveGameState, loadGameState, deleteGameState } from '../utils/game-state-persistence.js';
 import { saveShippingFulfillmentSnapshot } from '../utils/shipping-fulfillment-snapshot.js';
 import { fetchWinnerShippingAddressForSender } from '../utils/winner-shipping-address.js';
-import { validateGameStartCounts } from '../utils/game-start-validation.js';
+import { validateGameStartGiftAssignment } from '../utils/game-start-validation.js';
 
 const router = express.Router();
 
@@ -73,14 +73,14 @@ router.post('/start', async (req, res) => {
       ...giftConverter.fromFirestore(doc),
     }));
 
-    const startCountValidation = validateGameStartCounts({
-      participantCount: participants.length,
-      giftCount: gifts.length,
+    const startValidation = validateGameStartGiftAssignment({
+      goingParticipantIds: participants.map((p) => p.id),
+      gifts,
     });
-    if (!startCountValidation.valid) {
+    if (!startValidation.valid) {
       return res.status(400).json({
-        error: startCountValidation.error,
-        code: startCountValidation.code,
+        error: startValidation.error,
+        code: startValidation.code,
       });
     }
 

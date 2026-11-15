@@ -925,7 +925,7 @@ export function PartyLobby({ partyId, onStartGame }) {
                             const totalCount = participants.length + displayedInvites.length;
                             return totalCount >= 2
                               ? `Great! You have ${totalCount} participants.`
-                              : `You need at least 2 players to start. Currently: ${totalCount}`;
+                              : `You need at least 2 players to start. You have ${totalCount}.`;
                           })()}
                         </p>
                       </div>
