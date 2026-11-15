@@ -13,6 +13,7 @@ import { trackGameAction, trackGameComplete, trackError, trackEvent } from '../u
 import { SERVER_URL } from '../utils/config.js';
 import { canPlayerSkipTurn } from '../utils/skipTurnEligibility.js';
 import { GAME_USER_COPY } from '../utils/gameUserCopy.js';
+import { formatSocketErrorForToast } from '../../../shared/socket-error-copy.mjs';
 
 export function useGameEngine(partyId) {
   const { user } = useAuth();
@@ -185,43 +186,9 @@ export function useGameEngine(partyId) {
           message.includes('Cannot steal back') ||
           message === GAME_USER_COPY.stealBackSameTurn;
 
-        const isStateVersionConflict =
-          code === 'GAME_STATE_CONFLICT' || message === 'Game state conflict; please retry';
-        const isCorruptedGameState =
-          message === 'Corrupted game state' || message === 'Mutation did not return game state';
-        
         // Only show error toast for unexpected/critical errors
         if (!isExpectedGameStateError) {
-          // Format user-friendly error messages
-          let userFriendlyMessage = message;
-
-          if (isStateVersionConflict) {
-            userFriendlyMessage = GAME_USER_COPY.gameStateStaleMove;
-          } else if (isCorruptedGameState) {
-            userFriendlyMessage = GAME_USER_COPY.gameStateLoadFailed;
-          } else if (
-            message === GAME_USER_COPY.gameStateLoading ||
-            message === GAME_USER_COPY.gameStateStaleMove ||
-            message === GAME_USER_COPY.gameStateLoadFailed ||
-            message === GAME_USER_COPY.actionFailedGeneric ||
-            message === GAME_USER_COPY.gameInactive ||
-            message === GAME_USER_COPY.notYourTurn ||
-            message === GAME_USER_COPY.cannotOpenGift ||
-            message === GAME_USER_COPY.cannotStealGift ||
-            message === GAME_USER_COPY.stealBackSameTurn ||
-            message === GAME_USER_COPY.giftNotInWrappedPile
-          ) {
-            userFriendlyMessage = message;
-          } else if (message.includes('Game is not active')) {
-            userFriendlyMessage = GAME_USER_COPY.gameInactive;
-          } else if (message.includes('Socket not connected')) {
-            userFriendlyMessage = 'Connection lost. Please refresh the page.';
-          } else if (message === 'Not your turn') {
-            userFriendlyMessage = GAME_USER_COPY.notYourTurn;
-          } else {
-            userFriendlyMessage = GAME_USER_COPY.actionFailedGeneric;
-          }
-          
+          const userFriendlyMessage = formatSocketErrorForToast(message, code);
           dispatch(gameActions.errorReceived(userFriendlyMessage));
         } else {
           // For expected errors, just log and rollback but don't show toast

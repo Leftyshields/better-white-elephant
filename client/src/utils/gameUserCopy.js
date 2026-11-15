@@ -1,14 +1,21 @@
 /**
  * User-facing in-game toast and validation messages (not game rule logic).
  */
+import {
+  SOCKET_ACTION_FAILED_GENERIC_MESSAGE,
+  SOCKET_CONNECTION_LOST_MESSAGE,
+  SOCKET_GAME_STATE_LOAD_FAILED_MESSAGE,
+  SOCKET_GAME_STATE_LOADING_MESSAGE,
+  SOCKET_GAME_STATE_STALE_MOVE_MESSAGE,
+} from '../../../shared/socket-error-copy.mjs';
 
 export const GAME_USER_COPY = {
   gameInactive: "The game hasn't started, or it has already ended.",
-  gameStateLoading: "We're still loading the game. Refresh if this doesn't clear.",
-  gameStateStaleMove:
-    "That move didn't go through because the game just changed. Check the board and try again.",
-  gameStateLoadFailed: "We couldn't load the latest game. Refresh the page and try again.",
-  actionFailedGeneric: "That didn't work. Try again in a moment.",
+  gameStateLoading: SOCKET_GAME_STATE_LOADING_MESSAGE,
+  gameStateStaleMove: SOCKET_GAME_STATE_STALE_MOVE_MESSAGE,
+  gameStateLoadFailed: SOCKET_GAME_STATE_LOAD_FAILED_MESSAGE,
+  actionFailedGeneric: SOCKET_ACTION_FAILED_GENERIC_MESSAGE,
+  connectionLost: SOCKET_CONNECTION_LOST_MESSAGE,
   giftNotInWrappedPile: "That gift isn't available to open. Pick a wrapped gift.",
   notYourTurn: "It's not your turn yet.",
   cannotOpenGift: "You can't open that gift right now.",

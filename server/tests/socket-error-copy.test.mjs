@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   clientSafeSocketGameErrorMessage,
   SOCKET_ACTION_FAILED_GENERIC_MESSAGE,
+  SOCKET_APPROVED_TOAST_MESSAGES,
   SOCKET_GAME_STATE_LOAD_FAILED_MESSAGE,
   SOCKET_GAME_STATE_STALE_MOVE_MESSAGE,
 } from '../utils/socket-error-copy.js';
@@ -63,4 +64,10 @@ test('raw server strings map to player-facing copy', () => {
 test('known user copy passes through unchanged', () => {
   const userCopy = 'You can only open a gift on your own turn while the game is running.';
   assert.equal(clientSafeSocketGameErrorMessage(userCopy), userCopy);
+});
+
+test('every approved toast line passes through unchanged from shared list', () => {
+  for (const line of SOCKET_APPROVED_TOAST_MESSAGES) {
+    assert.equal(clientSafeSocketGameErrorMessage(line), line);
+  }
 });

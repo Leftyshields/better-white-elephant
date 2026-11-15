@@ -24,6 +24,10 @@ describe('gameUserCopy socket game errors', () => {
     expect(GAME_USER_COPY.actionFailedGeneric).toBe("That didn't work. Try again in a moment.");
   });
 
+  it('exposes connection-lost copy', () => {
+    expect(GAME_USER_COPY.connectionLost).toBe('Connection lost. Refresh the page to reconnect.');
+  });
+
   it('exposes mapped raw-server copy strings', () => {
     expect(GAME_USER_COPY.stealBackSameTurn).toBe(
       "You can't steal back a gift right after it was taken from you. Pick a different one.",
