@@ -879,7 +879,7 @@ export function Home() {
                 placeholder={SIGNED_IN_COPY.partyPlaceholder}
                 value={partyTitle}
                 onChange={(e) => setPartyTitle(e.target.value)}
-                className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 text-white placeholder:text-slate-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 text-white placeholder:text-slate-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
               />
             </div>
             <div>

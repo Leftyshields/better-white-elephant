@@ -285,6 +285,7 @@ export function Profile() {
         {/* Display Name */}
         <div>
           <Input
+            id="profile-display-name"
             label="Display Name"
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
@@ -294,15 +295,18 @@ export function Profile() {
 
         {/* Email (read-only) */}
         <div>
-          <label className="block text-sm font-medium text-slate-400 mb-2">
+          <label htmlFor="profile-email" className="block text-sm font-medium text-slate-400 mb-2">
             Email
           </label>
           <div className="relative">
             <input
+              id="profile-email"
               type="email"
               value={user.email || ''}
               disabled
-              className="w-full px-3 py-2 pl-10 border border-slate-800 rounded-md bg-slate-900/30 text-slate-500 cursor-not-allowed"
+              readOnly
+              aria-readonly="true"
+              className="w-full min-h-11 px-3 py-2 pl-10 border border-slate-800 rounded-md bg-slate-900/30 text-slate-500 cursor-not-allowed"
             />
             <LockClosedIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-600" />
           </div>
@@ -362,7 +366,7 @@ export function Profile() {
             <label className="flex gap-3 items-start text-sm text-slate-300 cursor-pointer">
               <input
                 type="checkbox"
-                className="mt-1"
+                className="mt-1 h-5 w-5 rounded border-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
                 checked={shareConsent}
                 onChange={(e) => setShareConsent(e.target.checked)}
               />
