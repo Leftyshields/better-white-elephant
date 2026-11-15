@@ -296,7 +296,7 @@ export const sendContactEmail = onRequest(
       });
 
       if (error) {
-        console.error('Resend error:', error);
+        console.error('Resend error:', { code: error?.statusCode ?? error?.code, name: error?.name });
 
         // Handle Resend testing mode limitation
         if (error.statusCode === 403 || error.message?.includes('testing emails') || error.message?.includes('verified email')) {
@@ -341,7 +341,7 @@ export const sendContactEmail = onRequest(
 
       res.json({ success: true, messageId: data?.id });
     } catch (error) {
-      console.error('Error sending contact email:', error);
+      console.error('Error sending contact email:', { code: error?.code, name: error?.name });
       res.status(500).json({ error: 'Failed to send contact email', message: error.message });
     }
   }

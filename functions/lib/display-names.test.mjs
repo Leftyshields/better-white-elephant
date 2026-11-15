@@ -4,7 +4,9 @@ import {
   PARTY_INVITE_INTRO_ANONYMOUS,
   displayNameMatchesEmailLocalPart,
   pickHostNameForInvite,
+  pickHostNameForInviteFromProfile,
   buildPartyInviteIntroParagraph,
+  sanitizeUserChosenDisplayName,
 } from './display-names.js';
 
 describe('functions display name privacy', () => {
@@ -29,9 +31,24 @@ describe('functions display name privacy', () => {
     assert.ok(!html.includes(ownerEmail));
   });
 
+  test('sanitizeUserChosenDisplayName strips Unicode line and paragraph separators', () => {
+    assert.equal(sanitizeUserChosenDisplayName('  Real\u2028Name  '), 'RealName');
+  });
+
+  test('pickHostNameForInviteFromProfile uses profile name when displayName is leaked local-part', () => {
+    assert.equal(
+      pickHostNameForInviteFromProfile('uid-3', {
+        email: 'legacy@mail.com',
+        displayName: 'legacy',
+        name: 'Legal Name',
+      }),
+      'Legal Name',
+    );
+  });
+
   test('invite email HTML uses host name when it is a real display name', () => {
     const adminId = 'adminUid12345678';
     const html = buildPartyInviteIntroParagraph('Holiday Host', adminId);
-    assert.ok(html.includes('Holiday Host has invited you to a White Elephant gift exchange party.'));
+    assert.ok(html.includes('Holiday Host invited you to a Steal or Reveal game.'));
   });
 });

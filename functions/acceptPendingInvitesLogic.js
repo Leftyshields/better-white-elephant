@@ -46,7 +46,10 @@ export async function markPendingInvitesAcceptedForParticipantJoin(
       userEmail = userRecord.email;
     }
   } catch (error) {
-    console.warn(`acceptInviteOnJoin: could not load auth user ${participantId}:`, error.message);
+    console.warn(`acceptInviteOnJoin: could not load auth user ${participantId}:`, {
+      code: error?.code,
+      name: error?.name,
+    });
   }
 
   if (!userEmail) {

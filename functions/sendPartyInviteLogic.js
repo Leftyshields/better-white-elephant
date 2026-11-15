@@ -5,9 +5,8 @@
 import { createHash } from 'node:crypto';
 import {
   isSyntheticPlayerDisplayName,
-  pickDisplayName,
-  pickHostNameForInvite,
-} from './displayName.js';
+  pickHostNameForInviteFromProfile,
+} from './lib/display-names.js';
 
 /** Copywriter-approved invite intro when the host has no usable public name. */
 export const PARTY_INVITE_INTRO_ANONYMOUS =
@@ -132,7 +131,7 @@ export function recipientIsExistingParticipant(normalizedEmail, participantEmail
 }
 
 export function hostDisplayNameForInvite(hostUid, hostUserProfile) {
-  return pickHostNameForInvite(hostUid, hostUserProfile);
+  return pickHostNameForInviteFromProfile(hostUid, hostUserProfile);
 }
 
 export function buildPartyInviteIntroParagraph(hostDisplayName, hostUid) {
@@ -140,7 +139,7 @@ export function buildPartyInviteIntroParagraph(hostDisplayName, hostUid) {
     return `<p>${escapeHtml(PARTY_INVITE_INTRO_ANONYMOUS)}</p>`;
   }
   const safeHost = escapeHtml(hostDisplayName);
-  return `<p>${safeHost} has invited you to a White Elephant gift exchange party.</p>`;
+  return `<p>${safeHost} invited you to a Steal or Reveal game.</p>`;
 }
 
 export function buildInviteEmailHtml({
@@ -200,9 +199,19 @@ export function resolveClientUrl(origin, referer, options = {}) {
 
   try {
     const parsed = new URL(source);
+    if (parsed.username || parsed.password) {
+      return PRODUCTION_CLIENT_ORIGIN;
+    }
     const host = parsed.hostname;
-    if (host === 'localhost' || host === '127.0.0.1') {
+    const isLocalHost = host === 'localhost' || host === '127.0.0.1';
+    if (isLocalHost) {
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        return PRODUCTION_CLIENT_ORIGIN;
+      }
       return parsed.origin.replace(/\/$/, '');
+    }
+    if (parsed.protocol !== 'https:') {
+      return PRODUCTION_CLIENT_ORIGIN;
     }
   } catch {
     return PRODUCTION_CLIENT_ORIGIN;
@@ -211,12 +220,15 @@ export function resolveClientUrl(origin, referer, options = {}) {
   return PRODUCTION_CLIENT_ORIGIN;
 }
 
+const UNICODE_HEADER_NAME_SEPARATORS = /\u2028|\u2029|\u0085/g;
+
 export function sanitizeEmailSubjectPart(value) {
   if (value == null) {
     return '';
   }
   return String(value)
     .replace(/[\x00-\x1f\x7f]/g, '')
+    .replace(UNICODE_HEADER_NAME_SEPARATORS, '')
     .replace(/[<>]/g, '')
     .trim();
 }
@@ -228,7 +240,7 @@ export const SEND_PARTY_INVITE_ERRORS = {
   missingFields: 'Enter an email address to send an invite.',
   invalidEmail: 'Enter a valid email address.',
   invalidPartyId: "We couldn't find this party. Refresh the page and try again.",
-  sendInviteServerError: "We couldn't send that invite. Try again in a moment.",
+  sendInviteServerError: "We couldn't send that invite right now. Try again later.",
   partyNotFound: "We couldn't find this party. Refresh the page and try again.",
   alreadyParticipant:
     "That person is already in this party, so we didn't send another invite.",
@@ -247,7 +259,7 @@ export const SEND_PARTY_INVITE_ERRORS = {
 /** Email Subject: sanitized partyTitle and hostName; capped length; CRLF/control chars stripped. */
 export function inviteEmailSubject(partyTitle, hostDisplayName) {
   sanitizeEmailSubjectPart(hostDisplayName);
-  const title = sanitizeEmailSubjectPart(partyTitle) || 'White Elephant Party';
+  const title = sanitizeEmailSubjectPart(partyTitle) || 'Steal or Reveal party';
   const prefix = "You're invited to ";
   const suffix = '!';
   let subject = `${prefix}${title}${suffix}`;
