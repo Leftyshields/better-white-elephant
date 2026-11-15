@@ -249,7 +249,8 @@ export function botMakeDecision(gameState) {
   }
 
   // 50% chance to steal, 50% chance to pick (when both options available)
-  const hasBothOptions = stealableGifts.length > 0 && wrappedGifts.length > 0;
+  const hasBothOptions =
+    stealableGifts.length > 0 && wrappedGifts.length > 0 && !botHasGift;
   if (hasBothOptions) {
     // Randomly choose between steal and pick (50/50)
     if (Math.random() < 0.5) {
@@ -269,8 +270,8 @@ export function botMakeDecision(gameState) {
     return { action: 'steal', giftId: randomGift };
   }
   
-  // Otherwise pick a wrapped gift
-  if (wrappedGifts.length > 0) {
+  // Otherwise pick a wrapped gift (only when bot does not already hold one)
+  if (wrappedGifts.length > 0 && !botHasGift) {
     const randomGift = wrappedGifts[Math.floor(Math.random() * wrappedGifts.length)];
     return { action: 'pick', giftId: randomGift };
   }

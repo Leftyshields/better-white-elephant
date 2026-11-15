@@ -13,6 +13,7 @@ import redisClient from './utils/redis.js';
 import { auth, db } from './config/firebase-admin.js';
 import admin from 'firebase-admin';
 import { checkAndMakeBotMove } from './utils/bot-utils.js';
+import { handlePickGift } from './handlers/pick-gift.js';
 
 dotenv.config();
 
@@ -269,79 +270,27 @@ io.on('connection', (socket) => {
   // Handle game actions
   socket.on('pick-gift', async ({ partyId, giftId }) => {
     try {
-      // Validate inputs
-      if (!isValidPartyId(partyId) || !isValidGiftId(giftId)) {
-        socket.emit('error', { message: 'Invalid party ID or gift ID' });
-        return;
-      }
-      
-      // Verify user is a participant
-      const isParticipant = await verifyPartyMembership(partyId, socket.userId);
-      if (!isParticipant) {
-        socket.emit('error', { message: 'You are not a participant in this party' });
-        return;
-      }
-      
-      // Load game state (from Redis or Firestore)
       const { loadGameState, saveGameState } = await import('./utils/game-state-persistence.js');
-      const gameState = await loadGameState(partyId);
-      if (!gameState) {
-        socket.emit('error', { message: 'Game not found' });
-        return;
-      }
-
-      // CRITICAL: Validate gameState.partyId matches partyId parameter
-      if (gameState.partyId && gameState.partyId !== partyId) {
-        console.error(`❌ CRITICAL: partyId mismatch in pick-gift! Parameter: ${partyId}, gameState.partyId: ${gameState.partyId}`);
-        socket.emit('error', { message: 'Game state party ID mismatch' });
-        return;
-      }
-      
       const { GameEngine } = await import('./engine.js');
-      const config = gameState.config || { maxSteals: 3, returnToStart: false };
-      // Ensure partyId is set in gameState before creating engine
-      gameState.partyId = partyId;
-      const engine = new GameEngine(gameState, config);
 
-      if (!engine.canPick(socket.userId)) {
-        const message = engine.playerHasGift(socket.userId)
-          ? "You already have a gift, so you can't open another one. Steal one instead, or skip your turn."
-          : 'Cannot pick gift: invalid action';
-        socket.emit('error', { message });
-        return;
-      }
-
-      const heldByOther = engine.unwrappedGifts.get(giftId);
-      if (heldByOther?.ownerId && heldByOther.ownerId !== socket.userId) {
-        socket.emit('error', { message: "That gift is already open, so you can't open it again." });
-        return;
-      }
-
-      // Emit action_started only after validation (no broadcast on rejected picks)
-      io.to(`party:${partyId}`).emit('action_started', {
-        type: 'pick',
+      await handlePickGift({
+        partyId,
         giftId,
-        playerId: socket.userId,
+        userId: socket.userId,
+        socket,
+        io,
+        isValidPartyId,
+        isValidGiftId,
+        verifyPartyMembership,
+        loadGameState,
+        saveGameState,
+        GameEngine,
+        scheduleBotMove: (savedPartyId, newState) => {
+          setTimeout(() => {
+            checkAndMakeBotMove(savedPartyId, newState, io).catch(console.error);
+          }, 3500);
+        },
       });
-
-      engine.pickGift(giftId, socket.userId);
-      const newState = engine.getState();
-      // Preserve config in state
-      newState.config = gameState.config;
-      // CRITICAL: Ensure partyId is preserved
-      newState.partyId = partyId;
-
-      // Save to both Redis and Firestore
-      await saveGameState(partyId, newState);
-
-      // Broadcast update
-      io.to(`party:${partyId}`).emit('game-updated', newState);
-      
-      // Check if next player is a bot and trigger auto-play
-      // Wait for reveal animation to complete (3s) + small buffer before checking
-      setTimeout(() => {
-        checkAndMakeBotMove(partyId, newState, io).catch(console.error);
-      }, 3500); // 3s reveal animation + 500ms buffer
     } catch (error) {
       socket.emit('error', { message: error.message });
     }
