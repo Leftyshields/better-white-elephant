@@ -182,17 +182,33 @@ export function resolveClientUrl(origin, referer) {
 }
 
 export const SEND_PARTY_INVITE_ERRORS = {
-  missingAuth: 'Sign in is required to send party invites.',
-  invalidAuth: 'Your session is invalid or expired. Sign in again and retry.',
-  notHost: 'Only the party host can send invites for this party.',
+  missingAuth: 'Sign in to send invites.',
+  invalidAuth: "You've been signed out. Sign in again to send invites.",
+  notHost: 'Only the host can send invites for this party.',
   missingFields: 'email and partyId are required',
-  invalidEmail: 'Please provide a valid email address.',
+  invalidEmail: 'Enter a valid email address.',
   invalidPartyId: 'Invalid party id.',
-  partyNotFound: 'Party not found',
-  alreadyParticipant: 'That person is already in this party, so we did not send another invite.',
-  inviteAccepted: 'That person already accepted their invite, so we did not send another email.',
-  rateLimitHostHour: 'You have sent too many invites recently. Please wait about an hour and try again.',
-  rateLimitHostDay: 'You have reached the daily invite limit for this party. Try again tomorrow.',
-  rateLimitRecipientHour: 'This email address has received too many invites recently. Please wait before trying again.',
-  rateLimitRecipientDay: 'This email address has received too many invites today. Try again tomorrow.',
+  partyNotFound: "We couldn't find this party. Refresh the page and try again.",
+  alreadyParticipant:
+    "That person is already in this party, so we didn't send another invite.",
+  inviteAccepted:
+    "That person already accepted their invite, so we didn't send another one.",
+  rateLimitHostHour:
+    "You've sent a lot of invites in the last hour. Try again in about an hour.",
+  rateLimitHostDay:
+    "You've hit today's invite limit for this party. Try again tomorrow.",
+  rateLimitRecipientHour:
+    'That email address has gotten a lot of invites recently. Try again later.',
+  rateLimitRecipientDay:
+    'That email address has gotten too many invites today. Try again tomorrow.',
 };
+
+/** Plain-text party title safe for email Subject headers (control chars / tags stripped). */
+export function inviteEmailSubject(partyTitle) {
+  const title =
+    typeof partyTitle === 'string' && partyTitle.trim()
+      ? partyTitle.trim()
+      : 'White Elephant Party';
+  const safe = title.replace(/[\x00-\x1f\x7f\r\n]/g, '').replace(/[<>]/g, '');
+  return `You're invited to ${safe}!`;
+}

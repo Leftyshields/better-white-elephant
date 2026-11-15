@@ -10,6 +10,7 @@ import {
   buildGiftSubmitterNotifyHtml,
   buildInviteEmailHtml,
   escapeHtml,
+  inviteEmailSubject,
   getRateLimitBuckets,
   hostDisplayNameForInvite,
   nextRateLimitState,
@@ -40,6 +41,26 @@ test('escapeHtml neutralizes HTML injection in email body', () => {
   assert.match(html, /&lt;script&gt;/);
   assert.match(html, /Fun &amp; &lt;Games&gt;/);
   assert.doesNotMatch(html, /<script>/);
+});
+
+test('hostName and partyTitle are HTML-escaped in invite email body', () => {
+  const html = buildInviteEmailHtml({
+    hostDisplayName: '<b>Host</b>',
+    partyTitle: '"><img onerror=alert(1)>',
+    partyDateLabel: 'Soon',
+    inviteLink: 'https://example.com/party/1',
+  });
+  assert.match(html, /&lt;b&gt;Host&lt;\/b&gt;/);
+  assert.match(html, /&quot;&gt;&lt;img onerror=alert\(1\)&gt;/);
+  assert.doesNotMatch(html, /<b>Host<\/b>/);
+  assert.doesNotMatch(html, /<img onerror/);
+});
+
+test('inviteEmailSubject strips markup from party title', () => {
+  assert.equal(
+    inviteEmailSubject('Holiday <script>'),
+    "You're invited to Holiday script!",
+  );
 });
 
 test('pickDisplayName skips email-like display names', () => {

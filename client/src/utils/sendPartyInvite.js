@@ -14,7 +14,7 @@ export function getSendPartyInviteUrl() {
  */
 export async function postSendPartyInvite(user, { email, partyId }) {
   if (!user?.getIdToken) {
-    throw new Error('Sign in is required to send party invites.');
+    throw new Error('Sign in to send invites.');
   }
   const token = await user.getIdToken();
   const functionUrl = getSendPartyInviteUrl();

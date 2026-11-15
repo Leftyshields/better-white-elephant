@@ -8,6 +8,7 @@ import {
   SEND_PARTY_INVITE_ERRORS,
   assertCallerIsPartyHost,
   buildInviteEmailHtml,
+  inviteEmailSubject,
   getRateLimitBuckets,
   hashRecipientForRateLimit,
   hostDisplayNameForInvite,
@@ -277,7 +278,7 @@ export async function handleSendPartyInviteRequest(req, deps) {
   const { data, error } = await resendClient.emails.send({
     from: fromEmail,
     to: normalizedEmail,
-    subject: `You're invited to ${partyTitle}!`,
+    subject: inviteEmailSubject(partyTitle),
     html,
   });
 
