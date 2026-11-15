@@ -54,7 +54,6 @@ const ownerProfile = {
 
 const publicProfile = {
   displayName: 'Public Host',
-  email: 'host@example.com',
 };
 
 /** @type {import('@firebase/rules-unit-testing').RulesTestEnvironment} */
@@ -96,10 +95,53 @@ beforeEach(async () => {
       displayName: 'Email Only',
       email: 'emailonly@example.com',
     });
+    await setDoc(doc(db, 'users', 'public-host-null-shipping'), {
+      displayName: 'Null Shipping Host',
+      shippingAddress: null,
+    });
+    await setDoc(doc(db, 'users', 'public-host-no-shipping-field'), {
+      displayName: 'No Shipping Field Host',
+    });
+    await setDoc(doc(db, 'users', 'public-host-empty-shipping'), {
+      displayName: 'Empty Shipping Host',
+      shippingAddress: '',
+    });
+    await setDoc(doc(db, 'users', 'email-with-null-shipping'), {
+      displayName: 'Email Null Ship',
+      email: 'leak@example.com',
+      shippingAddress: null,
+    });
   });
 });
 
-describe('users collection — owner access', () => {
+describe('users collection - public get shippingAddress shapes', () => {
+  it('allows unauthenticated get when shippingAddress field is missing and no email', async () => {
+    const db = unauthedDb();
+    await assertSucceeds(getDoc(doc(db, 'users', 'public-host-no-shipping-field')));
+  });
+
+  it('allows unauthenticated get when shippingAddress is null and no email', async () => {
+    const db = unauthedDb();
+    await assertSucceeds(getDoc(doc(db, 'users', 'public-host-null-shipping')));
+  });
+
+  it('denies unauthenticated get when shippingAddress is a real object', async () => {
+    const db = unauthedDb();
+    await assertFails(getDoc(doc(db, 'users', VICTIM_ID)));
+  });
+
+  it('denies unauthenticated get when shippingAddress is empty string', async () => {
+    const db = unauthedDb();
+    await assertFails(getDoc(doc(db, 'users', 'public-host-empty-shipping')));
+  });
+
+  it('denies unauthenticated get when email key is present even if shippingAddress is null', async () => {
+    const db = unauthedDb();
+    await assertFails(getDoc(doc(db, 'users', 'email-with-null-shipping')));
+  });
+});
+
+describe('users collection - owner access', () => {
   it('owner can read and write their own profile including shippingAddress', async () => {
     const db = authedDb(OWNER_ID);
     await assertSucceeds(getDoc(doc(db, 'users', OWNER_ID)));
@@ -111,9 +153,15 @@ describe('users collection — owner access', () => {
       }),
     );
   });
+
+  it('owner can read their own profile when it still contains email (legacy)', async () => {
+    const db = authedDb(OTHER_ID);
+    const snap = await assertSucceeds(getDoc(doc(db, 'users', OTHER_ID)));
+    assert.strictEqual(snap.data().email, 'other@example.com');
+  });
 });
 
-describe('users collection — non-owner single-document reads', () => {
+describe('users collection - non-owner single-document reads', () => {
   it('another authenticated user cannot get a profile that contains shippingAddress', async () => {
     const db = authedDb(OTHER_ID);
     await assertFails(getDoc(doc(db, 'users', VICTIM_ID)));
@@ -124,15 +172,52 @@ describe('users collection — non-owner single-document reads', () => {
     await assertFails(getDoc(doc(db, 'users', VICTIM_ID)));
   });
 
-  it('unauthenticated user can get a profile with no shippingAddress (public invite display)', async () => {
+  it('unauthenticated user can get a profile with no shippingAddress or email (public invite display)', async () => {
     const db = unauthedDb();
     const snap = await assertSucceeds(getDoc(doc(db, 'users', 'public-host')));
     assert.strictEqual(snap.exists(), true);
     assert.strictEqual(snap.data().displayName, 'Public Host');
+    assert.strictEqual(snap.data().email, undefined);
+  });
+
+  it('unauthenticated user cannot get an addressless profile that still has email (legacy docs)', async () => {
+    const db = unauthedDb();
+    await assertFails(getDoc(doc(db, 'users', 'email-only-victim')));
+  });
+
+  it('authenticated co-participant cannot read email on a legacy addressless profile', async () => {
+    const db = authedDb(OTHER_ID);
+    await assertFails(getDoc(doc(db, 'users', 'email-only-victim')));
+  });
+
+  it('authenticated co-participant can read a display-only profile (party/host name)', async () => {
+    const db = authedDb(OTHER_ID);
+    const snap = await assertSucceeds(getDoc(doc(db, 'users', 'public-host')));
+    assert.strictEqual(snap.data().displayName, 'Public Host');
+    assert.strictEqual(snap.data().email, undefined);
+  });
+
+  it('unauthenticated user can get profile with shippingAddress explicitly null (invite host name)', async () => {
+    const db = unauthedDb();
+    const snap = await assertSucceeds(getDoc(doc(db, 'users', 'public-host-null-shipping')));
+    assert.strictEqual(snap.data().displayName, 'Null Shipping Host');
+    assert.strictEqual(snap.data().shippingAddress, null);
+  });
+
+  it('unauthenticated user can get profile with no shippingAddress field', async () => {
+    const db = unauthedDb();
+    const snap = await assertSucceeds(getDoc(doc(db, 'users', 'public-host-no-shipping-field')));
+    assert.strictEqual(snap.data().displayName, 'No Shipping Field Host');
+    assert.strictEqual(snap.data().shippingAddress, undefined);
+  });
+
+  it('unauthenticated user cannot get profile with present shippingAddress', async () => {
+    const db = unauthedDb();
+    await assertFails(getDoc(doc(db, 'users', VICTIM_ID)));
   });
 });
 
-describe('users collection — non-owner queries (PII regression)', () => {
+describe('users collection - non-owner queries (PII regression)', () => {
   it('rejects authenticated collection query with limit (regression for main query bypass)', async () => {
     const db = authedDb(OTHER_ID);
     const usersQuery = query(collection(db, 'users'), limit(10));

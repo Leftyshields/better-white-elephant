@@ -10,6 +10,11 @@ import { db } from '../utils/firebase.js';
 import { trackParticipantJoin, trackError } from '../utils/analytics.js';
 import { GiftIcon } from '@heroicons/react/24/outline';
 import { Snowflakes } from './Snowflakes.jsx';
+import { publicDisplayNameFromUserDoc } from '../utils/firestoreDisplayName.js';
+import {
+  INVITE_LANDING_HOST_NAME_NOT_SHARED,
+  INVITE_LANDING_HOST_NAME_UNAVAILABLE,
+} from '../utils/profileDisplayNameCopy.js';
 
 export function PartyInviteLanding({ partyId }) {
   const { user, signInWithGoogle, loading: authLoading } = useAuth();
@@ -41,15 +46,17 @@ export function PartyInviteLanding({ partyId }) {
               const hostDoc = await getDoc(doc(db, 'users', data.adminId));
               if (hostDoc.exists()) {
                 const hostData = hostDoc.data();
-                // Only use displayName/email if available, don't access shippingAddress
-                setHostName(hostData.displayName || hostData.email || 'Party Host');
+                setHostName(
+                  publicDisplayNameFromUserDoc(hostData.displayName)
+                    || INVITE_LANDING_HOST_NAME_NOT_SHARED,
+                );
               } else {
-                setHostName('Party Host');
+                setHostName(INVITE_LANDING_HOST_NAME_NOT_SHARED);
               }
             } catch (error) {
               // If permission denied or other error, just use default
               console.warn('Could not fetch host name (may require auth):', error.message);
-              setHostName('Party Host');
+              setHostName(INVITE_LANDING_HOST_NAME_UNAVAILABLE);
             }
           }
         } else {
@@ -206,12 +213,16 @@ export function PartyInviteLanding({ partyId }) {
           <div className="space-y-4 mb-8 relative z-10">
             <div className="bg-slate-950/50 border border-white/5 rounded-lg p-4">
               <p className="text-sm text-slate-400 mb-1">Host</p>
-              <p className="text-lg font-semibold text-white">{hostName || 'Party Host'}</p>
+              <p className="text-lg font-semibold text-white break-words [overflow-wrap:anywhere]">
+                {hostName || INVITE_LANDING_HOST_NAME_NOT_SHARED}
+              </p>
             </div>
             
             <div className="bg-slate-950/50 border border-white/5 rounded-lg p-4">
               <p className="text-sm text-slate-400 mb-1">Party</p>
-              <p className="text-lg font-semibold text-white">{partyInfo.title}</p>
+              <p className="text-lg font-semibold text-white break-words [overflow-wrap:anywhere]">
+                {partyInfo.title}
+              </p>
             </div>
             
             <div className="bg-slate-950/50 border border-white/5 rounded-lg p-4">

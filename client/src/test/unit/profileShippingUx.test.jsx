@@ -54,6 +54,11 @@ describe('Profile shipping UX must-fixes', () => {
     expect(copyModule).not.toContain('SHIPPING_ADDRESS_CONSENT_REQUIRED_PROFILE');
   });
 
+  it('uses firestoreDisplayName helper for persisted displayName (no email fallback)', () => {
+    expect(profile).toContain('displayNameForFirestoreDoc');
+    expect(profile).not.toMatch(/displayName:\s*displayName\s*\|\|\s*user\.email/);
+  });
+
   it('requires delete confirmation before deleteField on cleared saved address', () => {
     expect(profile).toContain('showDeleteAddressConfirm');
     expect(profile).toContain('deleteAddress: true');

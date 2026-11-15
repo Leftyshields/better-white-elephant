@@ -13,8 +13,10 @@ import {
   signOut as firebaseSignOut,
 } from 'firebase/auth';
 import { auth, db } from '../utils/firebase.js';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, deleteField } from 'firebase/firestore';
 import { trackLogin, trackSignUp } from '../utils/analytics.js';
+import { displayNameForFirestoreDoc, looksLikeEmail } from '../utils/firestoreDisplayName.js';
+import { PROFILE_DISPLAY_NAME_EMAIL_ERROR } from '../utils/profileDisplayNameCopy.js';
 
 export function useAuth() {
   const [user, setUser] = useState(null);
@@ -34,16 +36,21 @@ export function useAuth() {
           // Get current Firestore data to preserve shippingAddress if it exists
           const existingData = userDoc.exists() ? userDoc.data() : {};
           
-          // Update or create user document with Auth data
-          await setDoc(userDocRef, {
-            displayName: user.displayName || existingData.displayName || user.email?.split('@')[0] || '',
-            email: user.email || existingData.email || '',
-            // Preserve existing shippingAddress if it exists
-            shippingAddress: existingData.shippingAddress || null,
-            // Preserve createdAt if document exists, otherwise set it
+          const syncPayload = {
+            displayName: displayNameForFirestoreDoc({
+              authDisplayName: user.displayName,
+              existingDisplayName: existingData.displayName,
+            }),
+            email: deleteField(),
             createdAt: existingData.createdAt || new Date(),
             updatedAt: new Date(),
-          }, { merge: true });
+          };
+
+          if (existingData.shippingAddress != null) {
+            syncPayload.shippingAddress = existingData.shippingAddress;
+          }
+
+          await setDoc(userDocRef, syncPayload, { merge: true });
         } catch (error) {
           // Don't block auth flow if Firestore sync fails
           console.error('Error syncing user data to Firestore:', error);
@@ -96,9 +103,14 @@ export function useAuth() {
 
   const signUpWithEmailAndPassword = async (email, password, displayName = null) => {
     try {
+      const trimmedName = typeof displayName === 'string' ? displayName.trim() : '';
+      if (trimmedName && looksLikeEmail(trimmedName)) {
+        return { success: false, error: PROFILE_DISPLAY_NAME_EMAIL_ERROR };
+      }
+
       const result = await createUserWithEmailAndPassword(auth, email, password);
-      if (displayName && result.user) {
-        await updateProfile(result.user, { displayName });
+      if (trimmedName && result.user) {
+        await updateProfile(result.user, { displayName: trimmedName });
       }
       return { success: true, user: result.user };
     } catch (error) {

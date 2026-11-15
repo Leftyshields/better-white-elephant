@@ -191,7 +191,17 @@ export const notifyGiftSubmitter = onDocumentUpdated(
           const submitterDoc = await db.collection('users').doc(gift.submitterId).get();
           const submitter = submitterDoc.data();
 
-          if (!submitter?.email) continue;
+          let submitterEmail = submitter?.email || null;
+          if (!submitterEmail) {
+            try {
+              const authUser = await admin.auth().getUser(gift.submitterId);
+              submitterEmail = authUser.email || null;
+            } catch {
+              submitterEmail = null;
+            }
+          }
+
+          if (!submitterEmail) continue;
 
           // Send email to submitter with winner's address
           const resendClient = getResend();
@@ -202,7 +212,7 @@ export const notifyGiftSubmitter = onDocumentUpdated(
           }
           await resendClient.emails.send({
             from: fromEmail,
-            to: submitter.email,
+            to: submitterEmail,
             subject: 'Shipping Address for Your Gift',
             html: `
               <h1>Shipping Address</h1>

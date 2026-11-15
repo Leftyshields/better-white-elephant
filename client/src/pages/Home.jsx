@@ -28,6 +28,7 @@ import { usePartyModal } from '../contexts/PartyModalContext.jsx';
 import { Footer } from '../components/Footer.jsx';
 import { SEO } from '../components/SEO.jsx';
 import { Snowflakes } from '../components/Snowflakes.jsx';
+import { displayNameForFirestoreDoc } from '../utils/firestoreDisplayName.js';
 import {
   FEATURE_CARDS,
   HOME_SEO_TITLE,
@@ -358,8 +359,10 @@ export function Home() {
         if (isSignUp && result.user) {
           try {
             await setDoc(doc(db, 'users', result.user.uid), {
-              displayName: displayName || result.user.email || '',
-              email: result.user.email || '',
+              displayName: displayNameForFirestoreDoc({
+                authDisplayName: result.user.displayName,
+                formDisplayName: displayName ?? '',
+              }),
               shippingAddress: shippingAddress,
               createdAt: new Date(),
               updatedAt: new Date(),
