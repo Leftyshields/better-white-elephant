@@ -10,11 +10,16 @@ import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline';
 import { apiRequest } from '../../utils/api.js';
 import { validateGameHistory } from '../../utils/gameValidator.js';
 
+/** Whether developer sim toolbar should mount (URL `?sim=true`). */
+export function isSimulationMode(search = window.location.search) {
+  return new URLSearchParams(search).get('sim') === 'true';
+}
+
 export function SimulationControls({ socket, partyId, gameState }) {
   
   try {
     // Check if simulation mode is enabled via URL query parameter
-    const isSimMode = new URLSearchParams(window.location.search).get('sim') === 'true';
+    const isSimMode = isSimulationMode();
     
     // Don't render if not in sim mode
     if (!isSimMode) {
