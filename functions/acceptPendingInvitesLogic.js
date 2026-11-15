@@ -7,9 +7,9 @@ export {
   inviteMatchesJoiningUser,
   filterVisiblePendingInvites,
   canResendPartyInvite,
-} from '../lib/pendingInvitesLogic.js';
+} from '../lib/pendingInvitesLogic.mjs';
 
-import { inviteMatchesJoiningUser } from '../lib/pendingInvitesLogic.js';
+import { inviteMatchesJoiningUser } from '../lib/pendingInvitesLogic.mjs';
 
 /**
  * @param {import('firebase-admin/firestore').Firestore} db

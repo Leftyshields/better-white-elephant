@@ -3,4 +3,4 @@ export {
   canResendPartyInvite,
   inviteMatchesJoiningUser,
   inviteDocIdFromEmail,
-} from '../../../lib/pendingInvitesLogic.js';
+} from '../../../lib/pendingInvitesLogic.mjs';
