@@ -495,10 +495,12 @@ describe('client path: Profile.jsx / AddressModal.jsx — users (not parties)', 
     await assertSucceeds(
       updateDoc(doc(db, 'users', GUEST_ID), {
         shippingAddress: {
+          name: 'Guest',
           street: '1 Main St',
           city: 'Town',
           state: 'ST',
           zip: '12345',
+          country: 'US',
         },
         updatedAt: new Date(),
       }),

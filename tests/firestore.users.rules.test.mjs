@@ -16,6 +16,7 @@ import {
   doc,
   getDoc,
   setDoc,
+  updateDoc,
   collection,
   query,
   limit,
@@ -34,27 +35,34 @@ const victimProfile = {
   displayName: 'Victim Player',
   email: 'victim@example.com',
   shippingAddress: {
-    line1: '123 Secret St',
+    name: 'Victim',
+    street: '123 Secret St',
     city: 'Testville',
     state: 'TS',
-    postalCode: '00000',
+    zip: '00000',
+    country: 'US',
   },
+  updatedAt: new Date(),
 };
 
 const ownerProfile = {
   displayName: 'Owner Player',
   email: 'owner@example.com',
   shippingAddress: {
-    line1: '456 My Home Rd',
+    name: 'Owner',
+    street: '456 My Home Rd',
     city: 'Ownertown',
     state: 'OW',
-    postalCode: '11111',
+    zip: '11111',
+    country: 'US',
   },
+  updatedAt: new Date(),
 };
 
-const publicProfile = {
+const addresslessProfile = {
   displayName: 'Public Host',
   email: 'host@example.com',
+  updatedAt: new Date(),
 };
 
 /** @type {import('@firebase/rules-unit-testing').RulesTestEnvironment} */
@@ -90,11 +98,13 @@ beforeEach(async () => {
     await setDoc(doc(db, 'users', OTHER_ID), {
       displayName: 'Other Player',
       email: 'other@example.com',
+      updatedAt: new Date(),
     });
-    await setDoc(doc(db, 'users', 'public-host'), publicProfile);
+    await setDoc(doc(db, 'users', 'public-host'), addresslessProfile);
     await setDoc(doc(db, 'users', 'email-only-victim'), {
       displayName: 'Email Only',
       email: 'emailonly@example.com',
+      updatedAt: new Date(),
     });
   });
 });
@@ -105,9 +115,9 @@ describe('users collection — owner access', () => {
     await assertSucceeds(getDoc(doc(db, 'users', OWNER_ID)));
 
     await assertSucceeds(
-      setDoc(doc(db, 'users', OWNER_ID), {
-        ...ownerProfile,
-        shippingAddress: { ...ownerProfile.shippingAddress, line1: '789 Updated Ln' },
+      updateDoc(doc(db, 'users', OWNER_ID), {
+        shippingAddress: { ...ownerProfile.shippingAddress, street: '789 Updated Ln' },
+        updatedAt: new Date(),
       }),
     );
   });
@@ -124,11 +134,14 @@ describe('users collection — non-owner single-document reads', () => {
     await assertFails(getDoc(doc(db, 'users', VICTIM_ID)));
   });
 
-  it('unauthenticated user can get a profile with no shippingAddress (public invite display)', async () => {
+  it('authenticated stranger cannot read an addressless profile (email must stay private)', async () => {
+    const db = authedDb(OTHER_ID);
+    await assertFails(getDoc(doc(db, 'users', 'public-host')));
+  });
+
+  it('unauthenticated user cannot read an addressless profile', async () => {
     const db = unauthedDb();
-    const snap = await assertSucceeds(getDoc(doc(db, 'users', 'public-host')));
-    assert.strictEqual(snap.exists(), true);
-    assert.strictEqual(snap.data().displayName, 'Public Host');
+    await assertFails(getDoc(doc(db, 'users', 'public-host')));
   });
 });
 
@@ -149,5 +162,86 @@ describe('users collection — non-owner queries (PII regression)', () => {
     const db = authedDb(OTHER_ID);
     const usersQuery = query(collection(db, 'users'), limit(25));
     await assertFails(getDocs(usersQuery));
+  });
+});
+
+describe('users collection — lobby and game (PartyLobby, GameBoard, GameRoom)', () => {
+  it('party participant can read own profile (PartyLobby shipping / Profile.jsx)', async () => {
+    const db = authedDb(OTHER_ID);
+    await assertSucceeds(getDoc(doc(db, 'users', OTHER_ID)));
+  });
+
+  it('party participant cannot Firestore-get a co-player (display names use POST /api/users/batch)', async () => {
+    const db = authedDb(OTHER_ID);
+    await assertFails(getDoc(doc(db, 'users', VICTIM_ID)));
+    await assertFails(getDoc(doc(db, 'users', OWNER_ID)));
+  });
+
+  it('other users emails are not readable via get on addressless profiles', async () => {
+    const db = authedDb(OTHER_ID);
+    await assertFails(getDoc(doc(db, 'users', 'email-only-victim')));
+  });
+});
+
+describe('users collection — client write validation', () => {
+  it('rejects update with a non-allowlisted top-level field', async () => {
+    const db = authedDb(OWNER_ID);
+    await assertFails(
+      updateDoc(doc(db, 'users', OWNER_ID), {
+        adminSecret: 'nope',
+        updatedAt: new Date(),
+      }),
+    );
+  });
+
+  it('rejects shippingAddress with an extra nested key', async () => {
+    const db = authedDb(OWNER_ID);
+    await assertFails(
+      updateDoc(doc(db, 'users', OWNER_ID), {
+        shippingAddress: {
+          ...ownerProfile.shippingAddress,
+          line1: 'hidden',
+        },
+        updatedAt: new Date(),
+      }),
+    );
+  });
+
+  it('rejects oversize shippingAddress.name', async () => {
+    const db = authedDb(OWNER_ID);
+    await assertFails(
+      updateDoc(doc(db, 'users', OWNER_ID), {
+        shippingAddress: {
+          ...ownerProfile.shippingAddress,
+          name: 'x'.repeat(101),
+        },
+        updatedAt: new Date(),
+      }),
+    );
+  });
+
+  it('allows valid profile update matching Profile.jsx / AddressModal.jsx', async () => {
+    const db = authedDb(OTHER_ID);
+    await assertSucceeds(
+      setDoc(doc(db, 'users', OTHER_ID), {
+        displayName: 'Other Player',
+        email: 'other@example.com',
+        updatedAt: new Date(),
+      }),
+    );
+    await assertSucceeds(
+      updateDoc(doc(db, 'users', OTHER_ID), {
+        shippingAddress: {
+          name: 'Other',
+          street: '1 Main St',
+          city: 'Town',
+          state: 'ST',
+          zip: '12345',
+          country: 'US',
+        },
+        shippingAddressSenderShareConsentAt: new Date(),
+        updatedAt: new Date(),
+      }),
+    );
   });
 });
