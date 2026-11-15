@@ -42,7 +42,6 @@ export function PartyInviteLanding({ partyId }) {
               const hostDoc = await getDoc(doc(db, 'users', data.adminId));
               if (hostDoc.exists()) {
                 const hostData = hostDoc.data();
-                // Only use displayName/email if available, don't access shippingAddress
                 setHostName(
                   pickDisplayName(data.adminId, hostData.displayName),
                 );

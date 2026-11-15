@@ -15,7 +15,10 @@ import {
 import { auth, db } from '../utils/firebase.js';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { trackLogin, trackSignUp } from '../utils/analytics.js';
-import { resolveSyncedFirestoreDisplayName } from '../../../server/lib/display-names.js';
+import {
+  resolveSyncedFirestoreDisplayName,
+  sanitizeUserChosenDisplayName,
+} from '../../../server/lib/display-names.js';
 
 export function useAuth() {
   const [user, setUser] = useState(null);
@@ -101,8 +104,9 @@ export function useAuth() {
   const signUpWithEmailAndPassword = async (email, password, displayName = null) => {
     try {
       const result = await createUserWithEmailAndPassword(auth, email, password);
-      if (displayName && result.user) {
-        await updateProfile(result.user, { displayName });
+      const safeDisplayName = sanitizeUserChosenDisplayName(displayName);
+      if (safeDisplayName && result.user) {
+        await updateProfile(result.user, { displayName: safeDisplayName });
       }
       return { success: true, user: result.user };
     } catch (error) {
