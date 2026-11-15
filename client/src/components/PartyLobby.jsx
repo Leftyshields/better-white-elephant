@@ -8,6 +8,7 @@ import { Button } from './ui/Button.jsx';
 import { Input } from './ui/Input.jsx';
 import { Modal } from './ui/Modal.jsx';
 import { scrapeGiftUrl, apiRequest } from '../utils/api.js';
+import { GIFT_MANUAL_HELPER } from '../utils/giftUiCopy.js';
 import { postSendPartyInvite } from '../utils/sendPartyInvite.js';
 import { PartyManagement } from './PartyManagement.jsx';
 import { GiftCard } from './GiftCard.jsx';
@@ -1160,7 +1161,7 @@ export function PartyLobby({ partyId, onStartGame }) {
                             >
                               <div className="flex items-center justify-between">
                                 <p className="text-slate-300">
-                                  Enter your gift details manually. Some sites block automatic extraction.
+                                  {GIFT_MANUAL_HELPER}
                                 </p>
                                 <button
                                   type="button"

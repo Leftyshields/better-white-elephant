@@ -8,6 +8,7 @@ import { partyConverter, participantConverter, giftConverter } from '../utils/fi
 import { GameEngine } from '../engine.js';
 import redisClient from '../utils/redis.js';
 import { scrapeGiftMetadata } from '../utils/scraper.js';
+import { logScrapeEvent, scrapeLogNameForHost } from '../utils/gift-url-metadata.js';
 import { saveGameState, loadGameState, deleteGameState } from '../utils/game-state-persistence.js';
 import { saveShippingFulfillmentSnapshot } from '../utils/shipping-fulfillment-snapshot.js';
 import { fetchWinnerShippingAddressForSender } from '../utils/winner-shipping-address.js';
@@ -436,13 +437,6 @@ router.post('/scrape', async (req, res) => {
     }
     
     const { url } = req.body;
-    let scrapeHost = 'unknown';
-    try {
-      scrapeHost = new URL(url).hostname;
-    } catch {
-      // validated below
-    }
-    console.log('[Scrape API] Received scrape request for host:', scrapeHost);
 
     if (!url || typeof url !== 'string') {
       return res.status(400).json({ error: 'Valid URL is required' });
@@ -458,12 +452,18 @@ router.post('/scrape', async (req, res) => {
       return res.status(400).json({ error: 'URL too long' });
     }
 
-    const metadata = await scrapeGiftMetadata(url);
-    console.log('[Scrape API] Returning metadata:', JSON.stringify(metadata, null, 2));
+    let logName = 'unknown';
+    try {
+      logName = scrapeLogNameForHost(new URL(url).hostname);
+    } catch {
+      // validated in scraper
+    }
+    logScrapeEvent({ code: 'gift_scrape_request', name: logName });
 
+    const metadata = await scrapeGiftMetadata(url);
     res.json(metadata);
   } catch (error) {
-    console.error('[Scrape API] Error scraping gift URL:', error.message, error.stack);
+    logScrapeEvent({ code: 'gift_scrape_api_error', name: 'api' });
     res.status(500).json({ error: 'Failed to scrape URL', message: error.message });
   }
 });

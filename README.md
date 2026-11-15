@@ -57,10 +57,8 @@ better-white-elephant/
    - **Server CORS**: Set `ALLOWED_ORIGINS` (comma-separated) or `CLIENT_URL` for allowed origins
      - Example: `ALLOWED_ORIGINS=https://stealorreveal.com,https://www.stealorreveal.com`
      - Defaults to localhost for development, production domains for production
-   - **Apify API (Optional)**: Set `APIFY_API_TOKEN` in server `.env` for enhanced Amazon product scraping
-     - Get your token from [Apify Console](https://console.apify.com/account/integrations)
-     - The scraper will automatically use Apify for Amazon URLs if the token is set
-     - Falls back to cheerio scraping if token is not set or Apify fails
+   - **Gift URL scraping**: Uses the free server-side fetch + HTML parse path by default.
+   - **Apify (optional, off by default)**: Set `GIFT_SCRAPE_USE_APIFY=true` and `APIFY_API_TOKEN` to evaluate Apify for Amazon URLs later.
    - **Bot Refresh Simulation (Optional)**: Set `BOT_REFRESH_SIMULATION=true` in server `.env` to enable periodic bot refresh simulation
      - Simulates realistic browser refresh behavior for bots (disconnect/reconnect scenarios)
      - Helps test state version checking and prevent stale state resets

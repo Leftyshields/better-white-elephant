@@ -1,9 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  extractAmazonAsin,
   extractAmazonSlugTitle,
   isGenericStoreTitle,
   resolveGiftTitle,
+  trimGiftTitle,
+  validateGiftScrapeUrl,
 } from '../utils/gift-url-metadata.js';
 
 test('extractAmazonSlugTitle humanizes slug before /dp/', () => {
@@ -92,4 +95,30 @@ test('resolveGiftTitle keeps a meaningful scraped title', () => {
 
 test('resolveGiftTitle returns empty when no slug and generic title', () => {
   assert.equal(resolveGiftTitle('Amazon.com', 'https://www.amazon.com/dp/B0C1H5HNV3'), '');
+});
+
+test('extractAmazonAsin from dp and gp/product paths', () => {
+  assert.equal(
+    extractAmazonAsin(
+      'https://www.amazon.com/Wireless-Charger/dp/B0C1H5HNV3/ref=sr_1_1',
+    ),
+    'B0C1H5HNV3',
+  );
+  assert.equal(
+    extractAmazonAsin('https://www.amazon.com/gp/product/B08N5WRWNW'),
+    'B08N5WRWNW',
+  );
+  assert.equal(extractAmazonAsin('https://www.amazon.com/dp/B0C1H5HNV3'), 'B0C1H5HNV3');
+});
+
+test('validateGiftScrapeUrl blocks private hosts', () => {
+  assert.throws(
+    () => validateGiftScrapeUrl('http://127.0.0.1/product'),
+    (err) => err.code === 'ssrf_blocked',
+  );
+});
+
+test('trimGiftTitle enforces max length', () => {
+  const long = 'a'.repeat(600);
+  assert.equal(trimGiftTitle(long).length, 500);
 });
