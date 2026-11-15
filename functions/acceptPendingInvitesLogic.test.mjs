@@ -5,8 +5,20 @@ import {
   inviteMatchesJoiningUser,
   filterVisiblePendingInvites,
   canResendPartyInvite,
+  logAcceptInviteOnParticipantJoinFailure,
   markPendingInvitesAcceptedForParticipantJoin,
 } from './acceptPendingInvitesLogic.js';
+
+const FIRESTORE_NOT_FOUND_PATH =
+  'No document to update: projects/test/databases/(default)/documents/parties/party-1/pendingInvites/guest_example_com';
+
+function assertNoSensitiveJoinLogContent(loggedPayload, inviteDocId = 'guest_example_com') {
+  assert.doesNotMatch(loggedPayload, /@/);
+  assert.doesNotMatch(loggedPayload, new RegExp(inviteDocId));
+  assert.doesNotMatch(loggedPayload, /pendingInvites\//);
+  assert.doesNotMatch(loggedPayload, /databases\/\(default\)\/documents/);
+  assert.doesNotMatch(loggedPayload, /No document to update/);
+}
 
 describe('inviteDocIdFromEmail', () => {
   it('normalizes email to invite document id (host UI only; not used for join matching)', () => {
@@ -183,8 +195,9 @@ function buildJoinMocks({
     id,
     update: (patch) => {
       if (failUpdate) {
-        const err = new Error('not found');
+        const err = new Error(FIRESTORE_NOT_FOUND_PATH);
         err.code = 5;
+        err.name = 'FirebaseError';
         return Promise.reject(err);
       }
       updates.push({ id, data, patch });
@@ -308,15 +321,56 @@ describe('markPendingInvitesAcceptedForParticipantJoin', () => {
       ],
     });
 
-    const result = await markPendingInvitesAcceptedForParticipantJoin(
-      db,
-      auth,
-      'party-1',
-      'guest-uid'
-    );
-    assert.equal(result.updated, 1);
-    assert.equal(updates.length, 1);
-    assert.equal(updates[0].id, 'guest_example_com');
+    const warnLogs = [];
+    const originalWarn = console.warn;
+    console.warn = (...args) => {
+      warnLogs.push(args.map(String).join(' '));
+    };
+    try {
+      const result = await markPendingInvitesAcceptedForParticipantJoin(
+        db,
+        auth,
+        'party-1',
+        'guest-uid'
+      );
+      assert.equal(result.updated, 1);
+      assert.equal(updates.length, 1);
+      assert.equal(updates[0].id, 'guest_example_com');
+
+      const removedBeforeAccept = warnLogs.find((line) =>
+        line.includes('removed before accept')
+      );
+      assert.ok(removedBeforeAccept, 'expected privacy-safe stale-invite warn');
+      assertNoSensitiveJoinLogContent(warnLogs.join('\n'));
+      assert.match(removedBeforeAccept, /partyId=party-1/);
+      assert.match(removedBeforeAccept, /participantId=guest-uid/);
+      assert.match(removedBeforeAccept, /reason=stale_invite_removed/);
+      assert.match(removedBeforeAccept, /code=5/);
+    } finally {
+      console.warn = originalWarn;
+    }
+  });
+
+  it('logs participant join handler failure without Firestore path or invite doc id', () => {
+    const errorLogs = [];
+    const originalError = console.error;
+    console.error = (...args) => {
+      errorLogs.push(args.map(String).join(' '));
+    };
+    try {
+      const err = new Error(FIRESTORE_NOT_FOUND_PATH);
+      err.code = 5;
+      err.name = 'FirebaseError';
+      logAcceptInviteOnParticipantJoinFailure('party-1', 'guest-uid', err);
+      assert.equal(errorLogs.length, 1);
+      assertNoSensitiveJoinLogContent(errorLogs.join('\n'));
+      assert.match(errorLogs[0], /partyId=party-1/);
+      assert.match(errorLogs[0], /participantId=guest-uid/);
+      assert.match(errorLogs[0], /code=5/);
+      assert.match(errorLogs[0], /name=FirebaseError/);
+    } finally {
+      console.error = originalError;
+    }
   });
 
   it('skips bot participants', async () => {

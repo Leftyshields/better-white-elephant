@@ -12,6 +12,18 @@ export {
 import { inviteMatchesJoiningUser } from './pendingInvitesLogic.js';
 
 /**
+ * @param {string} partyId
+ * @param {string} participantId
+ * @param {unknown} error
+ */
+export function logAcceptInviteOnParticipantJoinFailure(partyId, participantId, error) {
+  const err = /** @type {{ code?: string | number; name?: string }} */ (error);
+  console.error(
+    `acceptInviteOnParticipantJoin failed partyId=${partyId} participantId=${participantId} code=${err?.code ?? 'unknown'} name=${err?.name ?? 'Error'}`
+  );
+}
+
+/**
  * @param {import('firebase-admin/firestore').Firestore} db
  * @param {import('firebase-admin/auth').Auth} auth
  * @param {string} partyId
@@ -68,7 +80,7 @@ export async function markPendingInvitesAcceptedForParticipantJoin(
       const code = error?.code;
       if (code === 5 || code === 'not-found' || code === 'NOT_FOUND') {
         console.warn(
-          `acceptInviteOnJoin: invite ${inviteDoc.id} was removed before accept in party ${partyId}`
+          `acceptInviteOnJoin: invite was removed before accept partyId=${partyId} participantId=${participantId} reason=stale_invite_removed code=${code ?? 'unknown'}`
         );
         continue;
       }
