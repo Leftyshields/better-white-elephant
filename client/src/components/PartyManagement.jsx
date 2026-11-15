@@ -10,6 +10,7 @@ import { db } from '../utils/firebase.js';
 import { useAuth } from '../hooks/useAuth.js';
 import { apiRequest } from '../utils/api.js';
 import { filterVisiblePendingInvites } from '../utils/pendingInvites.js';
+import { pickHostNameForInvite } from '../../../server/lib/display-names.js';
 
 export function PartyManagement({ party, participants, pendingInvites = [] }) {
   const { user } = useAuth();
@@ -189,7 +190,11 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
           import.meta.env.VITE_FUNCTIONS_URL ||
           'https://us-central1-better-white-elephant.cloudfunctions.net/sendPartyInvite';
 
-        const hostName = user?.displayName || user?.email?.split('@')[0] || 'Someone';
+        const hostName = pickHostNameForInvite(
+          user?.uid,
+          user?.displayName,
+          user?.email,
+        );
 
         await fetch(functionUrl, {
           method: 'POST',
@@ -278,7 +283,11 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
         import.meta.env.VITE_FUNCTIONS_URL ||
         'https://us-central1-better-white-elephant.cloudfunctions.net/sendPartyInvite';
 
-      const hostName = user?.displayName || user?.email?.split('@')[0] || 'Someone';
+      const hostName = pickHostNameForInvite(
+        user?.uid,
+        user?.displayName,
+        user?.email,
+      );
 
       let successCount = 0;
       let failedList = [];

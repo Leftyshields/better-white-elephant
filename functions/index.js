@@ -22,6 +22,10 @@ import {
   getAllDocumentsFromQuery,
 } from './dataRetentionBatch.js';
 import { markPendingInvitesAcceptedForParticipantJoin } from './acceptPendingInvitesLogic.js';
+import {
+  buildPartyInviteIntroParagraph,
+  pickHostNameForInvite,
+} from './lib/display-names.js';
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -85,6 +89,17 @@ export const sendPartyInvite = onRequest(
 
       const party = partyDoc.data();
 
+      const adminId = party.adminId;
+      let ownerEmail = '';
+      if (adminId) {
+        const hostUserDoc = await db.collection('users').doc(adminId).get();
+        if (hostUserDoc.exists) {
+          ownerEmail = hostUserDoc.data()?.email || '';
+        }
+      }
+      const adminKey = adminId || 'host';
+      const safeHostName = pickHostNameForInvite(adminKey, hostName, ownerEmail);
+      const inviteIntroHtml = buildPartyInviteIntroParagraph(safeHostName, adminKey);
 
       // Determine client URL
       // Default to production
@@ -119,7 +134,7 @@ export const sendPartyInvite = onRequest(
         subject: `You're invited to ${partyTitle}!`,
         html: `
         <h1>You're Invited!</h1>
-        <p>${hostName || 'Someone'} has invited you to a White Elephant gift exchange party.</p>
+        ${inviteIntroHtml}
         <div style="background-color: #f3f4f6; padding: 16px; border-radius: 6px; margin: 16px 0;">
           <p style="margin: 0;"><strong>${partyTitle}</strong></p>
           <p style="margin: 8px 0 0 0; color: #6b7280;">Date: ${partyDate}</p>

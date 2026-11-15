@@ -5,6 +5,8 @@ import {
   fetchDisplayProfilesForUserIds,
   getPartyMemberUserIds,
   pickDisplayName,
+  pickHostNameForInvite,
+  displayNameMatchesEmailLocalPart,
   playerFallbackForUserId,
   verifyCallerPartyAccess,
   isValidPartyId,
@@ -216,6 +218,15 @@ test('pickDisplayName uses name when displayName looks like email', () => {
     pickDisplayName('user-id-3', 'legacy@mail.com', 'Legal Name'),
     'Legal Name',
   );
+});
+
+test('pickHostNameForInvite does not expose email local-part', () => {
+  const uid = 'admin-uid-xyz';
+  const email = 'private.name@example.org';
+  assert.equal(displayNameMatchesEmailLocalPart('private.name', email), true);
+  const hostName = pickHostNameForInvite(uid, 'private.name', email);
+  assert.notEqual(hostName, 'private.name');
+  assert.equal(hostName, playerFallbackForUserId(uid));
 });
 
 test('playerFallbackForUserId uses distinct bot suffixes', () => {
