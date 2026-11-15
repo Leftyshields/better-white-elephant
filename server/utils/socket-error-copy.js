@@ -1,18 +1,6 @@
 /**
  * User-facing socket error text (must match client/src/utils/gameUserCopy.js literals).
  */
-import {
-  PICK_GIFT_ALREADY_HOLDING,
-  PICK_GIFT_ALREADY_OPEN,
-  PICK_GIFT_NOT_IN_WRAPPED_PILE,
-  PICK_GIFT_NOT_ON_TURN,
-} from './pick-gift-guards.js';
-import {
-  END_TURN_GAME_ALREADY_ENDED,
-  END_TURN_GAME_NOT_FOUND,
-  END_TURN_SOCKET_ERROR,
-} from './end-turn-guards.js';
-
 export const SOCKET_GAME_STATE_LOADING_MESSAGE =
   "We're still loading the game. Refresh if this doesn't clear.";
 
@@ -32,14 +20,15 @@ const GAME_STATE_LOAD_FAILED_MESSAGES = new Set([
   'Mutation did not return game state',
 ]);
 
+/** Known gameplay validation copy (must stay in sync with pick-gift-guards.js and end-turn-guards.js). */
 const CLIENT_SAFE_USER_MESSAGES = new Set([
-  PICK_GIFT_NOT_ON_TURN,
-  PICK_GIFT_NOT_IN_WRAPPED_PILE,
-  PICK_GIFT_ALREADY_HOLDING,
-  PICK_GIFT_ALREADY_OPEN,
-  END_TURN_GAME_NOT_FOUND,
-  END_TURN_GAME_ALREADY_ENDED,
-  END_TURN_SOCKET_ERROR,
+  'You can only open a gift on your own turn while the game is running.',
+  "That gift isn't available to open. Pick a wrapped gift.",
+  "You already have a gift, so you can't open another one. Steal one instead, or skip your turn.",
+  "That gift is already open, so you can't open it again.",
+  "We couldn't find this game. Refresh the page and try again.",
+  "This game is over, so there's no turn to skip.",
+  'You can only skip on your own turn while the game is running.',
   'Cannot steal back a gift immediately after losing it on the same turn',
   "You already have a gift, so you can't open another one. Steal one instead, or skip your turn.",
   'Cannot pick gift: invalid action',
@@ -48,7 +37,6 @@ const CLIENT_SAFE_USER_MESSAGES = new Set([
   'Game is not active',
   'Not your turn',
   'Gift not found in wrapped pile',
-  "That gift is already open, so you can't open it again.",
 ]);
 
 /**
