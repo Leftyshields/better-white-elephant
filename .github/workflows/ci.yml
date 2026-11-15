@@ -53,7 +53,7 @@ jobs:
           else
             npm install
           fi
-      
+
       - name: Lint client code
         working-directory: ./client
         run: |

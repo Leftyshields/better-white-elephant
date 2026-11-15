@@ -6,6 +6,7 @@ import {
   pickDisplayName,
   pickHostNameForInvite,
   resolveSyncedFirestoreDisplayName,
+  sanitizeUserChosenDisplayName,
 } from './display-names.js';
 
 describe('display name privacy', () => {
@@ -49,5 +50,10 @@ describe('display name privacy', () => {
     assert.equal(resolveSyncedFirestoreDisplayName(null, undefined), '');
     assert.equal(resolveSyncedFirestoreDisplayName('  ', ' kept '), 'kept');
     assert.equal(resolveSyncedFirestoreDisplayName('Profile', 'legacy.local'), 'Profile');
+  });
+
+  test('sanitizeUserChosenDisplayName rejects full email strings', () => {
+    assert.equal(sanitizeUserChosenDisplayName('user@domain.com'), '');
+    assert.equal(sanitizeUserChosenDisplayName('  Real Name '), 'Real Name');
   });
 });

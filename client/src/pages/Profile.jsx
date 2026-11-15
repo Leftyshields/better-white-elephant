@@ -21,6 +21,7 @@ import {
 } from '../utils/shippingAddressCopy.js';
 import { updateProfile } from 'firebase/auth';
 import { auth, db } from '../utils/firebase.js';
+import { sanitizeUserChosenDisplayName } from '../../../server/lib/display-names.js';
 import { Button } from '../components/ui/Button.jsx';
 import { Input } from '../components/ui/Input.jsx';
 import { Modal } from '../components/ui/Modal.jsx';
@@ -148,7 +149,7 @@ export function Profile() {
 
     try {
       const profileUpdate = {
-        displayName: displayName || user.email || '',
+        displayName: sanitizeUserChosenDisplayName(displayName),
         email: user.email || '',
         updatedAt: new Date(),
         shippingAddressSenderShareConsentAt: deleteField(),
@@ -182,7 +183,7 @@ export function Profile() {
       }
 
       const profileUpdate = {
-        displayName: displayName || user.email || '',
+        displayName: sanitizeUserChosenDisplayName(displayName),
         email: user.email || '',
         updatedAt: new Date(),
       };

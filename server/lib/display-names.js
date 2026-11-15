@@ -90,3 +90,12 @@ export function resolveSyncedFirestoreDisplayName(authDisplayName, existingDispl
   }
   return '';
 }
+
+/** User-entered profile / signup display name — never persist an email string. */
+export function sanitizeUserChosenDisplayName(value) {
+  const trimmed = typeof value === 'string' ? value.trim() : '';
+  if (!trimmed || looksLikeEmail(trimmed)) {
+    return '';
+  }
+  return trimmed;
+}
