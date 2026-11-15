@@ -27,10 +27,13 @@ import {
 } from './acceptPendingInvitesLogic.js';
 import { handleSendPartyInviteRequest } from './sendPartyInviteHandler.js';
 import {
-  buildGiftSubmitterNotifyHtml,
-  hostDisplayNameForInvite,
   SEND_PARTY_INVITE_ERRORS,
 } from './sendPartyInviteLogic.js';
+import {
+  logNotifyGiftSubmitterFailure,
+  notifyGiftSubmittersForWinnerAddress,
+  resolveGiftSubmitterNotifyUpdate,
+} from './notifyGiftSubmitterLogic.js';
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -138,58 +141,32 @@ export const notifyGiftSubmitter = onDocumentUpdated(
       const before = event.data.before.data();
       const after = event.data.after.data();
 
-      // Check if shipping address was just added
-      if (!before.shippingAddress && after.shippingAddress) {
-        const userId = event.params.userId;
+      const { shouldNotify, emailMode } = resolveGiftSubmitterNotifyUpdate(before, after);
+      if (!shouldNotify || !emailMode) {
+        return;
+      }
 
-        // Find all gifts where this user is the winner
-        const giftsSnapshot = await db
-          .collection('gifts')
-          .where('winnerId', '==', userId)
-          .get();
-
-        if (giftsSnapshot.empty) return;
-
-        // Get user details
-        const userDoc = await db.collection('users').doc(userId).get();
-        const user = userDoc.data();
-
-        // For each gift, notify the submitter
-        for (const giftDoc of giftsSnapshot.docs) {
-          const gift = giftDoc.data();
-
-          // Get submitter's email
-          const submitterDoc = await db.collection('users').doc(gift.submitterId).get();
-          const submitter = submitterDoc.data();
-
-          if (!submitter?.email) continue;
-
-          // Send email to submitter with winner's address
-          const resendClient = getResend();
-          let fromEmail = resendFromEmail.value() || process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
+      const userId = event.params.userId;
+      await notifyGiftSubmittersForWinnerAddress(db, {
+        userId,
+        winnerUser: after,
+        shippingAddressRaw: after.shippingAddress,
+        emailMode,
+        getResend,
+        resolveFromEmail: () => {
+          let fromEmail =
+            resendFromEmail.value() ||
+            process.env.RESEND_FROM_EMAIL ||
+            'onboarding@resend.dev';
           fromEmail = fromEmail.trim();
           if (!fromEmail.includes('@')) {
             fromEmail = 'onboarding@resend.dev';
           }
-          const winnerDisplayName = hostDisplayNameForInvite(
-            userId,
-            user ?? {},
-          );
-          const html = buildGiftSubmitterNotifyHtml({
-            winnerDisplayName,
-            shippingAddressJson: JSON.stringify(after.shippingAddress, null, 2),
-          });
-
-          await resendClient.emails.send({
-            from: fromEmail,
-            to: submitter.email,
-            subject: 'Shipping Address for Your Gift',
-            html,
-          });
-        }
-      }
+          return fromEmail;
+        },
+      });
     } catch (error) {
-      console.error('Error notifying gift submitter:', error);
+      logNotifyGiftSubmitterFailure(error);
     }
   }
 );
