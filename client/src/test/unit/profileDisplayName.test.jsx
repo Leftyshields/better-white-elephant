@@ -4,7 +4,10 @@ import { MemoryRouter } from 'react-router-dom';
 import { Profile } from '../../pages/Profile.jsx';
 import {
   PROFILE_DISPLAY_NAME_EMAIL_ERROR,
+  PROFILE_DISPLAY_NAME_ERROR_ID,
   PROFILE_DISPLAY_NAME_HELPER,
+  PROFILE_DISPLAY_NAME_HELPER_ID,
+  PROFILE_DISPLAY_NAME_INPUT_ID,
   PROFILE_DISPLAY_NAME_PLACEHOLDER,
 } from '../../utils/profileDisplayNameCopy.js';
 import { PROFILE_SAVE_SUCCESS_MESSAGE } from '../../utils/shippingAddressCopy.js';
@@ -141,6 +144,32 @@ describe('Profile display name', () => {
       expect(screen.queryByText(PROFILE_SAVE_SUCCESS_MESSAGE)).not.toBeInTheDocument();
     },
   );
+
+  it('exposes a11y attributes and focuses input when @ name is blocked', async () => {
+    mockLoadedProfile({ displayName: 'Pat' });
+    await renderProfile();
+
+    const nameInput = screen.getByPlaceholderText(PROFILE_DISPLAY_NAME_PLACEHOLDER);
+    expect(nameInput).toHaveAttribute('id', PROFILE_DISPLAY_NAME_INPUT_ID);
+    expect(nameInput).toHaveAttribute('aria-describedby', PROFILE_DISPLAY_NAME_HELPER_ID);
+
+    fireEvent.change(nameInput, { target: { value: 'a@b.com' } });
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(nameInput).toHaveAttribute('aria-invalid', 'true');
+      expect(nameInput).toHaveAttribute(
+        'aria-describedby',
+        `${PROFILE_DISPLAY_NAME_HELPER_ID} ${PROFILE_DISPLAY_NAME_ERROR_ID}`,
+      );
+      expect(document.getElementById(PROFILE_DISPLAY_NAME_ERROR_ID)).toHaveTextContent(
+        PROFILE_DISPLAY_NAME_EMAIL_ERROR,
+      );
+    });
+    await waitFor(() => {
+      expect(document.activeElement).toBe(nameInput);
+    });
+  });
 
   it('saves a normal display name', async () => {
     mockLoadedProfile({ displayName: '' });

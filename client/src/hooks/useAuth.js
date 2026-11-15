@@ -15,7 +15,8 @@ import {
 import { auth, db } from '../utils/firebase.js';
 import { doc, setDoc, getDoc, deleteField } from 'firebase/firestore';
 import { trackLogin, trackSignUp } from '../utils/analytics.js';
-import { displayNameForFirestoreDoc } from '../utils/firestoreDisplayName.js';
+import { displayNameForFirestoreDoc, looksLikeEmail } from '../utils/firestoreDisplayName.js';
+import { PROFILE_DISPLAY_NAME_EMAIL_ERROR } from '../utils/profileDisplayNameCopy.js';
 
 export function useAuth() {
   const [user, setUser] = useState(null);
@@ -102,9 +103,14 @@ export function useAuth() {
 
   const signUpWithEmailAndPassword = async (email, password, displayName = null) => {
     try {
+      const trimmedName = typeof displayName === 'string' ? displayName.trim() : '';
+      if (trimmedName && looksLikeEmail(trimmedName)) {
+        return { success: false, error: PROFILE_DISPLAY_NAME_EMAIL_ERROR };
+      }
+
       const result = await createUserWithEmailAndPassword(auth, email, password);
-      if (displayName && result.user) {
-        await updateProfile(result.user, { displayName });
+      if (trimmedName && result.user) {
+        await updateProfile(result.user, { displayName: trimmedName });
       }
       return { success: true, user: result.user };
     } catch (error) {

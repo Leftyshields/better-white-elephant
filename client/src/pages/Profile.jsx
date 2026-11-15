@@ -2,7 +2,7 @@
  * User Profile Page
  * Allows users to update their shipping address and display name
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../hooks/useAuth.js';
 import { useNavigate } from 'react-router-dom';
 import { doc, getDoc, setDoc, updateDoc, deleteField } from 'firebase/firestore';
@@ -27,7 +27,10 @@ import { Modal } from '../components/ui/Modal.jsx';
 import { LockClosedIcon } from '@heroicons/react/24/outline';
 import {
   PROFILE_DISPLAY_NAME_EMAIL_ERROR,
+  PROFILE_DISPLAY_NAME_ERROR_ID,
   PROFILE_DISPLAY_NAME_HELPER,
+  PROFILE_DISPLAY_NAME_HELPER_ID,
+  PROFILE_DISPLAY_NAME_INPUT_ID,
   PROFILE_DISPLAY_NAME_PLACEHOLDER,
 } from '../utils/profileDisplayNameCopy.js';
 import { displayNameForFirestoreDoc, looksLikeEmail } from '../utils/firestoreDisplayName.js';
@@ -70,6 +73,7 @@ export function Profile() {
   const [showDeleteAddressConfirm, setShowDeleteAddressConfirm] = useState(false);
   const [persistedStoredAddress, setPersistedStoredAddress] = useState(null);
   const [displayNameEmailError, setDisplayNameEmailError] = useState(false);
+  const displayNameInputRef = useRef(null);
 
   const hasShippingFields = hasCompleteShippingFields(address);
   const saveDisabled = saving;
@@ -152,6 +156,7 @@ export function Profile() {
     const trimmedName = displayName.trim();
     if (trimmedName && looksLikeEmail(trimmedName)) {
       setDisplayNameEmailError(true);
+      queueMicrotask(() => displayNameInputRef.current?.focus());
       return null;
     }
     setDisplayNameEmailError(false);
@@ -316,18 +321,39 @@ export function Profile() {
         <form onSubmit={handleSubmit} className="bg-slate-900/60 backdrop-blur-xl border border-white/10 shadow-2xl rounded-2xl p-6 md:p-8 space-y-6">
         {/* Display Name */}
         <div>
-          <Input
-            label="Display Name"
+          <label
+            htmlFor={PROFILE_DISPLAY_NAME_INPUT_ID}
+            className="block text-sm font-medium text-slate-300 mb-1"
+          >
+            Display Name
+          </label>
+          <input
+            id={PROFILE_DISPLAY_NAME_INPUT_ID}
+            ref={displayNameInputRef}
+            type="text"
             value={displayName}
             onChange={(e) => {
               setDisplayNameEmailError(false);
               setDisplayName(e.target.value);
             }}
             placeholder={PROFILE_DISPLAY_NAME_PLACEHOLDER}
+            aria-invalid={displayNameEmailError ? true : undefined}
+            aria-describedby={
+              displayNameEmailError
+                ? `${PROFILE_DISPLAY_NAME_HELPER_ID} ${PROFILE_DISPLAY_NAME_ERROR_ID}`
+                : PROFILE_DISPLAY_NAME_HELPER_ID
+            }
+            className="w-full px-3 py-2 bg-slate-950/50 border border-slate-700 rounded-md shadow-sm focus:outline-none focus:ring-purple-500 focus:border-purple-500 text-white placeholder:text-slate-500"
           />
-          <p className="mt-1 text-sm text-slate-400">{PROFILE_DISPLAY_NAME_HELPER}</p>
+          <p id={PROFILE_DISPLAY_NAME_HELPER_ID} className="mt-1 text-sm text-slate-400">
+            {PROFILE_DISPLAY_NAME_HELPER}
+          </p>
           {displayNameEmailError && (
-            <p className="mt-1 text-sm text-amber-300" role="alert">
+            <p
+              id={PROFILE_DISPLAY_NAME_ERROR_ID}
+              className="mt-1 text-sm text-amber-300"
+              role="alert"
+            >
               {PROFILE_DISPLAY_NAME_EMAIL_ERROR}
             </p>
           )}
