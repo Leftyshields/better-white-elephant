@@ -38,6 +38,7 @@ import {
 } from '../utils/landingMarketingCopy.js';
 import {
   formatPartyStatus,
+  hostCanDeletePartyFromHome,
   partyEntryButtonLabel,
   PARTIES_LOAD_ERROR,
 } from '../utils/partyUiCopy.js';
@@ -763,7 +764,7 @@ export function Home() {
         {myParties.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {myParties.map((party) => {
-              const canDelete = (party.status === 'ENDED' || party.status === 'CANCELLED') && party.isAdmin;
+              const canDelete = hostCanDeletePartyFromHome(party);
               const participantCount = participantCounts[party.id] || 0;
               
               return (
