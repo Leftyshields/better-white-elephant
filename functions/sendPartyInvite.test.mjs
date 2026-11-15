@@ -22,7 +22,7 @@ import {
   pendingInviteBlocksSend,
   recipientIsExistingParticipant,
 } from './sendPartyInviteLogic.js';
-import { pickDisplayName } from './displayName.js';
+import { pickDisplayName } from './lib/display-names.js';
 import { handleSendPartyInviteRequest } from './sendPartyInviteHandler.js';
 
 test('buildGiftSubmitterNotifyHtml escapes winner display name and address body', () => {
@@ -50,7 +50,7 @@ test('copywriter strings for invalidPartyId, missingFields, and server error', (
   );
   assert.equal(
     SEND_PARTY_INVITE_ERRORS.sendInviteServerError,
-    "We couldn't send that invite. Try again in a moment.",
+    "We couldn't send that invite right now. Try again later.",
   );
 });
 
@@ -68,7 +68,7 @@ test('invite email uses anonymous intro when host has no usable name', () => {
     inviteLink: 'https://example.com/party/1',
   });
   assert.match(html, new RegExp(escapeHtml(PARTY_INVITE_INTRO_ANONYMOUS)));
-  assert.doesNotMatch(html, /has invited you to a White Elephant gift exchange party/);
+  assert.doesNotMatch(html, /White Elephant gift exchange party/);
 });
 
 test('invite email uses named intro when host has a usable name', () => {
@@ -79,7 +79,7 @@ test('invite email uses named intro when host has a usable name', () => {
     partyDateLabel: 'Soon',
     inviteLink: 'https://example.com/party/1',
   });
-  assert.match(html, /Sam has invited you to a White Elephant gift exchange party/);
+  assert.match(html, /Sam invited you to a Steal or Reveal game/);
 });
 
 test('escapeHtml neutralizes HTML injection in email body', () => {
@@ -137,6 +137,10 @@ test('sanitizeEmailSubjectPart removes control characters', () => {
   assert.equal(sanitizeEmailSubjectPart('a\u0000b'), 'ab');
 });
 
+test('sanitizeEmailSubjectPart strips Unicode line and paragraph separators', () => {
+  assert.equal(sanitizeEmailSubjectPart('a\u2028b\u2029c\u0085d'), 'abcd');
+});
+
 test('resolveClientUrl uses production origin outside emulator', () => {
   assert.equal(
     resolveClientUrl('https://localhost.attacker.com', null, {
@@ -148,6 +152,30 @@ test('resolveClientUrl uses production origin outside emulator', () => {
     resolveClientUrl('https://evil.com', 'https://evil.com', {
       functionsEmulator: false,
     }),
+    'https://stealorreveal.com',
+  );
+});
+
+test('resolveClientUrl rejects userinfo in emulator', () => {
+  assert.equal(
+    resolveClientUrl('https://user:pass@localhost:5173', null, { functionsEmulator: true }),
+    'https://stealorreveal.com',
+  );
+  assert.equal(
+    resolveClientUrl(null, 'https://evil:secret@127.0.0.1:5000/party', {
+      functionsEmulator: true,
+    }),
+    'https://stealorreveal.com',
+  );
+});
+
+test('resolveClientUrl rejects non-https origins except local http in emulator', () => {
+  assert.equal(
+    resolveClientUrl('http://example.com', null, { functionsEmulator: true }),
+    'https://stealorreveal.com',
+  );
+  assert.equal(
+    resolveClientUrl('ftp://localhost:5173', null, { functionsEmulator: true }),
     'https://stealorreveal.com',
   );
 });
@@ -452,6 +480,34 @@ test('handler rejects host hourly rate limit', async () => {
   );
   assert.equal(result.status, 429);
   assert.equal(result.body.message, SEND_PARTY_INVITE_ERRORS.rateLimitHostHour);
+});
+
+test('handler returns Copywriter server error when Resend fails', async () => {
+  const deps = makeMockDeps({
+    hostUid: 'host-uid',
+    seed: {
+      'parties/p1': { adminId: 'host-uid', title: 'Holiday' },
+      'users/host-uid': { displayName: 'Sam', email: 'host@example.com' },
+    },
+  });
+  deps.getResend = () => ({
+    emails: {
+      send: async () => ({
+        data: null,
+        error: { statusCode: 403, name: 'validation_error' },
+      }),
+    },
+  });
+  const result = await handleSendPartyInviteRequest(
+    {
+      body: { email: 'guest@example.com', partyId: 'p1' },
+      headers: { authorization: 'Bearer valid-host' },
+      get: () => undefined,
+    },
+    deps,
+  );
+  assert.equal(result.status, 500);
+  assert.equal(result.body.error, SEND_PARTY_INVITE_ERRORS.sendInviteServerError);
 });
 
 test('handler happy path sends email', async () => {

@@ -257,7 +257,7 @@ export async function handleSendPartyInviteRequest(req, deps) {
 
   const clientUrl = resolveClientUrl(req.get?.('origin'), req.get?.('referer'));
   const inviteLink = `${clientUrl}/party/${partyId}`;
-  const partyTitle = party.title || 'White Elephant Party';
+  const partyTitle = party.title || 'Steal or Reveal party';
   const partyDateLabel = party.date?.toDate
     ? party.date.toDate().toLocaleDateString()
     : 'TBD';
@@ -285,31 +285,14 @@ export async function handleSendPartyInviteRequest(req, deps) {
   });
 
   if (error) {
-    console.error('Resend error:', { statusCode: error.statusCode });
-
-    if (
-      error.statusCode === 403 ||
-      error.message?.includes('testing emails') ||
-      error.message?.includes('verified email')
-    ) {
-      const isTestingMode =
-        error.message?.includes('testing emails') ||
-        error.message?.includes('verified email');
-      return {
-        status: 403,
-        body: {
-          error: 'Email sending limited',
-          message: isTestingMode
-            ? 'Resend is in testing mode. You can only send emails to verified email addresses. To send to other recipients, verify a domain at resend.com/domains'
-            : 'Email sending is limited. Please verify your domain in Resend to send to all recipients.',
-          testingMode: isTestingMode,
-        },
-      };
-    }
+    console.error('Resend error:', {
+      code: error.statusCode ?? error.code,
+      name: error.name,
+    });
 
     return {
       status: 500,
-      body: { error: 'Failed to send email' },
+      body: { error: SEND_PARTY_INVITE_ERRORS.sendInviteServerError },
     };
   }
 

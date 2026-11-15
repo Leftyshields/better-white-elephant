@@ -69,12 +69,28 @@ export function pickHostNameForInvite(adminId, hostNameCandidate, ownerEmail) {
   return pickDisplayName(adminId, candidate);
 }
 
+/** Invite emails: Auth/Firestore user doc shape (displayName, name, email). */
+export function pickHostNameForInviteFromProfile(adminId, hostUserProfile) {
+  const profile = hostUserProfile ?? {};
+  const ownerEmail = typeof profile.email === 'string' ? profile.email : '';
+  let displayCandidate = profile.displayName;
+  if (displayNameMatchesEmailLocalPart(displayCandidate, ownerEmail)) {
+    displayCandidate = null;
+  }
+  return pickDisplayName(adminId, displayCandidate, profile.name);
+}
+
 /** Copywriter-approved invite intro when the host has no usable public name. */
 export const PARTY_INVITE_INTRO_ANONYMOUS =
   'Your host invited you to a Steal or Reveal game.';
 
+const UNICODE_HEADER_NAME_SEPARATORS = /\u2028|\u2029|\u0085/g;
+
 export function sanitizeUserChosenDisplayName(value) {
-  const trimmed = typeof value === 'string' ? value.trim() : '';
+  const trimmed =
+    typeof value === 'string'
+      ? value.replace(UNICODE_HEADER_NAME_SEPARATORS, '').trim()
+      : '';
   if (!trimmed || looksLikeEmail(trimmed)) {
     return '';
   }
@@ -103,5 +119,5 @@ export function buildPartyInviteIntroParagraph(safeHostName, adminId) {
   if (isSyntheticPlayerDisplayName(safeHostName, adminId)) {
     return `<p>${PARTY_INVITE_INTRO_ANONYMOUS}</p>`;
   }
-  return `<p>${safeHostName} has invited you to a White Elephant gift exchange party.</p>`;
+  return `<p>${safeHostName} invited you to a Steal or Reveal game.</p>`;
 }
