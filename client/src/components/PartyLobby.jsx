@@ -27,6 +27,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../utils/firebase.js';
 import { filterVisiblePendingInvites, canResendPartyInvite } from '../utils/pendingInvites.js';
+import { getStartGameFailureMessage, START_GAME_GENERIC_ERROR } from '../utils/startGameResponse.js';
 
 export function PartyLobby({ partyId, onStartGame }) {
   const { user } = useAuth();
@@ -419,15 +420,22 @@ export function PartyLobby({ partyId, onStartGame }) {
       });
 
       const data = await response.json();
+      const failureMessage = getStartGameFailureMessage(response, data);
+      if (failureMessage) {
+        trackError('start_game_failed', failureMessage, 'PartyLobby');
+        alert(failureMessage);
+        return;
+      }
+
       if (data.success) {
         // Track game start with participant count
         const participantCount = goingParticipants.length;
         trackStartGame(partyId, participantCount);
         onStartGame();
       } else {
-        const errorMsg = data.error || 'Unknown error';
+        const errorMsg = data.error || START_GAME_GENERIC_ERROR;
         trackError('start_game_failed', errorMsg, 'PartyLobby');
-        alert('Failed to start game: ' + errorMsg);
+        alert(errorMsg);
       }
     } catch (error) {
       console.error('Error starting game:', error);
@@ -917,7 +925,7 @@ export function PartyLobby({ partyId, onStartGame }) {
                             const totalCount = participants.length + displayedInvites.length;
                             return totalCount >= 2
                               ? `Great! You have ${totalCount} participants.`
-                              : `You need at least 2 participants to start. Currently: ${totalCount}`;
+                              : `You need at least 2 players to start. Currently: ${totalCount}`;
                           })()}
                         </p>
                       </div>

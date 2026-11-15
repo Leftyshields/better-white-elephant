@@ -11,6 +11,7 @@ import { scrapeGiftMetadata } from '../utils/scraper.js';
 import { saveGameState, loadGameState, deleteGameState } from '../utils/game-state-persistence.js';
 import { saveShippingFulfillmentSnapshot } from '../utils/shipping-fulfillment-snapshot.js';
 import { fetchWinnerShippingAddressForSender } from '../utils/winner-shipping-address.js';
+import { validateGameStartCounts } from '../utils/game-start-validation.js';
 
 const router = express.Router();
 
@@ -61,10 +62,6 @@ router.post('/start', async (req, res) => {
       ...participantConverter.fromFirestore(doc),
     }));
 
-    if (participants.length < 2) {
-      return res.status(400).json({ error: 'Need at least 2 participants to start' });
-    }
-
     // Fetch all gifts for this party
     const giftsSnapshot = await db
       .collection('gifts')
@@ -76,8 +73,15 @@ router.post('/start', async (req, res) => {
       ...giftConverter.fromFirestore(doc),
     }));
 
-    if (gifts.length < participants.length) {
-      return res.status(400).json({ error: 'Not enough gifts for all participants' });
+    const startCountValidation = validateGameStartCounts({
+      participantCount: participants.length,
+      giftCount: gifts.length,
+    });
+    if (!startCountValidation.valid) {
+      return res.status(400).json({
+        error: startCountValidation.error,
+        code: startCountValidation.code,
+      });
     }
 
     // Build turn order (randomly shuffled)
