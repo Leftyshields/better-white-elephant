@@ -4,7 +4,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { GameEngine } from '../engine.js';
-import { handlePickGift } from '../handlers/pick-gift.js';
+import {
+  handlePickGift,
+  PICK_GIFT_NOT_IN_WRAPPED_PILE,
+  PICK_GIFT_NOT_ON_TURN,
+} from '../handlers/pick-gift.js';
+import { END_TURN_GAME_NOT_FOUND } from '../utils/end-turn-guards.js';
 import { buildStandardState, createTestStore, mockIo } from './helpers/test-store.mjs';
 
 const PARTY_ID = 'party-pick-handler';
@@ -60,7 +65,7 @@ test('rejecting pick for id not in wrappedGifts: no action_started, save, or gam
   });
 
   assert.equal(socketErrors.length, 1);
-  assert.equal(socketErrors[0].message, 'Cannot pick gift: invalid action');
+  assert.equal(socketErrors[0].message, PICK_GIFT_NOT_IN_WRAPPED_PILE);
 
   const roomEvents = io.emissions.filter((e) => e.event !== 'error');
   assert.equal(
@@ -151,4 +156,69 @@ test('socket copy strings match Copywriter final text', async () => {
   });
 
   assert.equal(socketErrors2[0]?.message, MSG_ALREADY_OPEN);
+});
+
+test('missing game state returns shared game-not-found copy', async () => {
+  const store = createTestStore();
+  const socketErrors = [];
+  const socket = {
+    userId: 'p1',
+    emit(event, payload) {
+      if (event === 'error') socketErrors.push(payload);
+    },
+  };
+
+  await handlePickGift({
+    partyId: PARTY_ID,
+    giftId: 'g1',
+    userId: 'p1',
+    socket,
+    io: mockIo(),
+    isValidPartyId,
+    isValidGiftId,
+    verifyPartyMembership: async () => true,
+    loadGameState: (id) => store.loadGameState(id),
+    saveGameState: (id, s) => store.saveGameState(id, s),
+    GameEngine,
+    scheduleBotMove: null,
+  });
+
+  assert.equal(socketErrors[0]?.message, END_TURN_GAME_NOT_FOUND);
+});
+
+test('pick when not active player returns not-on-turn copy', async () => {
+  const store = createTestStore();
+  const turnOrder = ['p1', 'p2'];
+  const initial = buildStandardState({
+    partyId: PARTY_ID,
+    turnOrder,
+    currentTurnIndex: 0,
+    wrappedGifts: ['g-valid'],
+  });
+  await store.saveGameState(PARTY_ID, initial);
+
+  const socketErrors = [];
+  const socket = {
+    userId: 'p2',
+    emit(event, payload) {
+      if (event === 'error') socketErrors.push(payload);
+    },
+  };
+
+  await handlePickGift({
+    partyId: PARTY_ID,
+    giftId: 'g-valid',
+    userId: 'p2',
+    socket,
+    io: mockIo(),
+    isValidPartyId,
+    isValidGiftId,
+    verifyPartyMembership: async () => true,
+    loadGameState: (id) => store.loadGameState(id),
+    saveGameState: (id, s) => store.saveGameState(id, s),
+    GameEngine,
+    scheduleBotMove: null,
+  });
+
+  assert.equal(socketErrors[0]?.message, PICK_GIFT_NOT_ON_TURN);
 });

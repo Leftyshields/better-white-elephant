@@ -1,6 +1,13 @@
 /**
  * Socket pick-gift handler (testable; used by server.js).
  */
+import { END_TURN_GAME_NOT_FOUND } from '../utils/end-turn-guards.js';
+
+export const PICK_GIFT_NOT_ON_TURN =
+  'You can only open a gift on your own turn while the game is running.';
+export const PICK_GIFT_NOT_IN_WRAPPED_PILE =
+  "That gift isn't available to open. Pick a wrapped gift.";
+
 export async function handlePickGift({
   partyId,
   giftId,
@@ -28,12 +35,12 @@ export async function handlePickGift({
 
   const gameState = await loadGameState(partyId);
   if (!gameState) {
-    socket.emit('error', { message: 'Game not found' });
+    socket.emit('error', { message: END_TURN_GAME_NOT_FOUND });
     return;
   }
 
   if (gameState.partyId && gameState.partyId !== partyId) {
-    socket.emit('error', { message: 'Game state party ID mismatch' });
+    socket.emit('error', { message: END_TURN_GAME_NOT_FOUND });
     return;
   }
 
@@ -44,7 +51,7 @@ export async function handlePickGift({
   if (!engine.canPick(userId)) {
     const message = engine.playerHasGift(userId)
       ? "You already have a gift, so you can't open another one. Steal one instead, or skip your turn."
-      : 'Cannot pick gift: invalid action';
+      : PICK_GIFT_NOT_ON_TURN;
     socket.emit('error', { message });
     return;
   }
@@ -56,7 +63,7 @@ export async function handlePickGift({
   }
 
   if (!engine.wrappedGifts.includes(giftId)) {
-    socket.emit('error', { message: 'Cannot pick gift: invalid action' });
+    socket.emit('error', { message: PICK_GIFT_NOT_IN_WRAPPED_PILE });
     return;
   }
 
