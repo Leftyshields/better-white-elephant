@@ -72,13 +72,13 @@ export async function handlePickGift({
   newState.config = gameState.config;
   newState.partyId = partyId;
 
+  await saveGameState(partyId, newState);
+
   io.to(`party:${partyId}`).emit('action_started', {
     type: 'pick',
     giftId,
     playerId: userId,
   });
-
-  await saveGameState(partyId, newState);
   io.to(`party:${partyId}`).emit('game-updated', newState);
 
   if (scheduleBotMove) {
