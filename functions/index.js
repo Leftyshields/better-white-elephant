@@ -26,6 +26,10 @@ import {
   markPendingInvitesAcceptedForParticipantJoin,
 } from './acceptPendingInvitesLogic.js';
 import { handleSendPartyInviteRequest } from './sendPartyInviteHandler.js';
+import {
+  buildGiftSubmitterNotifyHtml,
+  hostDisplayNameForInvite,
+} from './sendPartyInviteLogic.js';
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -163,19 +167,20 @@ export const notifyGiftSubmitter = onDocumentUpdated(
           if (!fromEmail.includes('@')) {
             fromEmail = 'onboarding@resend.dev';
           }
+          const winnerDisplayName = hostDisplayNameForInvite(
+            userId,
+            user ?? {},
+          );
+          const html = buildGiftSubmitterNotifyHtml({
+            winnerDisplayName,
+            shippingAddressJson: JSON.stringify(after.shippingAddress, null, 2),
+          });
+
           await resendClient.emails.send({
             from: fromEmail,
             to: submitter.email,
             subject: 'Shipping Address for Your Gift',
-            html: `
-              <h1>Shipping Address</h1>
-              <p>The winner of your gift has provided their shipping address:</p>
-              <div style="background-color: #f3f4f6; padding: 16px; border-radius: 6px; margin: 16px 0;">
-                <p><strong>${user.displayName || 'Winner'}</strong></p>
-                <pre style="white-space: pre-wrap; font-family: sans-serif;">${JSON.stringify(after.shippingAddress, null, 2)}</pre>
-              </div>
-              <p>Please ship the gift to this address.</p>
-            `,
+            html,
           });
         }
       }

@@ -20,6 +20,8 @@ import {
   resolveClientUrl,
 } from './sendPartyInviteLogic.js';
 
+/** Rate-limit docs are written only via Admin SDK in Cloud Functions (no client rules). */
+
 function rateLimitHostRef(db, uid) {
   return db.collection('_rateLimits').doc('partyInviteHosts').collection('records').doc(uid);
 }

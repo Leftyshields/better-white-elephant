@@ -7,6 +7,7 @@ import {
   PARTY_INVITE_RATE_LIMITS,
   SEND_PARTY_INVITE_ERRORS,
   assertCallerIsPartyHost,
+  buildGiftSubmitterNotifyHtml,
   buildInviteEmailHtml,
   escapeHtml,
   getRateLimitBuckets,
@@ -18,6 +19,16 @@ import {
 } from './sendPartyInviteLogic.js';
 import { pickDisplayName } from './displayName.js';
 import { handleSendPartyInviteRequest } from './sendPartyInviteHandler.js';
+
+test('buildGiftSubmitterNotifyHtml escapes winner display name and address body', () => {
+  const html = buildGiftSubmitterNotifyHtml({
+    winnerDisplayName: '<img src=x onerror=alert(1)>',
+    shippingAddressJson: '{"line1":"</pre><script>"}',
+  });
+  assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/);
+  assert.doesNotMatch(html, /<img src=x/);
+  assert.match(html, /&lt;\/pre&gt;&lt;script&gt;/);
+});
 
 test('escapeHtml neutralizes HTML injection in email body', () => {
   const html = buildInviteEmailHtml({

@@ -149,6 +149,21 @@ export function buildInviteEmailHtml({
       `;
 }
 
+export function buildGiftSubmitterNotifyHtml({ winnerDisplayName, shippingAddressJson }) {
+  const safeName = escapeHtml(winnerDisplayName);
+  const safeAddress = escapeHtml(shippingAddressJson);
+
+  return `
+              <h1>Shipping Address</h1>
+              <p>The winner of your gift has provided their shipping address:</p>
+              <div style="background-color: #f3f4f6; padding: 16px; border-radius: 6px; margin: 16px 0;">
+                <p><strong>${safeName}</strong></p>
+                <pre style="white-space: pre-wrap; font-family: sans-serif;">${safeAddress}</pre>
+              </div>
+              <p>Please ship the gift to this address.</p>
+            `;
+}
+
 export function resolveClientUrl(origin, referer) {
   let clientUrl = 'https://stealorreveal.com';
   const source = origin || referer || '';
