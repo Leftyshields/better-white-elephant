@@ -35,6 +35,9 @@ export async function handlePickGift({
 
   try {
     const { newState } = await executePick(partyId, giftId, userId);
+    if (!newState || typeof newState !== 'object') {
+      throw new Error('Pick could not be applied');
+    }
 
     io.to(`party:${partyId}`).emit('action_started', {
       type: 'pick',

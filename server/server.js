@@ -13,7 +13,7 @@ import redisClient from './utils/redis.js';
 import { auth, db } from './config/firebase-admin.js';
 import admin from 'firebase-admin';
 import { checkAndMakeBotMove } from './utils/bot-utils.js';
-import { handlePickGift } from './handlers/pick-gift.js';
+import { onSocketPickGift } from './handlers/pick-gift-socket.js';
 import { incrementPartyReactionCount } from './utils/party-reaction-count.mjs';
 import { clientSafeSocketGameErrorMessage } from './utils/socket-error-copy.js';
 
@@ -270,13 +270,9 @@ io.on('connection', (socket) => {
   });
 
   // Handle game actions
-  socket.on('pick-gift', async ({ partyId, giftId }) => {
+  socket.on('pick-gift', async (payload) => {
     try {
-      await handlePickGift({
-        partyId,
-        giftId,
-        userId: socket.userId,
-        socket,
+      await onSocketPickGift(socket, payload, {
         io,
         isValidPartyId,
         isValidGiftId,

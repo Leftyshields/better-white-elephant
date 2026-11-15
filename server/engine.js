@@ -119,6 +119,7 @@ export class GameEngine {
    * Check if player can pick a wrapped gift
    */
   canPick(playerId) {
+    if (this.phase !== 'ACTIVE') return false;
     // CRITICAL: Use calculated active player (victim-first priority)
     const activePlayer = this.calculateActivePlayer();
     if (activePlayer !== playerId) return false;
@@ -133,6 +134,7 @@ export class GameEngine {
    * Check if gift is stealable
    */
   canSteal(giftId, playerId) {
+    if (this.phase !== 'ACTIVE') return false;
     // CRITICAL: Use calculated active player (victim-first priority)
     const activePlayer = this.calculateActivePlayer();
     if (activePlayer !== playerId) return false;

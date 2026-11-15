@@ -29,6 +29,19 @@ function buildConnection(store) {
         /* ignore */
       }
     },
+    async set(key, value, options = {}) {
+      if (options.NX && store.redis.has(key)) {
+        return null;
+      }
+      store.redis.set(key, value);
+      const partyId = key.replace(/^game:/, '');
+      try {
+        store.gameStates.set(partyId, JSON.parse(value));
+      } catch {
+        /* ignore */
+      }
+      return 'OK';
+    },
     multi() {
       let pending = null;
       return {

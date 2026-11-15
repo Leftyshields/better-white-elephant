@@ -3,6 +3,7 @@
  */
 import redisClient from './redis.js';
 import { loadGameState, saveGameState } from './game-state-persistence.js';
+import { runAtomicGameMutation } from './atomic-game-action.mjs';
 import { db } from '../config/firebase-admin.js';
 import admin from 'firebase-admin';
 import { isBot } from './bot-ids.js';
@@ -849,10 +850,6 @@ export async function forceBotMove(partyId, io) {
  */
 export async function forceBotSteal(partyId, io) {
   try {
-    // #region agent log
-    fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'bot-utils.js:forceBotSteal:entry',message:'forceBotSteal called',data:{partyId},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
-    
     // CRITICAL: Validate partyId
     if (!partyId || typeof partyId !== 'string') {
       throw new Error(`Invalid partyId: ${partyId}`);
@@ -879,10 +876,7 @@ export async function forceBotSteal(partyId, io) {
 
     // Check if current player is a bot
     const currentPlayerId = gameState.currentPlayerId;
-    // #region agent log
-    fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'bot-utils.js:forceBotSteal:afterLoad',message:'Game state loaded for steal',data:{currentPlayerId,phase:gameState.phase,turnAction:gameState.turnAction},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
-    
+
     if (!isBot(currentPlayerId)) {
       throw new Error(`Current player ${currentPlayerId} is not a bot`);
     }
@@ -905,17 +899,10 @@ export async function forceBotSteal(partyId, io) {
     const isLastIndex = gameState.currentTurnIndex === (gameState.turnQueue?.length - 1);
     const isPlayer1 = gameState.turnOrder && gameState.turnOrder[0] === currentPlayerId;
     const isPlayer1FinalTurn = isLastIndex && isPlayer1;
-    
-    // #region agent log
-    fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'bot-utils.js:forceBotSteal:beforeCheck',message:'Checking turnAction for steal',data:{currentPlayerId,isVictim,hasActed,isBoomerangPhase,isPlayer1FinalTurn,returnToStart,currentTurnIndex:gameState.currentTurnIndex,turnOrderLength:gameState.turnOrder?.length,turnActionMap:Array.from(turnActionMap.entries())},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
-    
+
     // Only block if they're not a victim AND they've already acted AND we're not in boomerang phase
     // In boomerang phase or Player 1's final turn, players can steal even after picking (swap mechanic)
     if (!isVictim && hasActed && !isBoomerangPhase && !isPlayer1FinalTurn) {
-      // #region agent log
-      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'bot-utils.js:forceBotSteal:blocked',message:'Bot already acted - blocking steal',data:{currentPlayerId,hasActed,isVictim,isBoomerangPhase,isPlayer1FinalTurn},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       throw new Error('Bot has already acted this turn');
     }
     
@@ -1039,102 +1026,70 @@ export async function forceBotSkip(partyId, io) {
 }
 
 /**
+ * Persist cleared bot turnAction via the same Redis WATCH/MULTI path as turn mutations.
+ */
+export async function atomicallyClearForcedBotTurnAction(partyId, botPlayerId) {
+  return runAtomicGameMutation(partyId, (gameState) => {
+    if (gameState.phase !== 'ACTIVE') {
+      throw new Error('Game is not active');
+    }
+    const turnActionMap = new Map(gameState.turnAction);
+    turnActionMap.set(botPlayerId, null);
+    gameState.turnAction = Array.from(turnActionMap.entries());
+    gameState.config = gameState.config || { maxSteals: 3, returnToStart: false };
+    return gameState;
+  });
+}
+
+/**
  * Force bot to pick a wrapped gift (for testing)
  */
 export async function forceBotPick(partyId, io) {
   try {
-    // #region agent log
-    fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'bot-utils.js:forceBotPick:entry',message:'forceBotPick called',data:{partyId,currentPlayerId:null},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
-    
-    // CRITICAL: Validate partyId
     if (!partyId || typeof partyId !== 'string') {
       throw new Error(`Invalid partyId: ${partyId}`);
     }
-    
-    // Load current game state
+
     const gameState = await loadGameState(partyId);
     if (!gameState) {
       throw new Error('Game state not found');
     }
-    
-    // CRITICAL: Validate partyId matches
+
     if (gameState.partyId && gameState.partyId !== partyId) {
       throw new Error(`Party ID mismatch: parameter ${partyId} does not match gameState.partyId ${gameState.partyId}`);
     }
-    
-    // Ensure partyId is set
+
     gameState.partyId = partyId;
 
-    // Check if game is active
     if (gameState.phase !== 'ACTIVE') {
       throw new Error('Game is not active');
     }
 
-    // Check if current player is a bot
     const currentPlayerId = gameState.currentPlayerId;
-    // #region agent log
-    fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'bot-utils.js:forceBotPick:afterLoad',message:'Game state loaded',data:{currentPlayerId,phase:gameState.phase,turnAction:gameState.turnAction,wrappedGiftsCount:gameState.wrappedGifts?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
-    
+
     if (!isBot(currentPlayerId)) {
       throw new Error(`Current player ${currentPlayerId} is not a bot`);
     }
 
-    // Check if bot has already acted this turn
-    // CRITICAL: If current player is a victim (currentVictim), they should always be able to act
-    // Their turnAction should be cleared, but even if there's stale data, allow forcing the action
     const turnActionMap = new Map(gameState.turnAction);
     const isVictim = gameState.currentVictim === currentPlayerId;
     const hasActed = turnActionMap.get(currentPlayerId);
-    // #region agent log
-    fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'bot-utils.js:forceBotPick:beforeCheck',message:'Checking turnAction state',data:{currentPlayerId,isVictim,hasActed,turnActionMap:Array.from(turnActionMap.entries())},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
-    
-    // Only block if they're not a victim AND they've already acted
+
     if (!isVictim && hasActed) {
-      // #region agent log
-      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'bot-utils.js:forceBotPick:blocked',message:'Bot already acted - throwing error',data:{currentPlayerId,hasActed},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'C'})}).catch(()=>{});
-      // #endregion
       throw new Error('Bot has already acted this turn');
     }
-    
-    // If they're a victim or have stale data, ensure turnAction is cleared
-    // CRITICAL: If we clear turnAction, we must save it even if we throw an error later
-    // Otherwise, the cleared state is lost and subsequent force operations will fail
-    let clearedTurnAction = false;
-    if (isVictim || hasActed) {
-      // Clear stale turnAction - the engine will handle setting it correctly
-      turnActionMap.set(currentPlayerId, null);
-      gameState.turnAction = Array.from(turnActionMap.entries());
-      clearedTurnAction = true;
-      // #region agent log
-      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'bot-utils.js:forceBotPick:cleared',message:'Cleared turnAction',data:{currentPlayerId,clearedTurnAction:gameState.turnAction},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
+
+    const mustClearTurnAction = isVictim || hasActed;
+    if (mustClearTurnAction) {
+      const { newState } = await atomicallyClearForcedBotTurnAction(partyId, currentPlayerId);
+      io.to(`party:${partyId}`).emit('game-updated', newState);
+      Object.assign(gameState, newState);
     }
 
-    // Check if there are wrapped gifts
     if (!gameState.wrappedGifts || gameState.wrappedGifts.length === 0) {
-      // #region agent log
-      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'bot-utils.js:forceBotPick:noGifts',message:'No wrapped gifts - checking if need to save cleared state',data:{currentPlayerId,turnActionCleared:clearedTurnAction,turnAction:gameState.turnAction},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
-      
-      // CRITICAL FIX: If we cleared turnAction, save it before throwing
-      // This ensures the cleared state persists even if the pick fails
-      if (clearedTurnAction) {
-        // #region agent log
-        fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'bot-utils.js:forceBotPick:savingClearedState',message:'Saving cleared turnAction before throwing error',data:{currentPlayerId,turnAction:gameState.turnAction},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'D'})}).catch(()=>{});
-        // #endregion
-        gameState.config = gameState.config || { maxSteals: 3, returnToStart: false };
-        await saveGameState(partyId, gameState);
-        // Broadcast the cleared state so clients are updated
-        io.to(`party:${partyId}`).emit('game-updated', gameState);
-      }
-      
       throw new Error('No wrapped gifts available');
     }
 
-    // Pick a random wrapped gift
     const giftId = gameState.wrappedGifts[Math.floor(Math.random() * gameState.wrappedGifts.length)];
 
     console.log(`🤖 [FORCED PICK] Bot ${currentPlayerId} picking gift ${giftId}`);
@@ -1147,11 +1102,7 @@ export async function forceBotPick(partyId, io) {
     scheduleAutoplayContinuation(partyId, newState, io, 'pick');
 
     return { success: true, action: 'pick', giftId };
-
   } catch (error) {
-    // #region agent log
-    fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'bot-utils.js:forceBotPick:catch',message:'Error in forceBotPick',data:{error:error.message,partyId},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'E'})}).catch(()=>{});
-    // #endregion
     console.error(`❌ Error forcing bot pick for party ${partyId}:`, error);
     throw error;
   }
