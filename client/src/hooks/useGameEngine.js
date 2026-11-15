@@ -11,6 +11,7 @@ import { io } from 'socket.io-client';
 import { auth } from '../utils/firebase.js';
 import { trackGameAction, trackGameComplete, trackError, trackEvent } from '../utils/analytics.js';
 import { SERVER_URL } from '../utils/config.js';
+import { canPlayerSkipTurn } from '../utils/skipTurnEligibility.js';
 
 export function useGameEngine(partyId) {
   const { user } = useAuth();
@@ -340,6 +341,29 @@ export function useGameEngine(partyId) {
     return Object.values(state.gifts).some(gift => gift.isWrapped);
   }, [isMyTurn, state.status, state.gifts]);
 
+  const canSkipTurn = useMemo(() => {
+    if (!isMyTurn || state.status !== 'PLAYING' || !user?.uid) {
+      return false;
+    }
+    return canPlayerSkipTurn({
+      gifts: state.gifts,
+      gameState: state.gameState,
+      currentTurnIndex: state.currentTurnIndex,
+      turnQueue: state.turnQueue,
+      userId: user.uid,
+      activePlayerId: state.activePlayerId,
+    });
+  }, [
+    isMyTurn,
+    state.status,
+    state.gifts,
+    state.gameState,
+    state.currentTurnIndex,
+    state.turnQueue,
+    state.activePlayerId,
+    user?.uid,
+  ]);
+
   const getStealBlockReason = useCallback((giftId) => {
     if (!isMyTurn || state.status !== 'PLAYING') {
       return null; // Not shown - not your turn
@@ -467,6 +491,7 @@ export function useGameEngine(partyId) {
     derived: {
       isMyTurn,
       canPick,
+      canSkipTurn,
       canSteal,
       getStealBlockReason,
     },

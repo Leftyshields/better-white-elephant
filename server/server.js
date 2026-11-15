@@ -432,6 +432,13 @@ io.on('connection', (socket) => {
         return;
       }
 
+      const { getEndTurnRejectionReason } = await import('./utils/end-turn-guards.js');
+      const endTurnRejection = getEndTurnRejectionReason(gameState, socket.userId);
+      if (endTurnRejection) {
+        socket.emit('error', { message: endTurnRejection });
+        return;
+      }
+
       // CRITICAL: Validate gameState.partyId matches partyId parameter
       if (gameState.partyId && gameState.partyId !== partyId) {
         console.error(`❌ CRITICAL: partyId mismatch in end-turn! Parameter: ${partyId}, gameState.partyId: ${gameState.partyId}`);
