@@ -34,5 +34,11 @@ describe('display name privacy regression', () => {
     expect(
       resolveSyncedFirestoreDisplayName(undefined, undefined),
     ).not.toMatch(/@/);
+    expect(resolveSyncedFirestoreDisplayName('full@email.com', 'Name')).toBe(
+      'Name',
+    );
+    expect(resolveSyncedFirestoreDisplayName('full@email.com', 'other@x.com')).toBe(
+      '',
+    );
   });
 });

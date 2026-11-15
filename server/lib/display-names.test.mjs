@@ -50,6 +50,9 @@ describe('display name privacy', () => {
     assert.equal(resolveSyncedFirestoreDisplayName(null, undefined), '');
     assert.equal(resolveSyncedFirestoreDisplayName('  ', ' kept '), 'kept');
     assert.equal(resolveSyncedFirestoreDisplayName('Profile', 'legacy.local'), 'Profile');
+    assert.equal(resolveSyncedFirestoreDisplayName('user@auth.com', ''), '');
+    assert.equal(resolveSyncedFirestoreDisplayName('', 'stored@email.com'), '');
+    assert.equal(resolveSyncedFirestoreDisplayName('stored@email.com', 'Backup Name'), 'Backup Name');
   });
 
   test('sanitizeUserChosenDisplayName rejects full email strings', () => {

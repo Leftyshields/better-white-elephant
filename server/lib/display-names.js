@@ -80,12 +80,12 @@ export function pickHostNameForInvite(adminId, hostNameCandidate, ownerEmail) {
  */
 export function resolveSyncedFirestoreDisplayName(authDisplayName, existingDisplayName) {
   const fromAuth = typeof authDisplayName === 'string' ? authDisplayName.trim() : '';
-  if (fromAuth) {
+  if (fromAuth && !looksLikeEmail(fromAuth)) {
     return fromAuth;
   }
   const fromExisting =
     typeof existingDisplayName === 'string' ? existingDisplayName.trim() : '';
-  if (fromExisting) {
+  if (fromExisting && !looksLikeEmail(fromExisting)) {
     return fromExisting;
   }
   return '';
