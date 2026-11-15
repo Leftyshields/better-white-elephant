@@ -2,7 +2,12 @@
  * Test setup file for Vitest
  * Configures testing environment and global mocks
  */
+import { ReadableStream } from 'node:stream/web';
 import { expect, afterEach, vi } from 'vitest';
+
+if (typeof globalThis.ReadableStream === 'undefined') {
+  globalThis.ReadableStream = ReadableStream;
+}
 import { cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 
