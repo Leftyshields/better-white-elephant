@@ -10,7 +10,7 @@ import { db } from '../utils/firebase.js';
 import { useAuth } from '../hooks/useAuth.js';
 import { apiRequest } from '../utils/api.js';
 import { filterVisiblePendingInvites } from '../utils/pendingInvites.js';
-import { pickHostNameForInvite } from '../../../server/lib/display-names.js';
+import { postSendPartyInvite } from '../utils/sendPartyInvite.js';
 
 export function PartyManagement({ party, participants, pendingInvites = [] }) {
   const { user } = useAuth();
@@ -186,26 +186,9 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
 
       // Try to send email, but don't worry if it fails
       try {
-        const functionUrl =
-          import.meta.env.VITE_FUNCTIONS_URL ||
-          'https://us-central1-better-white-elephant.cloudfunctions.net/sendPartyInvite';
-
-        const hostName = pickHostNameForInvite(
-          user?.uid,
-          user?.displayName,
-          user?.email,
-        );
-
-        await fetch(functionUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            email: emailLower,
-            partyId: party.id,
-            hostName,
-          }),
+        await postSendPartyInvite(user, {
+          email: emailLower,
+          partyId: party.id,
         });
         // Don't care about response - just try to send
       } catch (emailError) {
@@ -279,31 +262,14 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
 
     setSendingInvites(true);
     try {
-      const functionUrl =
-        import.meta.env.VITE_FUNCTIONS_URL ||
-        'https://us-central1-better-white-elephant.cloudfunctions.net/sendPartyInvite';
-
-      const hostName = pickHostNameForInvite(
-        user?.uid,
-        user?.displayName,
-        user?.email,
-      );
-
       let successCount = 0;
       let failedList = [];
 
       for (const invite of pendingList) {
         try {
-          const response = await fetch(functionUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              email: invite.email,
-              partyId: party.id,
-              hostName,
-            }),
+          const response = await postSendPartyInvite(user, {
+            email: invite.email,
+            partyId: party.id,
           });
 
           if (response.ok) {

@@ -179,5 +179,10 @@ service cloud.firestore {
       // This enables collectionGroup queries to find parties where the user is a participant
       allow read: if isAuthenticated() && participantId == request.auth.uid;
     }
+
+    // Invite rate-limit counters: Cloud Functions (Admin SDK) only
+    match /_rateLimits/{document=**} {
+      allow read, write: if false;
+    }
   }
 }

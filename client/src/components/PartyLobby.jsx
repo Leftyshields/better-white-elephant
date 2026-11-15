@@ -8,6 +8,7 @@ import { Button } from './ui/Button.jsx';
 import { Input } from './ui/Input.jsx';
 import { Modal } from './ui/Modal.jsx';
 import { scrapeGiftUrl, apiRequest } from '../utils/api.js';
+import { postSendPartyInvite } from '../utils/sendPartyInvite.js';
 import { PartyManagement } from './PartyManagement.jsx';
 import { GiftCard } from './GiftCard.jsx';
 import { trackSubmitGift, trackStartGame, trackInviteSent, trackParticipantJoin, trackError, trackGameAbandoned } from '../utils/analytics.js';
@@ -28,8 +29,6 @@ import {
 import { db } from '../utils/firebase.js';
 import { filterVisiblePendingInvites, canResendPartyInvite } from '../utils/pendingInvites.js';
 import { getStartGameFailureMessage, START_GAME_GENERIC_ERROR } from '../utils/startGameResponse.js';
-import { pickHostNameForInvite } from '../../../server/lib/display-names.js';
-
 export function PartyLobby({ partyId, onStartGame }) {
   const { user } = useAuth();
   const { party, participants, pendingInvites, gifts, loading } = useParty(partyId);
@@ -464,27 +463,9 @@ export function PartyLobby({ partyId, onStartGame }) {
     }
 
     try {
-      // Get the Firebase Function URL
-      const functionUrl = import.meta.env.VITE_FUNCTIONS_URL || 
-        'https://us-central1-better-white-elephant.cloudfunctions.net/sendPartyInvite';
-      
-      // Get host name from user
-      const hostName = pickHostNameForInvite(
-        user?.uid,
-        user?.displayName,
-        user?.email,
-      );
-
-      const response = await fetch(functionUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: inviteEmail.trim(),
-          partyId,
-          hostName,
-        }),
+      const response = await postSendPartyInvite(user, {
+        email: inviteEmail.trim(),
+        partyId,
       });
 
       const data = await response.json();
@@ -542,26 +523,9 @@ export function PartyLobby({ partyId, onStartGame }) {
 
       // Try to send email and provide feedback
       try {
-        const functionUrl =
-          import.meta.env.VITE_FUNCTIONS_URL ||
-          'https://us-central1-better-white-elephant.cloudfunctions.net/sendPartyInvite';
-
-        const hostName = pickHostNameForInvite(
-          user?.uid,
-          user?.displayName,
-          user?.email,
-        );
-
-        const emailResponse = await fetch(functionUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            email: emailLower,
-            partyId,
-            hostName,
-          }),
+        const emailResponse = await postSendPartyInvite(user, {
+          email: emailLower,
+          partyId,
         });
 
         if (emailResponse.ok) {
@@ -1073,22 +1037,9 @@ export function PartyLobby({ partyId, onStartGame }) {
                                     variant="secondary"
                                     onClick={async () => {
                                       try {
-                                        const functionUrl =
-                                          import.meta.env.VITE_FUNCTIONS_URL ||
-                                          'https://us-central1-better-white-elephant.cloudfunctions.net/sendPartyInvite';
-                                        const hostName = pickHostNameForInvite(
-                                          user?.uid,
-                                          user?.displayName,
-                                          user?.email,
-                                        );
-                                        const response = await fetch(functionUrl, {
-                                          method: 'POST',
-                                          headers: { 'Content-Type': 'application/json' },
-                                          body: JSON.stringify({
-                                            email: invite.email,
-                                            partyId,
-                                            hostName,
-                                          }),
+                                        const response = await postSendPartyInvite(user, {
+                                          email: invite.email,
+                                          partyId,
                                         });
                                         
                                         const data = await response.json();

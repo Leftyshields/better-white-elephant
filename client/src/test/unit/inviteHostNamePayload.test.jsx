@@ -1,10 +1,9 @@
 /**
- * Invite requests must not send the host email local-part as hostName.
+ * Invite requests must not send client hostName (server resolves display name).
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { PartyLobby } from '../../components/PartyLobby.jsx';
-import { pickHostNameForInvite } from '../../../../server/lib/display-names.js';
 
 const HOST_UID = 'invite-host-uid1234';
 const PARTY_ID = 'invite-privacy-party';
@@ -72,7 +71,7 @@ vi.mock('firebase/firestore', () => {
   };
 });
 
-describe('PartyLobby invite hostName payload', () => {
+describe('PartyLobby invite auth payload', () => {
   beforeEach(() => {
     vi.stubGlobal('alert', vi.fn());
     vi.stubGlobal('fetch', fetchMock);
@@ -87,7 +86,7 @@ describe('PartyLobby invite hostName payload', () => {
         uid: HOST_UID,
         displayName: '',
         email: 'shouldnot.leak@example.com',
-        getIdToken: vi.fn(),
+        getIdToken: vi.fn().mockResolvedValue('fake-id-token'),
       },
     });
     usePartyMock.mockReturnValue({
@@ -107,7 +106,7 @@ describe('PartyLobby invite hostName payload', () => {
     });
   });
 
-  it('sends a non-email-local hostName when resending a failed invite', async () => {
+  it('sends only email and partyId with Authorization when resending invite', async () => {
     usePartyMock.mockReturnValue({
       party: {
         id: PARTY_ID,
@@ -147,9 +146,11 @@ describe('PartyLobby invite hostName payload', () => {
 
     const [, requestInit] = fetchMock.mock.calls[0];
     const body = JSON.parse(requestInit.body);
-    expect(body.hostName).not.toBe('shouldnot.leak');
-    expect(body.hostName).toBe(
-      pickHostNameForInvite(HOST_UID, '', 'shouldnot.leak@example.com'),
-    );
+    expect(body).toEqual({
+      email: 'guest@example.com',
+      partyId: PARTY_ID,
+    });
+    expect(body.hostName).toBeUndefined();
+    expect(requestInit.headers.Authorization).toBe('Bearer fake-id-token');
   });
 });
