@@ -21,7 +21,10 @@ import {
   dedupeOperationsByDocumentPath,
   getAllDocumentsFromQuery,
 } from './dataRetentionBatch.js';
-import { markPendingInvitesAcceptedForParticipantJoin } from './acceptPendingInvitesLogic.js';
+import {
+  logAcceptInviteOnParticipantJoinFailure,
+  markPendingInvitesAcceptedForParticipantJoin,
+} from './acceptPendingInvitesLogic.js';
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -171,9 +174,7 @@ export const acceptInviteOnParticipantJoin = onDocumentCreated(
         participantId
       );
     } catch (error) {
-      console.error(
-        `acceptInviteOnParticipantJoin failed partyId=${partyId} participantId=${participantId}: ${error?.message ?? 'unknown error'}`
-      );
+      logAcceptInviteOnParticipantJoinFailure(partyId, participantId, error);
     }
   }
 );
