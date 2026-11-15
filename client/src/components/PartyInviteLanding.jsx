@@ -42,7 +42,7 @@ export function PartyInviteLanding({ partyId }) {
               if (hostDoc.exists()) {
                 const hostData = hostDoc.data();
                 // Only use displayName/email if available, don't access shippingAddress
-                setHostName(hostData.displayName || hostData.email || 'Party Host');
+                setHostName(hostData.displayName || 'Party Host');
               } else {
                 setHostName('Party Host');
               }

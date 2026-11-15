@@ -34,8 +34,8 @@ service cloud.firestore {
       allow create: if isOwner(userId);
       allow update: if isOwner(userId);
       
-      // Public single-document reads for invite/party display (no shippingAddress on document).
-      allow get: if !resource.data.keys().hasAny(['shippingAddress']);
+      // Public single-document reads for invite/party display (displayName only — no PII fields).
+      allow get: if !resource.data.keys().hasAny(['shippingAddress', 'email']);
     }
     
     // Parties collection

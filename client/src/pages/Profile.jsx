@@ -120,7 +120,6 @@ export function Profile() {
           setHadGrantedSenderShareConsent(false);
           await setDoc(doc(db, 'users', user.uid), {
             displayName: user.displayName || '',
-            email: user.email || '',
             createdAt: new Date(),
             updatedAt: new Date(),
           });
@@ -149,7 +148,6 @@ export function Profile() {
     try {
       const profileUpdate = {
         displayName: displayName || user.email || '',
-        email: user.email || '',
         updatedAt: new Date(),
         shippingAddressSenderShareConsentAt: deleteField(),
       };
@@ -183,7 +181,6 @@ export function Profile() {
 
       const profileUpdate = {
         displayName: displayName || user.email || '',
-        email: user.email || '',
         updatedAt: new Date(),
       };
 

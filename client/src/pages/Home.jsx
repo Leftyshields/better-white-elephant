@@ -359,7 +359,6 @@ export function Home() {
           try {
             await setDoc(doc(db, 'users', result.user.uid), {
               displayName: displayName || result.user.email || '',
-              email: result.user.email || '',
               shippingAddress: shippingAddress,
               createdAt: new Date(),
               updatedAt: new Date(),

@@ -54,7 +54,6 @@ const ownerProfile = {
 
 const publicProfile = {
   displayName: 'Public Host',
-  email: 'host@example.com',
 };
 
 /** @type {import('@firebase/rules-unit-testing').RulesTestEnvironment} */
@@ -111,6 +110,12 @@ describe('users collection — owner access', () => {
       }),
     );
   });
+
+  it('owner can read their own profile when it still contains email (legacy)', async () => {
+    const db = authedDb(OTHER_ID);
+    const snap = await assertSucceeds(getDoc(doc(db, 'users', OTHER_ID)));
+    assert.strictEqual(snap.data().email, 'other@example.com');
+  });
 });
 
 describe('users collection — non-owner single-document reads', () => {
@@ -124,11 +129,29 @@ describe('users collection — non-owner single-document reads', () => {
     await assertFails(getDoc(doc(db, 'users', VICTIM_ID)));
   });
 
-  it('unauthenticated user can get a profile with no shippingAddress (public invite display)', async () => {
+  it('unauthenticated user can get a profile with no shippingAddress or email (public invite display)', async () => {
     const db = unauthedDb();
     const snap = await assertSucceeds(getDoc(doc(db, 'users', 'public-host')));
     assert.strictEqual(snap.exists(), true);
     assert.strictEqual(snap.data().displayName, 'Public Host');
+    assert.strictEqual(snap.data().email, undefined);
+  });
+
+  it('unauthenticated user cannot get an addressless profile that still has email (legacy docs)', async () => {
+    const db = unauthedDb();
+    await assertFails(getDoc(doc(db, 'users', 'email-only-victim')));
+  });
+
+  it('authenticated co-participant cannot read email on a legacy addressless profile', async () => {
+    const db = authedDb(OTHER_ID);
+    await assertFails(getDoc(doc(db, 'users', 'email-only-victim')));
+  });
+
+  it('authenticated co-participant can read a display-only profile (party/host name)', async () => {
+    const db = authedDb(OTHER_ID);
+    const snap = await assertSucceeds(getDoc(doc(db, 'users', 'public-host')));
+    assert.strictEqual(snap.data().displayName, 'Public Host');
+    assert.strictEqual(snap.data().email, undefined);
   });
 });
 

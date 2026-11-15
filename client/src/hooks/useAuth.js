@@ -13,7 +13,7 @@ import {
   signOut as firebaseSignOut,
 } from 'firebase/auth';
 import { auth, db } from '../utils/firebase.js';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, deleteField } from 'firebase/firestore';
 import { trackLogin, trackSignUp } from '../utils/analytics.js';
 
 export function useAuth() {
@@ -37,7 +37,7 @@ export function useAuth() {
           // Update or create user document with Auth data
           await setDoc(userDocRef, {
             displayName: user.displayName || existingData.displayName || user.email?.split('@')[0] || '',
-            email: user.email || existingData.email || '',
+            email: deleteField(),
             // Preserve existing shippingAddress if it exists
             shippingAddress: existingData.shippingAddress || null,
             // Preserve createdAt if document exists, otherwise set it
