@@ -103,7 +103,7 @@ function buildMockDb({
     },
     collectionGroup(name) {
       throw new Error(
-        `collectionGroup('${name}') must not be used — party-scoped access only`,
+        `collectionGroup('${name}') must not be used - party-scoped access only`,
       );
     },
   };

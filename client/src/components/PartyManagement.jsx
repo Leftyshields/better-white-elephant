@@ -672,7 +672,7 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
                     <p className="font-medium text-white break-words">
                       {userNames[participant.id] && userNames[participant.id] !== participant.id
                         ? userNames[participant.id]
-                        : `User ${participant.id.slice(0, 8)}...`}
+                        : `Player ${participant.id.slice(0, 8)}`}
                     </p>
                         {isAdmin && (
                           <span className="text-xs bg-indigo-600/30 text-indigo-300 px-2 py-1 rounded border border-indigo-500/30">

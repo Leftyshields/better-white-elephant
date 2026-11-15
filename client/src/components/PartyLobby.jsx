@@ -89,7 +89,7 @@ export function PartyLobby({ partyId, onStartGame }) {
         // Fallback: use participant IDs
         const names = {};
         participants.forEach(p => {
-          names[p.id] = `User ${p.id.slice(0, 8)}`;
+          names[p.id] = `Player ${p.id.slice(0, 8)}`;
         });
         setUserNames(names);
       }
@@ -994,7 +994,7 @@ export function PartyLobby({ partyId, onStartGame }) {
                               <div className="flex items-center gap-3">
                                 <div>
                                   <span className="text-white font-medium flex items-center gap-2">
-                                    {displayName || `User ${participant.id.slice(0, 8)}`}
+                                    {displayName || `Player ${participant.id.slice(0, 8)}`}
                                     {isBot && (
                                       <span className="text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded border border-purple-500/30">
                                         🤖 Bot
@@ -1487,7 +1487,7 @@ export function PartyLobby({ partyId, onStartGame }) {
                                   const isBot = userIsBot[participant.id] || participant.id.startsWith('bot_');
                                   const displayName = userNames[participant.id] && userNames[participant.id] !== participant.id 
                   ? userNames[participant.id] 
-                                    : `User ${participant.id.slice(0, 8)}`;
+                                    : `Player ${participant.id.slice(0, 8)}`;
             
             return (
                                     <div

@@ -323,7 +323,7 @@ export function GameBoard({ partyId, onEndTurn }) {
     const getWinnerName = (ownerId) => {
       if (!ownerId) return 'No Winner';
       if (ownerId === user?.uid) return 'You';
-      return userNames[ownerId] || `User ${ownerId.slice(0, 8)}`;
+      return userNames[ownerId] || `Player ${ownerId.slice(0, 8)}`;
     };
 
     return (
@@ -857,7 +857,7 @@ export function GameBoard({ partyId, onEndTurn }) {
     const getWinnerName = (ownerId) => {
       if (!ownerId) return 'No Winner';
       if (ownerId === user?.uid) return 'You';
-      return userNames[ownerId] || `User ${ownerId.slice(0, 8)}`;
+      return userNames[ownerId] || `Player ${ownerId.slice(0, 8)}`;
     };
 
     // When game is ended, use gift.winnerId from Firestore OR unwrappedMap from gameState
