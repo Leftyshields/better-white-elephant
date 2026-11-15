@@ -79,19 +79,67 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data).affectedKeys()
         .hasOnly(['url', 'title', 'image', 'price', 'updatedAt']);
     }
+
+    function validUserDisplayName(name) {
+      return name is string && name.size() <= 64;
+    }
+
+    function validUserEmail(email) {
+      return email is string && email.size() <= 320;
+    }
+
+    function validShippingAddress(addr) {
+      return addr == null
+        || (
+          addr is map
+          && addr.keys().hasOnly(['name', 'street', 'city', 'state', 'zip', 'country'])
+          && (!addr.keys().hasAny(['name']) || (addr.name is string && addr.name.size() <= 100))
+          && (!addr.keys().hasAny(['street']) || (addr.street is string && addr.street.size() <= 200))
+          && (!addr.keys().hasAny(['city']) || (addr.city is string && addr.city.size() <= 100))
+          && (!addr.keys().hasAny(['state']) || (addr.state is string && addr.state.size() <= 50))
+          && (!addr.keys().hasAny(['zip']) || (addr.zip is string && addr.zip.size() <= 20))
+          && (!addr.keys().hasAny(['country']) || (addr.country is string && addr.country.size() <= 60))
+        );
+    }
+
+    function validShippingConsentTimestamp() {
+      return !request.resource.data.keys().hasAny(['shippingAddressSenderShareConsentAt'])
+        || request.resource.data.shippingAddressSenderShareConsentAt is timestamp;
+    }
+
+    function userProfileWritableKeys() {
+      return [
+        'displayName', 'email', 'shippingAddress', 'shippingAddressSenderShareConsentAt',
+        'createdAt', 'updatedAt',
+      ];
+    }
+
+    function userCreateAllowed() {
+      return request.resource.data.keys().hasOnly(userProfileWritableKeys())
+        && validUserDisplayName(request.resource.data.displayName)
+        && validUserEmail(request.resource.data.email)
+        && validShippingAddress(request.resource.data.get('shippingAddress', null))
+        && validShippingConsentTimestamp();
+    }
+
+    function userUpdateAllowed() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return changed.hasOnly(userProfileWritableKeys())
+        && (!changed.hasAny(['displayName']) || validUserDisplayName(request.resource.data.displayName))
+        && (!changed.hasAny(['email']) || validUserEmail(request.resource.data.email))
+        && (!changed.hasAny(['shippingAddress'])
+            || validShippingAddress(request.resource.data.get('shippingAddress', null)))
+        && (!changed.hasAny(['shippingAddressSenderShareConsentAt']) || validShippingConsentTimestamp());
+    }
     
     // Users collection
     match /users/{userId} {
-      // Users can read their own profile (get and list own document in queries)
+      // Owner-only reads: email, shippingAddress, and profile fields are never public.
       allow get: if isOwner(userId);
       allow list: if isOwner(userId);
       
-      // Users can create/update their own profile
-      allow create: if isOwner(userId);
-      allow update: if isOwner(userId);
-      
-      // Public single-document reads for invite/party display (no shippingAddress on document).
-      allow get: if !resource.data.keys().hasAny(['shippingAddress']);
+      allow create: if isOwner(userId) && userCreateAllowed();
+      allow update: if isOwner(userId) && userUpdateAllowed();
     }
     
     // Parties collection
