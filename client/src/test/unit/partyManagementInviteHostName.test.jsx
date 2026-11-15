@@ -1,10 +1,9 @@
 /**
- * PartyManagement invite requests must not send the host email local-part as hostName.
+ * PartyManagement invite requests must not send hostName (server resolves host display name).
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { PartyManagement } from '../../components/PartyManagement.jsx';
-import { pickHostNameForInvite } from '../../../../server/lib/display-names.js';
 
 const HOST_UID = 'mgmt-host-uid1234';
 const PARTY_ID = 'mgmt-party-id';
@@ -36,7 +35,7 @@ vi.mock('firebase/firestore', () => ({
   collection: vi.fn(),
 }));
 
-describe('PartyManagement invite hostName payload', () => {
+describe('PartyManagement invite auth payload', () => {
   beforeEach(() => {
     vi.stubGlobal('alert', vi.fn());
     vi.stubGlobal('fetch', fetchMock);
@@ -48,11 +47,12 @@ describe('PartyManagement invite hostName payload', () => {
         uid: HOST_UID,
         displayName: '',
         email: 'mgmt.leak@example.com',
+        getIdToken: vi.fn().mockResolvedValue('fake-id-token'),
       },
     });
   });
 
-  it('sends a safe hostName when adding a person and sending invite', async () => {
+  it('sends only email and partyId with Authorization (no client hostName)', async () => {
     const party = {
       id: PARTY_ID,
       adminId: HOST_UID,
@@ -71,10 +71,9 @@ describe('PartyManagement invite hostName payload', () => {
     fireEvent.click(screen.getByRole('button', { name: /Manage Party/i }));
     fireEvent.click(screen.getByRole('button', { name: /^Guests$/i }));
     fireEvent.click(screen.getByRole('button', { name: /Add Person/i }));
-    fireEvent.change(
-      screen.getByPlaceholderText('friend@example.com'),
-      { target: { value: 'friend@example.com' } },
-    );
+    fireEvent.change(screen.getByPlaceholderText('friend@example.com'), {
+      target: { value: 'friend@example.com' },
+    });
     fireEvent.click(screen.getByRole('button', { name: /^Add$/i }));
 
     await waitFor(() => {
@@ -83,10 +82,11 @@ describe('PartyManagement invite hostName payload', () => {
 
     const [, requestInit] = fetchMock.mock.calls[0];
     const body = JSON.parse(requestInit.body);
-    expect(body.hostName).not.toBe('mgmt.leak');
-    expect(body.hostName).not.toContain('@');
-    expect(body.hostName).toBe(
-      pickHostNameForInvite(HOST_UID, '', 'mgmt.leak@example.com'),
-    );
+    expect(body).toEqual({
+      email: 'friend@example.com',
+      partyId: PARTY_ID,
+    });
+    expect(body.hostName).toBeUndefined();
+    expect(requestInit.headers.Authorization).toBe('Bearer fake-id-token');
   });
 });
