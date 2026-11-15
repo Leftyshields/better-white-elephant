@@ -16,6 +16,7 @@ export function Contact() {
     subject: '',
     message: '',
     type: typeParam || 'general', // 'general', 'account', 'security', 'bug'
+    company: '',
   });
   
   // Pre-fill bug report info if coming from bug report link
@@ -110,10 +111,9 @@ ${timestamp}
           subject: formData.subject.trim(),
           message: formData.message.trim(),
           type: formData.type,
+          company: formData.company.trim(),
         }),
       });
-
-      const data = await response.json();
 
       if (response.ok) {
         setSubmitStatus('success');
@@ -124,36 +124,21 @@ ${timestamp}
           subject: '',
           message: '',
           type: 'general',
+          company: '',
         });
       } else {
         setSubmitStatus('error');
-        let errorMsg = data.error || 'Unknown error';
-        if (data.message) {
-          errorMsg = data.message; // Use the full message from server
-        } else if (data.details?.message) {
-          errorMsg = data.details.message;
-        }
-        
-        // Special handling for Resend testing mode
-        if (data.testingMode || data.message?.includes('testing mode') || data.message?.includes('verified email')) {
-          errorMsg = "We couldn't send that just now. Try again in a few minutes, or use a different email address.";
-        }
-        
-        setErrorMessage(errorMsg);
+        setErrorMessage(
+          "We couldn't send your message. Try again in a few minutes.",
+        );
       }
     } catch (error) {
       console.error('Error sending contact form:', error);
       setSubmitStatus('error');
       
-      // Provide helpful error messages
-      let errorMsg = 'Failed to send message. ';
-      if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-        errorMsg = 'The email service is not available right now. Try again in a few minutes.';
-      } else {
-        errorMsg += error.message;
-      }
-      
-      setErrorMessage(errorMsg);
+      setErrorMessage(
+        "We couldn't send your message. Try again in a few minutes.",
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -184,6 +169,17 @@ ${timestamp}
         {/* Contact Form */}
         <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-8">
           <form onSubmit={handleSubmit} className="space-y-6">
+            <input
+              type="text"
+              name="company"
+              value={formData.company}
+              onChange={handleChange}
+              autoComplete="off"
+              tabIndex={-1}
+              className="hidden"
+              aria-hidden="true"
+            />
+
             {/* Contact Type */}
             <div>
               <label htmlFor="type" className="block text-sm font-medium text-slate-300 mb-2">

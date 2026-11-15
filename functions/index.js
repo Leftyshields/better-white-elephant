@@ -4,7 +4,7 @@
 import { onRequest } from 'firebase-functions/v2/https';
 import { onDocumentCreated, onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
-import { defineSecret } from 'firebase-functions/params';
+import { defineSecret, defineString } from 'firebase-functions/params';
 import { Resend } from 'resend';
 import admin from 'firebase-admin';
 import {
@@ -26,6 +26,8 @@ import {
   markPendingInvitesAcceptedForParticipantJoin,
 } from './acceptPendingInvitesLogic.js';
 import { handleSendPartyInviteRequest } from './sendPartyInviteHandler.js';
+import { handleSendContactEmailRequest } from './sendContactEmailHandler.js';
+import { SEND_CONTACT_GENERIC_ERROR } from './sendContactEmailLogic.js';
 import {
   buildGiftSubmitterNotifyHtml,
   hostDisplayNameForInvite,
@@ -39,6 +41,11 @@ if (!admin.apps.length) {
 // Define secrets for Resend
 const resendApiKey = defineSecret('RESEND_API_KEY');
 const resendFromEmail = defineSecret('RESEND_FROM_EMAIL');
+/** Inbox that receives contact form mail (required; function fails closed if unset). */
+const contactRecipientEmail = defineString('CONTACT_EMAIL');
+/** When true, requires a valid Firebase App Check token. Default off until the client enables App Check. */
+const enforceContactAppCheck = defineString('ENFORCE_CONTACT_APP_CHECK', { default: 'false' });
+const allowedOriginsParam = defineString('ALLOWED_ORIGINS', { default: '' });
 const db = admin.firestore();
 
 // Initialize Resend with secret (production) or env var (fallback)
@@ -197,154 +204,55 @@ export const notifyGiftSubmitter = onDocumentUpdated(
 /**
  * Send contact form email (for support, security issues, general inquiries)
  */
+function applyContactCors(res, corsOrigin) {
+  if (corsOrigin) {
+    res.set('Access-Control-Allow-Origin', corsOrigin);
+    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, X-Firebase-AppCheck');
+    res.set('Vary', 'Origin');
+  }
+}
+
 export const sendContactEmail = onRequest(
   {
-    cors: true,
+    cors: false,
     secrets: [resendApiKey, resendFromEmail],
-    invoker: 'public', // Make function publicly accessible
+    invoker: 'public',
   },
   async (req, res) => {
-    // Handle CORS preflight
-    if (req.method === 'OPTIONS') {
-      res.set('Access-Control-Allow-Origin', '*');
-      res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-      res.set('Access-Control-Allow-Headers', 'Content-Type');
-      res.status(204).send('');
-      return;
-    }
-
-    // Set CORS headers
-    res.set('Access-Control-Allow-Origin', '*');
-    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.set('Access-Control-Allow-Headers', 'Content-Type');
-
     try {
-      const { name, email, subject, message, type } = req.body;
+      const getFromEmail = () =>
+        resendFromEmail.value() || process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
+      const getContactRecipient = () =>
+        contactRecipientEmail.value() || process.env.CONTACT_EMAIL || '';
+      const getEnforceAppCheck = () =>
+        enforceContactAppCheck.value() || process.env.ENFORCE_CONTACT_APP_CHECK || 'false';
+      const getAllowedOriginsCsv = () =>
+        allowedOriginsParam.value() || process.env.ALLOWED_ORIGINS || '';
 
-      // Validation
-      if (!email || !message) {
-        return res.status(400).json({ error: 'email and message are required' });
-      }
-
-      // Basic email validation
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email)) {
-        return res.status(400).json({ error: 'Invalid email address' });
-      }
-
-      // Determine recipient based on type
-      const contactType = type || 'general';
-      // Use a valid email address for recipient (must be verified in Resend for testing mode)
-      // In testing mode, Resend only allows sending to verified emails
-      let recipientEmail = process.env.CONTACT_EMAIL || 'brianshields@gmail.com';
-      recipientEmail = recipientEmail.trim();
-
-      // For security issues and bug reports, use different subject prefixes
-      const subjectPrefix = contactType === 'security' ? '[SECURITY]'
-        : contactType === 'bug' ? '[BUG REPORT]'
-          : contactType === 'account' ? '[ACCOUNT]'
-            : '[CONTACT]';
-      const emailSubject = subject
-        ? `${subjectPrefix} ${subject}`
-        : `${subjectPrefix} Contact Form Submission from ${name || email}`;
-
-      // Send email via Resend
-      const resendClient = getResend();
-      // Get from email and ensure proper format for Resend
-      let fromEmail = resendFromEmail.value() || process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
-      fromEmail = fromEmail.trim();
-
-      // Resend requires: "email@domain.com" or "Name <email@domain.com>"
-      // Extract email if it's in "Name <email>" format, or use as-is if it's just an email
-      const emailMatch = fromEmail.match(/<(.+?)>/) || fromEmail.match(/^(.+?@.+?)$/);
-      if (emailMatch) {
-        const emailOnly = emailMatch[1];
-        // If original had a name, keep the format; otherwise use email only
-        if (fromEmail.includes('<') && fromEmail.includes('>')) {
-          // Already in correct format, just ensure it's clean
-          fromEmail = fromEmail.replace(/\s+/g, ' ').trim();
-        } else {
-          // Just an email, use as-is
-          fromEmail = emailOnly;
-        }
-      } else {
-        // Fallback to simple email format
-        fromEmail = 'onboarding@resend.dev';
-      }
-
-      // Send to support/contact email
-      const { data, error } = await resendClient.emails.send({
-        from: fromEmail,
-        to: recipientEmail,
-        replyTo: email, // Allow replying directly to the user
-        subject: emailSubject,
-        html: `
-          <h2>Contact Form Submission</h2>
-          <div style="background-color: #f3f4f6; padding: 16px; border-radius: 6px; margin: 16px 0;">
-            <p><strong>Type:</strong> ${contactType}</p>
-            <p><strong>From:</strong> ${name || 'Anonymous'} (${email})</p>
-            ${subject ? `<p><strong>Subject:</strong> ${subject}</p>` : ''}
-          </div>
-          <div style="background-color: #ffffff; padding: 16px; border-radius: 6px; margin: 16px 0; border-left: 4px solid #2563eb;">
-            <h3>Message:</h3>
-            <p style="white-space: pre-wrap; font-family: sans-serif;">${message}</p>
-          </div>
-          <p style="color: #6b7280; font-size: 14px; margin-top: 16px;">
-            You can reply directly to this email to respond to ${email}
-          </p>
-        `,
+      const result = await handleSendContactEmailRequest(req, {
+        db,
+        getResend,
+        getFromEmail,
+        getContactRecipient,
+        getEnforceAppCheck,
+        getAllowedOriginsCsv,
+        appCheck: admin.appCheck(),
       });
 
-      if (error) {
-        console.error('Resend error:', error);
+      applyContactCors(res, result.corsOrigin);
 
-        // Handle Resend testing mode limitation
-        if (error.statusCode === 403 || error.message?.includes('testing emails') || error.message?.includes('verified email')) {
-          const isTestingMode = error.message?.includes('testing emails') || error.message?.includes('verified email');
-          return res.status(403).json({
-            error: 'Email sending limited',
-            message: isTestingMode
-              ? `Resend is in testing mode. You can only send emails to verified email addresses. To send to other recipients, verify a domain at resend.com/domains`
-              : 'Email sending is limited. Please verify your domain in Resend to send to all recipients.',
-            details: error,
-            testingMode: isTestingMode
-          });
-        }
-
-        return res.status(500).json({ error: 'Failed to send email', details: error });
+      if (result.status === 204) {
+        res.status(204).send('');
+        return;
       }
 
-      // Optionally send a confirmation email to the user
-      if (contactType !== 'security') {
-        try {
-          await resendClient.emails.send({
-            from: fromEmail,
-            to: email,
-            subject: 'We received your message - StealOrReveal',
-            html: `
-              <h2>Thank you for contacting us!</h2>
-              <p>We've received your message and will get back to you as soon as possible.</p>
-              <div style="background-color: #f3f4f6; padding: 16px; border-radius: 6px; margin: 16px 0;">
-                <p><strong>Your message:</strong></p>
-                <p style="white-space: pre-wrap; font-family: sans-serif;">${message}</p>
-              </div>
-              <p style="color: #6b7280; font-size: 14px; margin-top: 16px;">
-                If you have any urgent security concerns, please reply to this email immediately.
-              </p>
-            `,
-          });
-        } catch (confirmationError) {
-          // Don't fail the request if confirmation email fails
-          console.error('Failed to send confirmation email:', confirmationError);
-        }
-      }
-
-      res.json({ success: true, messageId: data?.id });
+      res.status(result.status).json(result.body ?? { error: SEND_CONTACT_GENERIC_ERROR });
     } catch (error) {
-      console.error('Error sending contact email:', error);
-      res.status(500).json({ error: 'Failed to send contact email', message: error.message });
+      console.error('sendContactEmail:', { code: error?.code, name: error?.name });
+      res.status(500).json({ error: SEND_CONTACT_GENERIC_ERROR });
     }
-  }
+  },
 );
 
 /**
