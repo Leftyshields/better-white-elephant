@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   extractAmazonAsin,
   extractAmazonSlugTitle,
+  formatAmazonSlugSegment,
   isGenericStoreTitle,
   resolveGiftTitle,
   trimGiftTitle,
@@ -16,6 +17,14 @@ test('extractAmazonSlugTitle humanizes slug before /dp/', () => {
     extractAmazonSlugTitle(url),
     'Wireless Charger iPhone Charging Multiple',
   );
+});
+
+test('formatAmazonSlugSegment strips asin tokens and title-cases with brands', () => {
+  assert.equal(
+    formatAmazonSlugSegment('wireless-charger-USB-iphone-dp-B0C1H5HNV3'),
+    'Wireless Charger USB iPhone',
+  );
+  assert.equal(formatAmazonSlugSegment('hdmi-cable-4k-tv'), 'HDMI Cable 4k TV');
 });
 
 test('extractAmazonSlugTitle returns empty for /dp/-only URLs', () => {

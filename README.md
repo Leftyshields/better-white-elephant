@@ -57,8 +57,7 @@ better-white-elephant/
    - **Server CORS**: Set `ALLOWED_ORIGINS` (comma-separated) or `CLIENT_URL` for allowed origins
      - Example: `ALLOWED_ORIGINS=https://stealorreveal.com,https://www.stealorreveal.com`
      - Defaults to localhost for development, production domains for production
-   - **Gift URL scraping**: Uses the free server-side fetch + HTML parse path by default.
-   - **Apify (optional, off by default)**: Set `GIFT_SCRAPE_USE_APIFY=true` and `APIFY_API_TOKEN` to evaluate Apify for Amazon URLs later.
+   - **Gift URL scraping**: Server-side HTML fetch + parse (Open Graph, JSON-LD, retailer-specific selectors, Amazon slug title fallback).
    - **Bot Refresh Simulation (Optional)**: Set `BOT_REFRESH_SIMULATION=true` in server `.env` to enable periodic bot refresh simulation
      - Simulates realistic browser refresh behavior for bots (disconnect/reconnect scenarios)
      - Helps test state version checking and prevent stale state resets

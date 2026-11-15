@@ -4,6 +4,7 @@
 import { memo, useState, useEffect, useRef } from 'react';
 import { Button } from './ui/Button.jsx';
 import { GiftIcon, LockClosedIcon, FireIcon } from '@heroicons/react/24/outline';
+import { GiftImage } from './GiftImage.jsx';
 
 export const GiftCard = memo(function GiftCard({
   gift,
@@ -31,7 +32,6 @@ export const GiftCard = memo(function GiftCard({
   // Recalculate isMyGift from gift prop to avoid stale prop values
   // This ensures the badge always shows correctly even if the passed prop is stale
   const computedIsMyGift = gift?.submitterId === userId || isMyGift;
-  const [imageError, setImageError] = useState(false);
   const [isRevealing, setIsRevealing] = useState(false);
   const revealTimerRef = useRef(null);
 
@@ -159,19 +159,12 @@ export const GiftCard = memo(function GiftCard({
       ) : (
         <div className="flex flex-col h-full">
           {/* Image or Fallback Container */}
-          <div className="relative w-full h-48 rounded-lg mb-3 overflow-hidden bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500">
-            {gift.image && !imageError ? (
-              <img
-                src={gift.image}
-                alt={gift.title || 'Gift'}
-                className="w-full h-full object-cover"
-                onError={() => setImageError(true)}
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center">
-                <GiftIcon className="w-16 h-16 text-white opacity-50" />
-              </div>
-            )}
+          <div className="relative w-full h-48 rounded-lg mb-3 overflow-hidden">
+            <GiftImage
+              src={gift.image}
+              alt={gift.title || 'Gift'}
+              className="rounded-lg"
+            />
             
             {/* Status Badge Overlay */}
             {isFrozen ? (

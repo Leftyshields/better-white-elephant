@@ -15,7 +15,7 @@ import { SimulationControls } from '../components/dev/SimulationControls.jsx';
 import { ReactionBar } from '../components/ReactionBar.jsx';
 import { ReactionOverlay } from '../components/ReactionOverlay.jsx';
 import { GiftToSendCard } from '../components/GiftToSendCard.jsx';
-import { GiftIcon } from '@heroicons/react/24/outline';
+import { GiftImage } from '../components/GiftImage.jsx';
 import confetti from 'canvas-confetti';
 import { apiRequest } from '../utils/api.js';
 
@@ -62,7 +62,6 @@ export function GameRoom({ partyId }) {
   const { playTurnNotification, playSteal, playUnwrap } = useGameSounds();
   const [userNames, setUserNames] = useState({});
   const [revealingGiftId, setRevealingGiftId] = useState(null);
-  const [prizeImageError, setPrizeImageError] = useState(false);
   const prevIsMyTurnRef = useRef(false);
   const [gameLoadTimedOut, setGameLoadTimedOut] = useState(false);
 
@@ -407,20 +406,13 @@ export function GameRoom({ partyId }) {
                   className="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-[0_0_30px_-10px_rgba(234,179,8,0.3)] hover:border-white/20 transition-all"
                 >
                   <div className="flex gap-6">
-                    <div className="relative w-32 h-32 rounded-lg overflow-hidden bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex-shrink-0">
-                      {myPrize.image && !prizeImageError ? (
-                        <img
-                          src={myPrize.image}
-                          alt={myPrize.title || 'Gift'}
-                          className="w-full h-full object-cover"
-                          onError={() => setPrizeImageError(true)}
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <GiftIcon className="w-12 h-12 text-white opacity-50" />
-                        </div>
-                      )}
-                    </div>
+                    <GiftImage
+                      src={myPrize.image}
+                      alt={myPrize.title || 'Gift'}
+                      className="relative w-32 h-32 rounded-lg overflow-hidden flex-shrink-0"
+                      placeholderClassName="w-32 h-32 rounded-lg"
+                      iconSize="w-12 h-12"
+                    />
                     <div className="flex-1">
                       <h3 className="text-white text-3xl font-bold mb-2">{myPrize.title || 'Gift'}</h3>
                       {myPrize.url && (

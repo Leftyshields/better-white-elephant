@@ -4,7 +4,7 @@
 
 export const GIFT_TITLE_MAX_LENGTH = 500;
 export const GIFT_SCRAPE_MAX_REDIRECTS = 5;
-export const GIFT_SCRAPE_TIMEOUT_MS = 15_000;
+export const GIFT_SCRAPE_TIMEOUT_MS = 6_000;
 export const GIFT_SCRAPE_MAX_HTML_BYTES = 2 * 1024 * 1024;
 
 const GENERIC_STORE_TITLE_EXACT = new Set(
@@ -133,33 +133,68 @@ export function extractAmazonSlugTitle(url) {
 
   const dpMatch = path.match(/\/([^/]+)\/dp\/[A-Z0-9]{10}(?:[/?]|$)/i);
   if (dpMatch) {
-    return humanizeSlugSegment(dpMatch[1]);
+    return formatAmazonSlugSegment(dpMatch[1]);
   }
 
   const productMatch = path.match(/\/([^/]+)\/product\/[A-Z0-9]{10}(?:[/?]|$)/i);
   if (productMatch) {
-    return humanizeSlugSegment(productMatch[1]);
+    return formatAmazonSlugSegment(productMatch[1]);
   }
 
   return '';
 }
 
+const SLUG_WORD_OVERRIDES = new Map(
+  [
+    ['usb', 'USB'],
+    ['hdmi', 'HDMI'],
+    ['led', 'LED'],
+    ['tv', 'TV'],
+    ['wifi', 'WiFi'],
+    ['iphone', 'iPhone'],
+    ['ipad', 'iPad'],
+    ['ipod', 'iPod'],
+    ['macbook', 'MacBook'],
+    ['ps5', 'PS5'],
+    ['xbox', 'Xbox'],
+  ].map(([k, v]) => [k, v]),
+);
+
 /**
- * @param {string} segment
+ * @param {string} segment - Raw URL slug segment (before /dp/ etc.)
  * @returns {string}
  */
-function humanizeSlugSegment(segment) {
+export function formatAmazonSlugSegment(segment) {
   if (!segment || typeof segment !== 'string') {
     return '';
   }
-  const reserved = new Set(['dp', 'gp', 'product', 'exec', 'obidos', 'asin']);
+  const reserved = new Set(['dp', 'gp', 'product', 'exec', 'obidos', 'asin', 'ref']);
   if (reserved.has(segment.toLowerCase())) {
     return '';
   }
-  return segment
-    .replace(/[-_]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+
+  let text = segment.replace(/[-_]+/g, ' ');
+  text = text.replace(/\bB[0-9A-Z]{9}\b/gi, ' ');
+  text = text.replace(/\b(dp|gp|product|ref|asin)\b/gi, ' ');
+  text = text.replace(/\s+/g, ' ').trim();
+  if (!text) {
+    return '';
+  }
+
+  return text
+    .split(' ')
+    .filter(Boolean)
+    .map((word) => {
+      const lower = word.toLowerCase();
+      if (SLUG_WORD_OVERRIDES.has(lower)) {
+        return SLUG_WORD_OVERRIDES.get(lower);
+      }
+      if (/^[A-Z0-9]{2,5}$/.test(word)) {
+        return word;
+      }
+      return lower.charAt(0).toUpperCase() + lower.slice(1);
+    })
+    .join(' ');
 }
 
 /**

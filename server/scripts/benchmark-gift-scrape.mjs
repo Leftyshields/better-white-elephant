@@ -40,9 +40,9 @@ const URLS = [
 ];
 
 function hasRealTitle(meta) {
-  if (!meta?.title) return false;
-  if (meta.title === 'Gift' || meta.title === 'Untitled Gift') return false;
+  if (!meta?.title || !meta.title.trim()) return false;
   const lower = meta.title.toLowerCase();
+  if (lower === 'gift' || lower === 'untitled gift' || lower === 'amazon product') return false;
   if (lower === 'amazon.com' || lower.startsWith('amazon.com')) return false;
   return true;
 }

@@ -23,11 +23,26 @@ export const SCRAPE_BROWSER_HEADERS = {
 };
 
 /**
- * @param {import('node:http').IncomingMessage | Response} response
+ * @param {number} deadlineMs
+ * @returns {number}
+ */
+export function remainingScrapeBudgetMs(deadlineMs) {
+  const left = deadlineMs - Date.now();
+  return left > 0 ? left : 0;
+}
+
+/**
+ * @param {Response} response
  * @param {number} maxBytes
+ * @param {number} deadlineMs
  * @returns {Promise<string>}
  */
-async function readResponseTextWithLimit(response, maxBytes) {
+async function readResponseTextWithLimit(response, maxBytes, deadlineMs) {
+  const budget = remainingScrapeBudgetMs(deadlineMs);
+  if (budget === 0) {
+    throw Object.assign(new Error('Fetch timed out'), { code: 'timeout' });
+  }
+
   const reader = response.body?.getReader?.();
   if (!reader) {
     const text = await response.text();
@@ -40,6 +55,9 @@ async function readResponseTextWithLimit(response, maxBytes) {
   const chunks = [];
   let total = 0;
   while (true) {
+    if (remainingScrapeBudgetMs(deadlineMs) === 0) {
+      throw Object.assign(new Error('Fetch timed out'), { code: 'timeout' });
+    }
     const { done, value } = await reader.read();
     if (done) {
       break;
@@ -56,21 +74,39 @@ async function readResponseTextWithLimit(response, maxBytes) {
 
 /**
  * @param {string} startUrl
+ * @param {{ deadlineMs?: number }} [options]
  * @returns {Promise<{ finalUrl: string, html: string, status: number, hostname: string }>}
  */
-export async function fetchGiftPageHtml(startUrl) {
+export async function fetchGiftPageHtml(startUrl, options = {}) {
+  const deadlineMs = options.deadlineMs ?? Date.now() + GIFT_SCRAPE_TIMEOUT_MS;
   let currentUrl = startUrl;
 
   for (let hop = 0; hop <= GIFT_SCRAPE_MAX_REDIRECTS; hop++) {
+    if (remainingScrapeBudgetMs(deadlineMs) === 0) {
+      throw Object.assign(new Error('Fetch timed out'), { code: 'timeout' });
+    }
+
     const { fullUrl, hostname } = validateGiftScrapeUrl(currentUrl);
     currentUrl = fullUrl;
 
-    const response = await fetch(currentUrl, {
-      method: 'GET',
-      redirect: 'manual',
-      headers: SCRAPE_BROWSER_HEADERS,
-      signal: AbortSignal.timeout(GIFT_SCRAPE_TIMEOUT_MS),
-    });
+    let response;
+    try {
+      response = await fetch(currentUrl, {
+        method: 'GET',
+        redirect: 'manual',
+        headers: SCRAPE_BROWSER_HEADERS,
+        signal: AbortSignal.timeout(remainingScrapeBudgetMs(deadlineMs)),
+      });
+    } catch (error) {
+      const isTimeout =
+        error?.name === 'TimeoutError' ||
+        error?.name === 'AbortError' ||
+        error?.code === 23;
+      if (isTimeout) {
+        throw Object.assign(new Error('Fetch timed out'), { code: 'timeout' });
+      }
+      throw error;
+    }
 
     if (response.status >= 300 && response.status < 400) {
       const location = response.headers.get('location');
@@ -81,7 +117,7 @@ export async function fetchGiftPageHtml(startUrl) {
       continue;
     }
 
-    const html = await readResponseTextWithLimit(response, GIFT_SCRAPE_MAX_HTML_BYTES);
+    const html = await readResponseTextWithLimit(response, GIFT_SCRAPE_MAX_HTML_BYTES, deadlineMs);
 
     return {
       finalUrl: currentUrl,

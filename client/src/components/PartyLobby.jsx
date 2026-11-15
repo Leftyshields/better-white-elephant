@@ -8,7 +8,15 @@ import { Button } from './ui/Button.jsx';
 import { Input } from './ui/Input.jsx';
 import { Modal } from './ui/Modal.jsx';
 import { scrapeGiftUrl, apiRequest } from '../utils/api.js';
-import { GIFT_MANUAL_HELPER } from '../utils/giftUiCopy.js';
+import {
+  GIFT_IMAGE_LINK_HELPER,
+  GIFT_IMAGE_LINK_INVALID,
+  GIFT_IMAGE_LINK_LABEL,
+  GIFT_IMAGE_LINK_PLACEHOLDER,
+  GIFT_MANUAL_HELPER,
+  isUnusableScrapedGiftTitle,
+  validateOptionalGiftImageUrl,
+} from '../utils/giftUiCopy.js';
 import { postSendPartyInvite } from '../utils/sendPartyInvite.js';
 import { PartyManagement } from './PartyManagement.jsx';
 import { GiftCard } from './GiftCard.jsx';
@@ -240,11 +248,10 @@ export function PartyLobby({ partyId, onStartGame }) {
       const normalizedUrl = giftUrl.startsWith('http') ? giftUrl : `https://${giftUrl}`;
       const { title, image, price, error } = await scrapeGiftUrl(normalizedUrl);
 
-      // Check if scraping returned meaningful data
-      if (error || !title || title === 'Gift' || title === 'Untitled Gift' || !image) {
-        // Show manual entry form instead of just confirming
+      const hasUsableTitle = !isUnusableScrapedGiftTitle(title);
+      if (error || !hasUsableTitle || !image) {
         setShowManualEntry(true);
-        setManualTitle(title && title !== 'Gift' && title !== 'Untitled Gift' ? title : '');
+        setManualTitle(hasUsableTitle ? title.trim() : '');
         setManualImageUrl(image || '');
         setManualPrice(price || '');
         setPastedImage(null);
@@ -1207,12 +1214,12 @@ export function PartyLobby({ partyId, onStartGame }) {
                               </div>
                               <div className="space-y-2">
                                 <label className="block text-sm font-medium text-slate-300">
-                                  Image (optional)
+                                  {GIFT_IMAGE_LINK_LABEL}
                                 </label>
                                 <div className="flex gap-2">
                                   <Input
                                     type="url"
-                                    placeholder="https://example.com/image.jpg"
+                                    placeholder={GIFT_IMAGE_LINK_PLACEHOLDER}
                                     value={manualImageUrl}
                                     onChange={(e) => {
                                       setManualImageUrl(e.target.value);
@@ -1256,7 +1263,7 @@ export function PartyLobby({ partyId, onStartGame }) {
         </div>
       )}
                                 <p className="text-xs text-slate-400">
-                                  Paste an image from your clipboard or enter an image URL
+                                  {GIFT_IMAGE_LINK_HELPER}
                                 </p>
                               </div>
                               <div className="flex gap-2">
@@ -1264,6 +1271,14 @@ export function PartyLobby({ partyId, onStartGame }) {
               onClick={async () => {
                                     if (!giftUrl.trim() || !manualTitle.trim()) {
                                       alert('Please enter a URL and title');
+                                      return;
+                                    }
+
+                                    const imageUrlResult = pastedImage
+                                      ? { ok: true, value: pastedImage }
+                                      : validateOptionalGiftImageUrl(manualImageUrl);
+                                    if (!imageUrlResult.ok) {
+                                      alert(imageUrlResult.error);
                                       return;
                                     }
                                     
@@ -1313,7 +1328,7 @@ export function PartyLobby({ partyId, onStartGame }) {
                                         submitterId: user.uid,
                                         url: normalizedUrl,
                                         title: manualTitle.trim(),
-                                        image: pastedImage || manualImageUrl.trim() || null,
+                                        image: imageUrlResult.value || null,
                                         price: manualPrice.trim() || null,
                                         isFrozen: false,
                                         winnerId: null,
