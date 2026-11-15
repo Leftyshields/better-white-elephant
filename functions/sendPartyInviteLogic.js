@@ -3,7 +3,15 @@
  */
 
 import { createHash } from 'node:crypto';
-import { pickDisplayName } from './displayName.js';
+import {
+  isSyntheticPlayerDisplayName,
+  pickDisplayName,
+  pickHostNameForInvite,
+} from './displayName.js';
+
+/** Copywriter-approved invite intro when the host has no usable public name. */
+export const PARTY_INVITE_INTRO_ANONYMOUS =
+  'Your host invited you to a Steal or Reveal game.';
 
 /**
  * Documented rate limits (see PR). Fixed hour/day bucket counters (not rolling windows).
@@ -124,28 +132,32 @@ export function recipientIsExistingParticipant(normalizedEmail, participantEmail
 }
 
 export function hostDisplayNameForInvite(hostUid, hostUserProfile) {
-  const profile = hostUserProfile ?? {};
-  return pickDisplayName(
-    hostUid,
-    profile.displayName,
-    profile.name,
-  );
+  return pickHostNameForInvite(hostUid, hostUserProfile);
+}
+
+export function buildPartyInviteIntroParagraph(hostDisplayName, hostUid) {
+  if (isSyntheticPlayerDisplayName(hostDisplayName, hostUid)) {
+    return `<p>${escapeHtml(PARTY_INVITE_INTRO_ANONYMOUS)}</p>`;
+  }
+  const safeHost = escapeHtml(hostDisplayName);
+  return `<p>${safeHost} has invited you to a White Elephant gift exchange party.</p>`;
 }
 
 export function buildInviteEmailHtml({
+  hostUid,
   hostDisplayName,
   partyTitle,
   partyDateLabel,
   inviteLink,
 }) {
-  const safeHost = escapeHtml(hostDisplayName);
+  const inviteIntroHtml = buildPartyInviteIntroParagraph(hostDisplayName, hostUid);
   const safeTitle = escapeHtml(partyTitle);
   const safeDate = escapeHtml(partyDateLabel);
   const safeLink = escapeHtml(inviteLink);
 
   return `
         <h1>You're Invited!</h1>
-        <p>${safeHost} has invited you to a White Elephant gift exchange party.</p>
+        ${inviteIntroHtml}
         <div style="background-color: #f3f4f6; padding: 16px; border-radius: 6px; margin: 16px 0;">
           <p style="margin: 0;"><strong>${safeTitle}</strong></p>
           <p style="margin: 8px 0 0 0; color: #6b7280;">Date: ${safeDate}</p>
@@ -213,9 +225,10 @@ export const SEND_PARTY_INVITE_ERRORS = {
   missingAuth: 'Sign in to send invites.',
   invalidAuth: "You've been signed out. Sign in again to send invites.",
   notHost: 'Only the host can send invites for this party.',
-  missingFields: 'email and partyId are required',
+  missingFields: 'Enter an email address to send an invite.',
   invalidEmail: 'Enter a valid email address.',
-  invalidPartyId: 'Invalid party id.',
+  invalidPartyId: "We couldn't find this party. Refresh the page and try again.",
+  sendInviteServerError: "We couldn't send that invite. Try again in a moment.",
   partyNotFound: "We couldn't find this party. Refresh the page and try again.",
   alreadyParticipant:
     "That person is already in this party, so we didn't send another invite.",

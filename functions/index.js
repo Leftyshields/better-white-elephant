@@ -29,6 +29,7 @@ import { handleSendPartyInviteRequest } from './sendPartyInviteHandler.js';
 import {
   buildGiftSubmitterNotifyHtml,
   hostDisplayNameForInvite,
+  SEND_PARTY_INVITE_ERRORS,
 } from './sendPartyInviteLogic.js';
 
 if (!admin.apps.length) {
@@ -96,7 +97,7 @@ export const sendPartyInvite = onRequest(
       res.status(result.status).json(result.body);
     } catch (error) {
       console.error('Error sending invite:', error?.message ?? error);
-      res.status(500).json({ error: 'Failed to send invite' });
+      res.status(500).json({ error: SEND_PARTY_INVITE_ERRORS.sendInviteServerError });
     }
   });
 

@@ -263,6 +263,7 @@ export async function handleSendPartyInviteRequest(req, deps) {
     : 'TBD';
 
   const html = buildInviteEmailHtml({
+    hostUid: callerUid,
     hostDisplayName,
     partyTitle,
     partyDateLabel,

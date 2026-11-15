@@ -4,6 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  PARTY_INVITE_INTRO_ANONYMOUS,
   PARTY_INVITE_RATE_LIMITS,
   SEND_PARTY_INVITE_ERRORS,
   assertCallerIsPartyHost,
@@ -34,8 +35,56 @@ test('buildGiftSubmitterNotifyHtml escapes winner display name and address body'
   assert.match(html, /&lt;\/pre&gt;&lt;script&gt;/);
 });
 
+test('copywriter strings for invalidPartyId, missingFields, and server error', () => {
+  assert.equal(
+    SEND_PARTY_INVITE_ERRORS.missingFields,
+    'Enter an email address to send an invite.',
+  );
+  assert.equal(
+    SEND_PARTY_INVITE_ERRORS.invalidPartyId,
+    "We couldn't find this party. Refresh the page and try again.",
+  );
+  assert.equal(
+    SEND_PARTY_INVITE_ERRORS.invalidPartyId,
+    SEND_PARTY_INVITE_ERRORS.partyNotFound,
+  );
+  assert.equal(
+    SEND_PARTY_INVITE_ERRORS.sendInviteServerError,
+    "We couldn't send that invite. Try again in a moment.",
+  );
+});
+
+test('invite email uses anonymous intro when host has no usable name', () => {
+  const uid = 'abcdefghijklmnop';
+  const hostDisplayName = hostDisplayNameForInvite(uid, {
+    email: 'leaky@example.com',
+    displayName: 'leaky',
+  });
+  const html = buildInviteEmailHtml({
+    hostUid: uid,
+    hostDisplayName,
+    partyTitle: 'Holiday',
+    partyDateLabel: 'Soon',
+    inviteLink: 'https://example.com/party/1',
+  });
+  assert.match(html, new RegExp(escapeHtml(PARTY_INVITE_INTRO_ANONYMOUS)));
+  assert.doesNotMatch(html, /has invited you to a White Elephant gift exchange party/);
+});
+
+test('invite email uses named intro when host has a usable name', () => {
+  const html = buildInviteEmailHtml({
+    hostUid: 'uid-1',
+    hostDisplayName: 'Sam',
+    partyTitle: 'Holiday',
+    partyDateLabel: 'Soon',
+    inviteLink: 'https://example.com/party/1',
+  });
+  assert.match(html, /Sam has invited you to a White Elephant gift exchange party/);
+});
+
 test('escapeHtml neutralizes HTML injection in email body', () => {
   const html = buildInviteEmailHtml({
+    hostUid: 'host-1',
     hostDisplayName: '<script>x</script>',
     partyTitle: 'Fun & <Games>',
     partyDateLabel: '1/1/26',
@@ -48,6 +97,7 @@ test('escapeHtml neutralizes HTML injection in email body', () => {
 
 test('hostName and partyTitle are HTML-escaped in invite email body', () => {
   const html = buildInviteEmailHtml({
+    hostUid: 'host-2',
     hostDisplayName: '<b>Host</b>',
     partyTitle: '"><img onerror=alert(1)>',
     partyDateLabel: 'Soon',
@@ -125,6 +175,13 @@ test('pickDisplayName skips email-like display names', () => {
     'Real Name',
   );
   assert.equal(hostDisplayNameForInvite('uid-1', { displayName: 'a@b.co', name: 'Host' }), 'Host');
+  assert.equal(
+    hostDisplayNameForInvite('uid-2', {
+      email: 'secret@example.com',
+      displayName: 'secret',
+    }),
+    'Player uid-2',
+  );
 });
 
 test('normalizeInviteEmail rejects invalid addresses', () => {
