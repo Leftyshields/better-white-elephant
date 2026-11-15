@@ -1,10 +1,7 @@
 import js from '@eslint/js';
 import globals from 'globals';
 
-/**
- * no-undef is enforced on app source trees. Pre-existing issues are deferred
- * via per-file overrides below (see PR notes).
- */
+/** no-undef is enforced on all client src; vitest globals are added for src/test. */
 export default [
   { ignores: ['dist/**', 'node_modules/**'] },
   {
@@ -21,20 +18,9 @@ export default [
       },
     },
     rules: {
-      'no-undef': 'off',
+      'no-undef': 'error',
       'no-unused-vars': 'off',
       'no-empty': 'off',
-    },
-  },
-  {
-    files: [
-      'src/components/**/*.{js,jsx}',
-      'src/pages/**/*.{js,jsx}',
-      'src/hooks/**/*.{js,jsx}',
-      'src/contexts/**/*.{js,jsx}',
-    ],
-    rules: {
-      'no-undef': 'error',
     },
   },
   {
@@ -54,12 +40,6 @@ export default [
     },
     rules: {
       'no-undef': 'error',
-    },
-  },
-  {
-    files: ['src/components/AddParticipants.jsx'],
-    rules: {
-      'no-undef': 'off',
     },
   },
 ];
