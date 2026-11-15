@@ -1001,9 +1001,6 @@ export function PartyLobby({ partyId, onStartGame }) {
                                   </span>
                                     )}
                                   </span>
-                                  {email && displayName && !isYou && !isBot && (
-                                    <span className="text-xs text-slate-400 ml-1">({email})</span>
-                                  )}
                                 </div>
                               </div>
                               <div className="flex items-center gap-2">

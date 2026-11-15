@@ -6,13 +6,36 @@ export function looksLikeEmail(value) {
   return typeof value === 'string' && value.includes('@');
 }
 
-function pickDisplayName(userId, ...candidates) {
-  for (const name of candidates) {
-    if (name && !looksLikeEmail(name)) {
-      return name;
+export function playerFallbackForUserId(userId) {
+  if (typeof userId !== 'string' || !userId) {
+    return 'Player unknown';
+  }
+  if (userId.startsWith('bot_')) {
+    const parts = userId.split('_');
+    if (parts.length >= 2) {
+      const suffix = parts[parts.length - 1];
+      return `Player ${suffix.slice(0, 8)}`;
     }
+    return `Player ${userId.slice(4, 12)}`;
   }
   return `Player ${userId.slice(0, 8)}`;
+}
+
+export function pickDisplayName(userId, ...candidates) {
+  for (const name of candidates) {
+    if (typeof name !== 'string') {
+      continue;
+    }
+    const trimmed = name.trim();
+    if (!trimmed) {
+      continue;
+    }
+    if (looksLikeEmail(trimmed)) {
+      continue;
+    }
+    return trimmed;
+  }
+  return playerFallbackForUserId(userId);
 }
 
 export function isValidPartyId(partyId) {
@@ -113,12 +136,15 @@ export async function fetchDisplayProfilesForUserIds(db, auth, userIds) {
 
       const userDoc = await db.collection('users').doc(userId).get();
       let firestoreDisplayName = null;
+      let firestoreName = null;
       let avatarUrl = null;
       let isBotUser = false;
 
       if (userDoc.exists) {
         const userData = userDoc.data();
-        firestoreDisplayName = userData.displayName || userData.name || null;
+        firestoreDisplayName =
+          userData.displayName != null ? userData.displayName : null;
+        firestoreName = userData.name != null ? userData.name : null;
         avatarUrl = userData.avatarUrl || null;
         isBotUser = userData.isBot === true || isBot;
       }
@@ -139,6 +165,7 @@ export async function fetchDisplayProfilesForUserIds(db, auth, userIds) {
       const displayName = pickDisplayName(
         userId,
         firestoreDisplayName,
+        firestoreName,
         authDisplayName,
       );
 
@@ -147,7 +174,7 @@ export async function fetchDisplayProfilesForUserIds(db, auth, userIds) {
       bots[userId] = isBotUser;
     } catch (error) {
       console.error(`batch-users: error fetching user ${userId}:`, error);
-      users[userId] = `Player ${userId.slice(0, 8)}`;
+      users[userId] = playerFallbackForUserId(userId);
       photos[userId] = null;
       bots[userId] = false;
     }

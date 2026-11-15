@@ -2,7 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   batchUsersLookup,
+  fetchDisplayProfilesForUserIds,
   getPartyMemberUserIds,
+  pickDisplayName,
+  playerFallbackForUserId,
   verifyCallerPartyAccess,
   isValidPartyId,
 } from '../utils/batch-users.js';
@@ -197,6 +200,61 @@ test('batchUsersLookup fails closed when caller lacks party access', async () =>
     CO_PARTICIPANT_ID,
   ]);
   assert.deepEqual(result.users, {});
+});
+
+test('pickDisplayName trims and skips whitespace-only strings', () => {
+  assert.equal(pickDisplayName('user-id-1', '   ', '  Good  '), 'Good');
+  assert.equal(pickDisplayName('user-id-1', ' \t '), `Player user-id-`);
+});
+
+test('pickDisplayName skips non-string candidates', () => {
+  assert.equal(pickDisplayName('user-id-2', 42, null, undefined, 'Named'), 'Named');
+});
+
+test('pickDisplayName uses name when displayName looks like email', () => {
+  assert.equal(
+    pickDisplayName('user-id-3', 'legacy@mail.com', 'Legal Name'),
+    'Legal Name',
+  );
+});
+
+test('playerFallbackForUserId uses distinct bot suffixes', () => {
+  const botA = 'bot_party_1_0_abcdefgh';
+  const botB = 'bot_party_1_1_ijklmnop';
+  assert.equal(playerFallbackForUserId(botA), 'Player abcdefgh');
+  assert.equal(playerFallbackForUserId(botB), 'Player ijklmnop');
+  assert.notEqual(
+    playerFallbackForUserId(botA),
+    playerFallbackForUserId(botB),
+  );
+});
+
+test('fetchDisplayProfiles uses Firestore name when displayName is email-shaped', async () => {
+  const USER_ID = 'profile-name-user';
+  const db = {
+    collection(name) {
+      if (name === 'users') {
+        return {
+          doc(id) {
+            return {
+              async get() {
+                return {
+                  exists: id === USER_ID,
+                  data: () => ({
+                    displayName: 'stored@email.example',
+                    name: 'Stored Real Name',
+                  }),
+                };
+              },
+            };
+          },
+        };
+      }
+      throw new Error(`unexpected collection ${name}`);
+    },
+  };
+  const result = await fetchDisplayProfilesForUserIds(db, mockAuth, [USER_ID]);
+  assert.equal(result.users[USER_ID], 'Stored Real Name');
 });
 
 test('rejects email-shaped Firestore and Auth display names in response', async () => {
