@@ -245,15 +245,22 @@ export class GameEngine {
       throw new Error('Cannot pick gift: invalid action');
     }
 
-    // CRITICAL: If player already has a gift, remove it first to prevent duplicate ownership
-    // This ensures "one gift per person" rule is maintained
+    // Do not pick a gift that is already held by someone else (including duplicate wrapped/unwrapped state).
+    const alreadyUnwrapped = this.unwrappedGifts.get(giftId);
+    if (alreadyUnwrapped?.ownerId && alreadyUnwrapped.ownerId !== playerId) {
+      throw new Error('Cannot pick gift: gift is already held by another player');
+    }
+
+    // If player already has a gift, re-wrap it (do not delete — that drops gifts from the game).
     const playerHasGift = this.playerHasGift(playerId);
     if (playerHasGift) {
-      // Find and remove the player's existing gift
       for (const [existingGiftId, gift] of this.unwrappedGifts.entries()) {
-        if (gift.ownerId === playerId) {
+        if (gift.ownerId === playerId && existingGiftId !== giftId) {
           this.unwrappedGifts.delete(existingGiftId);
-          console.log(`🔄 Player ${playerId} picking new gift - releasing old gift ${existingGiftId}`);
+          if (!this.wrappedGifts.includes(existingGiftId)) {
+            this.wrappedGifts.push(existingGiftId);
+          }
+          console.log(`🔄 Player ${playerId} picking new gift - re-wrapped old gift ${existingGiftId}`);
           break;
         }
       }

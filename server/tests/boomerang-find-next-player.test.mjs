@@ -116,7 +116,12 @@ test('reverse pass visits every player for 4-party boomerang picks', () => {
     wrapped = state.wrappedGifts;
   }
 
-  assert.equal(state.currentTurnIndex, turnQueue.length);
+  const totalGifts =
+    state.wrappedGifts.length +
+  new Map(state.unwrappedGifts).size;
+  assert.equal(totalGifts, gifts.length, 're-wrap picks must not drop gifts from play');
+  // Queue is exhausted but wrapped gifts remain (reverse pass re-wraps), so index clamps per engine rules.
+  assert.equal(state.currentTurnIndex, turnQueue.length - 1);
   assert.equal(state.currentPlayerId, 'a');
 });
 
