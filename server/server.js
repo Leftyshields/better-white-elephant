@@ -14,6 +14,8 @@ import { auth, db } from './config/firebase-admin.js';
 import admin from 'firebase-admin';
 import { checkAndMakeBotMove } from './utils/bot-utils.js';
 import { handlePickGift } from './handlers/pick-gift.js';
+import { incrementPartyReactionCount } from './utils/party-reaction-count.mjs';
+import { clientSafeSocketGameErrorMessage } from './utils/socket-error-copy.js';
 
 dotenv.config();
 
@@ -270,9 +272,6 @@ io.on('connection', (socket) => {
   // Handle game actions
   socket.on('pick-gift', async ({ partyId, giftId }) => {
     try {
-      const { loadGameState, saveGameState } = await import('./utils/game-state-persistence.js');
-      const { GameEngine } = await import('./engine.js');
-
       await handlePickGift({
         partyId,
         giftId,
@@ -282,9 +281,6 @@ io.on('connection', (socket) => {
         isValidPartyId,
         isValidGiftId,
         verifyPartyMembership,
-        loadGameState,
-        saveGameState,
-        GameEngine,
         scheduleBotMove: (savedPartyId, newState) => {
           setTimeout(() => {
             checkAndMakeBotMove(savedPartyId, newState, io).catch(console.error);
@@ -297,6 +293,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('steal-gift', async ({ partyId, giftId }) => {
+    const { executeStealGift, isGameStateConflictError } = await import('./utils/game-turn-handler.mjs');
     try {
       console.log(`[Server] 📥 Received steal-gift event:`, { partyId, giftId, userId: socket.userId });
       
@@ -312,48 +309,15 @@ io.on('connection', (socket) => {
         socket.emit('error', { message: 'You are not a participant in this party' });
         return;
       }
-      
-      // Load game state (from Redis or Firestore)
-      const { loadGameState, saveGameState } = await import('./utils/game-state-persistence.js');
-      const gameState = await loadGameState(partyId);
-      if (!gameState) {
-        socket.emit('error', { message: 'Game not found' });
-        return;
-      }
 
-      // Emit action_started event BEFORE processing (for auto-scroll, not reveal animation)
-      // Note: STEAL events don't trigger reveal animation (gift is already known)
-      io.to(`party:${partyId}`).emit('action_started', { 
-        type: 'steal', 
-        giftId, 
-        playerId: socket.userId 
+      const { newState } = await executeStealGift(partyId, giftId, socket.userId);
+
+      io.to(`party:${partyId}`).emit('action_started', {
+        type: 'steal',
+        giftId,
+        playerId: socket.userId,
       });
 
-      // CRITICAL: Validate gameState.partyId matches partyId parameter
-      if (gameState.partyId && gameState.partyId !== partyId) {
-        console.error(`❌ CRITICAL: partyId mismatch in steal-gift! Parameter: ${partyId}, gameState.partyId: ${gameState.partyId}`);
-        socket.emit('error', { message: 'Game state party ID mismatch' });
-        return;
-      }
-      
-      const { GameEngine } = await import('./engine.js');
-      const config = gameState.config || { maxSteals: 3, returnToStart: false };
-      // Ensure partyId is set in gameState before creating engine
-      gameState.partyId = partyId;
-      const engine = new GameEngine(gameState, config);
-      
-      engine.stealGift(giftId, socket.userId);
-      
-      const newState = engine.getState();
-      // Preserve config in state
-      newState.config = gameState.config;
-      // CRITICAL: Ensure partyId is preserved
-      newState.partyId = partyId;
-
-      // Save to both Redis and Firestore
-      await saveGameState(partyId, newState);
-
-      // Broadcast update
       io.to(`party:${partyId}`).emit('game-updated', newState);
       
       // Check if next player (victim) is a bot and trigger auto-play
@@ -363,11 +327,21 @@ io.on('connection', (socket) => {
       }, 1000); // Shorter delay for steal (no reveal animation needed)
     } catch (error) {
       console.error(`[Server] ❌ Error in steal-gift:`, error);
-      socket.emit('error', { message: error.message });
+      if (isGameStateConflictError(error)) {
+        socket.emit('error', {
+          message: clientSafeSocketGameErrorMessage(error.message, 'GAME_STATE_CONFLICT'),
+          code: 'GAME_STATE_CONFLICT',
+        });
+        return;
+      }
+      socket.emit('error', {
+        message: clientSafeSocketGameErrorMessage(error.message),
+      });
     }
   });
 
   socket.on('end-turn', async ({ partyId }) => {
+    const { executeEndTurn, isGameStateConflictError } = await import('./utils/game-turn-handler.mjs');
     try {
       // Validate input
       if (!isValidPartyId(partyId)) {
@@ -382,49 +356,20 @@ io.on('connection', (socket) => {
         return;
       }
       
-      // Load game state (from Redis or Firestore)
-      const { loadGameState, saveGameState } = await import('./utils/game-state-persistence.js');
-      const gameState = await loadGameState(partyId);
-      if (!gameState) {
-        socket.emit('error', { message: 'Game not found' });
-        return;
+      let newState;
+      try {
+        ({ newState } = await executeEndTurn(partyId, socket.userId));
+      } catch (error) {
+        if (error.message === 'Game not found') {
+          const { END_TURN_GAME_NOT_FOUND } = await import('./utils/end-turn-guards.js');
+          socket.emit('error', { message: END_TURN_GAME_NOT_FOUND });
+          return;
+        }
+        throw error;
       }
-
-      if (gameState.phase === 'ENDED') {
-        socket.emit('error', { message: 'Game has already ended' });
-        return;
-      }
-
-      const { getEndTurnRejectionReason } = await import('./utils/end-turn-guards.js');
-      const endTurnRejection = getEndTurnRejectionReason(gameState, socket.userId);
-      if (endTurnRejection) {
-        socket.emit('error', { message: endTurnRejection });
-        return;
-      }
-
-      // CRITICAL: Validate gameState.partyId matches partyId parameter
-      if (gameState.partyId && gameState.partyId !== partyId) {
-        console.error(`❌ CRITICAL: partyId mismatch in end-turn! Parameter: ${partyId}, gameState.partyId: ${gameState.partyId}`);
-        socket.emit('error', { message: 'Game state party ID mismatch' });
-        return;
-      }
-      
+      const config = newState.config || { maxSteals: 3, returnToStart: false };
       const { GameEngine } = await import('./engine.js');
-      const config = gameState.config || { maxSteals: 3, returnToStart: false };
-      // Ensure partyId is set in gameState before creating engine
-      gameState.partyId = partyId;
-      const engine = new GameEngine(gameState, config);
 
-      const newState = engine.endTurn();
-      // Preserve config in state
-      newState.config = gameState.config;
-      // CRITICAL: Ensure partyId is preserved
-      newState.partyId = partyId;
-
-      // Save to both Redis and Firestore
-      await saveGameState(partyId, newState);
-
-      // Broadcast update
       io.to(`party:${partyId}`).emit('game-updated', newState);
 
       // Check if next player is a bot and trigger auto-play (if game didn't end)
@@ -512,6 +457,7 @@ io.on('connection', (socket) => {
         finalState.state.config = config;
         finalState.state.partyId = partyId;
         finalState.state.finalOwnership = finalOwnership;
+        const { saveGameState } = await import('./utils/game-state-persistence.js');
         await saveGameState(partyId, finalState.state, redisTtlSecondsForPartyStatus('ENDED'));
         const { saveShippingFulfillmentSnapshot } = await import('./utils/shipping-fulfillment-snapshot.js');
         await saveShippingFulfillmentSnapshot(partyId, finalOwnership, db);
@@ -519,7 +465,16 @@ io.on('connection', (socket) => {
         io.to(`party:${partyId}`).emit('game-ended', finalState);
       }
     } catch (error) {
-      socket.emit('error', { message: error.message });
+      if (isGameStateConflictError(error)) {
+        socket.emit('error', {
+          message: clientSafeSocketGameErrorMessage(error.message, 'GAME_STATE_CONFLICT'),
+          code: 'GAME_STATE_CONFLICT',
+        });
+        return;
+      }
+      socket.emit('error', {
+        message: clientSafeSocketGameErrorMessage(error.message),
+      });
     }
   });
 
@@ -546,20 +501,11 @@ io.on('connection', (socket) => {
         socket.join(roomName);
       }
       
-      // Load game state and increment reaction count
-      const { loadGameState, saveGameState } = await import('./utils/game-state-persistence.js');
+      const { loadGameState } = await import('./utils/game-state-persistence.js');
       const gameState = await loadGameState(partyId);
-      
+
       if (gameState && gameState.phase === 'ACTIVE') {
-        // Increment reaction count in game state
-        const { GameEngine } = await import('./engine.js');
-        const config = gameState.config || { maxSteals: 3, returnToStart: false };
-        const engine = new GameEngine(gameState, config);
-        engine.reactionCount = (engine.reactionCount || 0) + 1;
-        const updatedState = engine.getState();
-        
-        // Save updated state (with incremented reaction count)
-        await saveGameState(partyId, updatedState);
+        await incrementPartyReactionCount(partyId);
       }
       
       // Broadcast reaction to all OTHER clients in the party room

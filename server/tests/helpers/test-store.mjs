@@ -4,20 +4,31 @@
 export function createTestStore() {
   const gameStates = new Map();
   const redis = new Map();
+  const counters = new Map();
 
   return {
     gameStates,
     redis,
+    counters,
     async loadGameState(partyId) {
       const state = gameStates.get(partyId);
       return state ? structuredClone(state) : null;
     },
     async saveGameState(partyId, state) {
-      gameStates.set(partyId, structuredClone(state));
+      const copy = structuredClone(state);
+      gameStates.set(partyId, copy);
+      const stamped = {
+        ...copy,
+        partyId,
+        stateVersion: copy.stateVersion ?? 1,
+        updatedAt: copy.updatedAt ?? new Date().toISOString(),
+      };
+      redis.set(`game:${partyId}`, JSON.stringify(stamped));
     },
     reset() {
       gameStates.clear();
       redis.clear();
+      counters.clear();
     },
   };
 }
