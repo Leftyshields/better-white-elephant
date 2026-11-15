@@ -67,17 +67,20 @@ describe('display name privacy', () => {
     assert.equal(isValidPublicHostDisplayName('A'), true);
   });
 
-  test('hostDisplayNameForPartyDoc caps values longer than 64 characters', () => {
+  test('hostDisplayNameForPartyDoc trims after slice so a space at position 64 is not stored', () => {
     const uid = 'party-host-abcd1234';
-    const long = 'L'.repeat(80);
-    assert.equal(
-      hostDisplayNameForPartyDoc(uid, long, 'safe@example.com').length,
-      64,
-    );
-    assert.equal(
-      isValidPublicHostDisplayName(hostDisplayNameForPartyDoc(uid, long, 'safe@example.com')),
-      true,
-    );
+    const long = `${'L'.repeat(63)} ${'x'.repeat(6)}`;
+    assert.equal(long.length, 70);
+    const value = hostDisplayNameForPartyDoc(uid, long, 'safe@example.com');
+    assert.equal(value, 'L'.repeat(63));
+    assert.equal(isValidPublicHostDisplayName(value), true);
+    assert.ok(!value.endsWith(' '));
+  });
+
+  test('hostDisplayNameForPartyDoc returns null when trimmed value is not rule-safe', () => {
+    const uid = 'party-host-abcd1234';
+    assert.equal(hostDisplayNameForPartyDoc(uid, 'Host\tName', 'safe@example.com'), null);
+    assert.equal(hostDisplayNameForPartyDoc(uid, 'Host\nName', 'safe@example.com'), null);
   });
 
   test('resolveSyncedFirestoreDisplayName never derives from email', () => {

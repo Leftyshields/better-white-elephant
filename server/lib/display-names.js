@@ -81,6 +81,9 @@ export function pickHostNameForInvite(adminId, hostNameCandidate, ownerEmail) {
 export const PARTY_INVITE_INTRO_ANONYMOUS =
   'Your host invited you to a Steal or Reveal game.';
 
+/** Invite landing when party.hostDisplayName is missing or not public. */
+export const INVITE_LANDING_HOST_NAME_NOT_SHARED = 'Name not shared';
+
 /** User-entered profile / signup display name — never persist an email string. */
 export function sanitizeUserChosenDisplayName(value) {
   const trimmed = typeof value === 'string' ? value.trim() : '';
@@ -101,13 +104,19 @@ export function isValidPublicHostDisplayName(value) {
   if (value.length > MAX_PUBLIC_HOST_DISPLAY_NAME_LENGTH) {
     return false;
   }
+  if (/[\t\n\r\f\v]/.test(value)) {
+    return false;
+  }
   return /^\S(.{0,62}\S)?$/.test(value);
 }
 
 export function hostDisplayNameForPartyDoc(adminId, displayName, email) {
   let value = pickHostNameForInvite(adminId, displayName, email).trim();
   if (value.length > MAX_PUBLIC_HOST_DISPLAY_NAME_LENGTH) {
-    value = value.slice(0, MAX_PUBLIC_HOST_DISPLAY_NAME_LENGTH);
+    value = value.slice(0, MAX_PUBLIC_HOST_DISPLAY_NAME_LENGTH).trim();
+  }
+  if (!isValidPublicHostDisplayName(value)) {
+    return null;
   }
   return value;
 }

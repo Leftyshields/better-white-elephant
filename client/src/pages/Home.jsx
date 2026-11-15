@@ -25,6 +25,7 @@ import { collection, addDoc, doc, setDoc, query, where, onSnapshot, orderBy, col
 import { db } from '../utils/firebase.js';
 import {
   hostDisplayNameForPartyDoc,
+  isValidPublicHostDisplayName,
   resolveSyncedFirestoreDisplayName,
 } from '../../../server/lib/display-names.js';
 import { trackCreateParty, trackSignUp, trackLogin, trackButtonClick, trackGameAbandoned, trackError } from '../utils/analytics.js';
@@ -296,9 +297,8 @@ export function Home() {
         user.displayName,
         user.email,
       );
-      const partyRef = await addDoc(collection(db, 'parties'), {
+      const partyPayload = {
         adminId: user.uid,
-        hostDisplayName,
         title: partyTitle.trim() || null,
         date: new Date(partyDate),
         status: 'LOBBY',
@@ -308,7 +308,11 @@ export function Home() {
         },
         createdAt: new Date(),
         updatedAt: new Date(),
-      });
+      };
+      if (hostDisplayName != null && isValidPublicHostDisplayName(hostDisplayName)) {
+        partyPayload.hostDisplayName = hostDisplayName;
+      }
+      const partyRef = await addDoc(collection(db, 'parties'), partyPayload);
 
       // Create participant entry for admin (if not exists)
       const participantRef = doc(db, 'parties', partyRef.id, 'participants', user.uid);

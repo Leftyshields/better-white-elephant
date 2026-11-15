@@ -10,14 +10,18 @@ import { db } from '../utils/firebase.js';
 import { trackParticipantJoin, trackError } from '../utils/analytics.js';
 import { GiftIcon } from '@heroicons/react/24/outline';
 import { Snowflakes } from './Snowflakes.jsx';
-import { isSyntheticPlayerDisplayName } from '../../../server/lib/display-names.js';
+import {
+  INVITE_LANDING_HOST_NAME_NOT_SHARED,
+  isSyntheticPlayerDisplayName,
+  isValidPublicHostDisplayName,
+} from '../../../server/lib/display-names.js';
 
 export function PartyInviteLanding({ partyId }) {
   const { user, signInWithGoogle, loading: authLoading } = useAuth();
   const [partyInfo, setPartyInfo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
-  const [hostName, setHostName] = useState('Party Host');
+  const [hostName, setHostName] = useState(null);
 
   // Fetch public party info
   useEffect(() => {
@@ -43,11 +47,12 @@ export function PartyInviteLanding({ partyId }) {
           if (
             storedHostName &&
             adminId &&
-            !isSyntheticPlayerDisplayName(storedHostName, adminId)
+            !isSyntheticPlayerDisplayName(storedHostName, adminId) &&
+            isValidPublicHostDisplayName(storedHostName)
           ) {
             setHostName(storedHostName);
           } else {
-            setHostName('Party Host');
+            setHostName(null);
           }
         } else {
           setPartyInfo(null);
@@ -203,7 +208,9 @@ export function PartyInviteLanding({ partyId }) {
           <div className="space-y-4 mb-8 relative z-10">
             <div className="bg-slate-950/50 border border-white/5 rounded-lg p-4">
               <p className="text-sm text-slate-400 mb-1">Host</p>
-              <p className="text-lg font-semibold text-white">{hostName || 'Party Host'}</p>
+              <p className="text-lg font-semibold text-white">
+                {hostName || INVITE_LANDING_HOST_NAME_NOT_SHARED}
+              </p>
             </div>
             
             <div className="bg-slate-950/50 border border-white/5 rounded-lg p-4">

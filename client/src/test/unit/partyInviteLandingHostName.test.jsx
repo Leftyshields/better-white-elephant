@@ -4,6 +4,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { PartyInviteLanding } from '../../components/PartyInviteLanding.jsx';
+import { INVITE_LANDING_HOST_NAME_NOT_SHARED } from '../../../../server/lib/display-names.js';
 
 const PARTY_ID = 'invite-landing-party';
 
@@ -67,7 +68,7 @@ describe('PartyInviteLanding host name', () => {
     expect(getDocMock).toHaveBeenCalledTimes(1);
   });
 
-  it('falls back to Party Host when hostDisplayName is a synthetic Player fallback', async () => {
+  it('falls back to copy when hostDisplayName is a synthetic Player fallback', async () => {
     getDocMock.mockResolvedValue({
       exists: () => true,
       data: () => ({
@@ -81,11 +82,11 @@ describe('PartyInviteLanding host name', () => {
     render(<PartyInviteLanding partyId={PARTY_ID} />);
 
     await waitFor(() => {
-      expect(screen.getByText('Party Host')).toBeInTheDocument();
+      expect(screen.getByText(INVITE_LANDING_HOST_NAME_NOT_SHARED)).toBeInTheDocument();
     });
   });
 
-  it('falls back to Party Host when hostDisplayName is missing', async () => {
+  it('falls back to copy when hostDisplayName is missing', async () => {
     getDocMock.mockResolvedValue({
       exists: () => true,
       data: () => ({
@@ -98,7 +99,7 @@ describe('PartyInviteLanding host name', () => {
     render(<PartyInviteLanding partyId={PARTY_ID} />);
 
     await waitFor(() => {
-      expect(screen.getByText('Party Host')).toBeInTheDocument();
+      expect(screen.getByText(INVITE_LANDING_HOST_NAME_NOT_SHARED)).toBeInTheDocument();
     });
     expect(getDocMock).toHaveBeenCalledTimes(1);
   });

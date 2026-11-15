@@ -26,6 +26,7 @@ import {
 import { trackLogin, trackSignUp } from '../utils/analytics.js';
 import {
   hostDisplayNameForPartyDoc,
+  isValidPublicHostDisplayName,
   resolveSyncedFirestoreDisplayName,
   sanitizeUserChosenDisplayName,
 } from '../../../server/lib/display-names.js';
@@ -68,22 +69,38 @@ export function useAuth() {
             syncedDisplayName,
             user.email || existingData.email || '',
           );
-          const hostedPartiesQuery = query(
-            collection(db, 'parties'),
-            where('adminId', '==', user.uid),
-          );
-          const hostedParties = await getDocs(hostedPartiesQuery);
-          await Promise.all(
-            hostedParties.docs.map((partyDoc) =>
-              updateDoc(partyDoc.ref, {
-                hostDisplayName,
-                updatedAt: new Date(),
-              }),
-            ),
-          );
+          if (hostDisplayName != null && isValidPublicHostDisplayName(hostDisplayName)) {
+            const hostedPartiesQuery = query(
+              collection(db, 'parties'),
+              where('adminId', '==', user.uid),
+              where('status', 'in', ['LOBBY', 'CANCELLED']),
+            );
+            const hostedParties = await getDocs(hostedPartiesQuery);
+            const partyUpdates = hostedParties.docs
+              .filter((partyDoc) => partyDoc.data().hostDisplayName !== hostDisplayName)
+              .map((partyDoc) =>
+                updateDoc(partyDoc.ref, {
+                  hostDisplayName,
+                  updatedAt: new Date(),
+                }),
+              );
+            const results = await Promise.allSettled(partyUpdates);
+            for (const result of results) {
+              if (result.status === 'rejected') {
+                const error = result.reason;
+                console.error('Error syncing hostDisplayName to party:', {
+                  code: error?.code,
+                  name: error?.name,
+                });
+              }
+            }
+          }
         } catch (error) {
           // Don't block auth flow if Firestore sync fails
-          console.error('Error syncing user data to Firestore:', error);
+          console.error('Error syncing user data to Firestore:', {
+            code: error?.code,
+            name: error?.name,
+          });
         }
       }
     });
