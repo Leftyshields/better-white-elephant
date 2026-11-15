@@ -29,6 +29,19 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/parties/$(partyId)).data.status == 'LOBBY';
     }
 
+    // Public host label on party docs (invite landing — matches PR #91 validation)
+    function validHostDisplayName(name) {
+      return name is string
+        && name.size() > 0
+        && name.size() <= 64
+        && !name.matches('.*@.*');
+    }
+
+    function hostDisplayNameOkOnWrite() {
+      return !request.resource.data.keys().hasAny(['hostDisplayName'])
+        || validHostDisplayName(request.resource.data.hostDisplayName);
+    }
+
     function partyServerFieldsUntouched() {
       return !request.resource.data.diff(resource.data).affectedKeys()
         .hasAny(['gameState', 'gameStateUpdatedAt', 'endedAt', 'gameHistory', 'adminId', 'createdAt']);
@@ -36,8 +49,9 @@ service cloud.firestore {
 
     function partyAdminUpdateAllowed() {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
-      return changed.hasOnly(['title', 'date', 'config', 'updatedAt', 'status'])
+      return changed.hasOnly(['title', 'date', 'config', 'updatedAt', 'status', 'hostDisplayName'])
         && partyServerFieldsUntouched()
+        && hostDisplayNameOkOnWrite()
         && request.resource.data.status != 'ACTIVE'
         && request.resource.data.status != 'ENDED'
         && (
@@ -90,6 +104,7 @@ service cloud.firestore {
       allow create: if isAuthenticated() && 
                        request.resource.data.adminId == request.auth.uid &&
                        request.resource.data.status == 'LOBBY' &&
+                       hostDisplayNameOkOnWrite() &&
                        !request.resource.data.keys().hasAny([
                          'gameState', 'gameStateUpdatedAt', 'endedAt', 'gameHistory'
                        ]);
@@ -150,10 +165,11 @@ service cloud.firestore {
                        giftProtectedFieldsUnchanged() &&
                        giftSubmitterUpdateAllowed();
       
-      // Admin may delete gifts during lobby (e.g. when removing a participant)
+      // Submitter or admin may delete gifts during lobby (Change Gift / remove participant)
       allow delete: if isAuthenticated() && 
-                       isPartyAdmin(resource.data.partyId) &&
-                       partyIsLobby(resource.data.partyId);
+                       partyIsLobby(resource.data.partyId) &&
+                       (resource.data.submitterId == request.auth.uid ||
+                        isPartyAdmin(resource.data.partyId));
     }
     
     // Collection group query for participants - allows users to find parties where they are participants
