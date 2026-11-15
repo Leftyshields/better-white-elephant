@@ -167,6 +167,10 @@ export function buildInviteEmailHtml({
       `;
 }
 
+/** Placeholder until Copywriter finalizes gift-submitter “no address shared yet” copy. */
+export const GIFT_SUBMITTER_NOTIFY_NO_ADDRESS_SHARED_MESSAGE =
+  "Your giftee hasn't shared a shipping address yet. We'll let you know when they do.";
+
 export function buildGiftSubmitterNotifyHtml({ winnerDisplayName, shippingAddressJson }) {
   const safeName = escapeHtml(winnerDisplayName);
   const safeAddress = escapeHtml(shippingAddressJson);
@@ -179,6 +183,17 @@ export function buildGiftSubmitterNotifyHtml({ winnerDisplayName, shippingAddres
                 <pre style="white-space: pre-wrap; font-family: sans-serif;">${safeAddress}</pre>
               </div>
               <p>Please ship the gift to this address.</p>
+            `;
+}
+
+export function buildGiftSubmitterNotifyNoAddressSharedHtml({ winnerDisplayName }) {
+  const safeName = escapeHtml(winnerDisplayName);
+  const safeMessage = escapeHtml(GIFT_SUBMITTER_NOTIFY_NO_ADDRESS_SHARED_MESSAGE);
+
+  return `
+              <h1>Shipping Address</h1>
+              <p>The winner of your gift, <strong>${safeName}</strong>, has saved their shipping details for the exchange.</p>
+              <p>${safeMessage}</p>
             `;
 }
 

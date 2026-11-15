@@ -21,7 +21,7 @@ function pickShippingAddress(raw) {
   return hasStreet ? picked : null;
 }
 
-function hasSenderShareConsent(userData) {
+export function hasSenderShareConsent(userData) {
   const consentAt = userData?.shippingAddressSenderShareConsentAt;
   if (!consentAt) {
     return false;
