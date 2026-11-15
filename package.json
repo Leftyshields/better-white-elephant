@@ -13,7 +13,7 @@
     "dev:server": "cd server && npm run dev",
     "build:client": "cd client && npm run build",
     "build:functions": "cd functions && npm run build",
-    "test:firestore-rules": "firebase emulators:exec --only firestore --project better-white-elephant-rules-test 'node --test --test-concurrency=1 tests/firestore.users.rules.test.mjs tests/firestore.pendingInvites.rules.test.mjs tests/firestore.gifts-parties.rules.test.mjs tests/firestore.client-writes.rules.test.mjs'"
+    "test:firestore-rules": "firebase emulators:exec --only firestore --project better-white-elephant-rules-test 'node --test tests/firestore.users.rules.test.mjs && node --test tests/firestore.pendingInvites.rules.test.mjs && node --test tests/firestore.gifts-parties.rules.test.mjs && node --test tests/firestore.client-writes.rules.test.mjs'"
   },
   "keywords": [
     "white-elephant",
