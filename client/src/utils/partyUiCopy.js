@@ -29,3 +29,11 @@ export function partyEntryButtonLabel(status) {
 
 export const PARTIES_LOAD_ERROR =
   "Your parties couldn't load. Refresh the page, or try again in a few minutes.";
+
+/** Firestore allows party delete only when status is ENDED or CANCELLED (see firestore.rules). */
+export function hostCanDeletePartyFromHome(party) {
+  if (!party?.isAdmin) {
+    return false;
+  }
+  return party.status === 'ENDED' || party.status === 'CANCELLED';
+}
