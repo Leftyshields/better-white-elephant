@@ -25,10 +25,7 @@ import {
   logAcceptInviteOnParticipantJoinFailure,
   markPendingInvitesAcceptedForParticipantJoin,
 } from './acceptPendingInvitesLogic.js';
-import {
-  buildPartyInviteIntroParagraph,
-  pickHostNameForInvite,
-} from './lib/display-names.js';
+import { handleSendPartyInviteRequest } from './sendPartyInviteHandler.js';
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -60,113 +57,39 @@ export const sendPartyInvite = onRequest(
   {
     cors: true,
     secrets: [resendApiKey, resendFromEmail],
-    invoker: 'public', // Make function publicly accessible
+    invoker: 'public',
   },
   async (req, res) => {
-    // Handle CORS preflight
     if (req.method === 'OPTIONS') {
       res.set('Access-Control-Allow-Origin', '*');
       res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-      res.set('Access-Control-Allow-Headers', 'Content-Type');
+      res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
       res.status(204).send('');
       return;
     }
 
-    // Set CORS headers
+    if (req.method !== 'POST') {
+      res.set('Access-Control-Allow-Origin', '*');
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
+    }
+
     res.set('Access-Control-Allow-Origin', '*');
     res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
     try {
-      const { email, partyId, hostName } = req.body;
+      const getFromEmail = () =>
+        resendFromEmail.value() || process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
 
-      if (!email || !partyId) {
-        return res.status(400).json({ error: 'email and partyId are required' });
-      }
-
-      // Get party details
-      const partyDoc = await db.collection('parties').doc(partyId).get();
-      if (!partyDoc.exists) {
-        return res.status(404).json({ error: 'Party not found' });
-      }
-
-      const party = partyDoc.data();
-
-      const adminId = party.adminId;
-      let ownerEmail = '';
-      if (adminId) {
-        const hostUserDoc = await db.collection('users').doc(adminId).get();
-        if (hostUserDoc.exists) {
-          ownerEmail = hostUserDoc.data()?.email || '';
-        }
-      }
-      const adminKey = adminId || 'host';
-      const safeHostName = pickHostNameForInvite(adminKey, hostName, ownerEmail);
-      const inviteIntroHtml = buildPartyInviteIntroParagraph(safeHostName, adminKey);
-
-      // Determine client URL
-      // Default to production
-      let clientUrl = 'https://stealorreveal.com';
-
-      // Check if request is from localhost (for development)
-      const origin = req.get('origin') || req.get('referer');
-      if (origin && (origin.includes('localhost') || origin.includes('127.0.0.1'))) {
-        clientUrl = origin;
-      }
-
-      // Clean up trailing slash
-      if (clientUrl.endsWith('/')) {
-        clientUrl = clientUrl.slice(0, -1);
-      }
-      const inviteLink = `${clientUrl}/party/${partyId}`;
-      const partyTitle = party.title || 'White Elephant Party';
-      const partyDate = party.date?.toDate ? party.date.toDate().toLocaleDateString() : 'TBD';
-
-      // Send email via Resend
-      const resendClient = getResend();
-      // Prioritize secrets (production), fallback to env var
-      // Ensure proper format for Resend
-      let fromEmail = resendFromEmail.value() || process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
-      fromEmail = fromEmail.trim();
-      if (!fromEmail.includes('@')) {
-        fromEmail = 'onboarding@resend.dev';
-      }
-      const { data, error } = await resendClient.emails.send({
-        from: fromEmail,
-        to: email,
-        subject: `You're invited to ${partyTitle}!`,
-        html: `
-        <h1>You're Invited!</h1>
-        ${inviteIntroHtml}
-        <div style="background-color: #f3f4f6; padding: 16px; border-radius: 6px; margin: 16px 0;">
-          <p style="margin: 0;"><strong>${partyTitle}</strong></p>
-          <p style="margin: 8px 0 0 0; color: #6b7280;">Date: ${partyDate}</p>
-        </div>
-        <p><a href="${inviteLink}" style="display: inline-block; padding: 12px 24px; background-color: #2563eb; color: white; text-decoration: none; border-radius: 6px; margin-top: 16px;">Join Party</a></p>
-        <p style="margin-top: 16px; color: #6b7280; font-size: 14px;">Or copy this link: <a href="${inviteLink}">${inviteLink}</a></p>
-      `,
+      const result = await handleSendPartyInviteRequest(req, {
+        db,
+        auth: admin.auth(),
+        getResend,
+        getFromEmail,
       });
 
-      if (error) {
-        console.error('Resend error:', error);
-
-        // Handle Resend testing mode limitation
-        if (error.statusCode === 403 || error.message?.includes('testing emails') || error.message?.includes('verified email')) {
-          const isTestingMode = error.message?.includes('testing emails') || error.message?.includes('verified email');
-          return res.status(403).json({
-            error: 'Email sending limited',
-            message: isTestingMode
-              ? `Resend is in testing mode. You can only send emails to verified email addresses (like ${process.env.VERIFIED_EMAIL || 'your account email'}). To send to other recipients, verify a domain at resend.com/domains`
-              : 'Email sending is limited. Please verify your domain in Resend to send to all recipients.',
-            details: error,
-            testingMode: isTestingMode
-          });
-        }
-
-        return res.status(500).json({ error: 'Failed to send email', details: error });
-      }
-
-      res.json({ success: true, messageId: data?.id });
+      res.status(result.status).json(result.body);
     } catch (error) {
       console.error('Error sending invite:', error);
       res.status(500).json({ error: 'Failed to send invite', message: error.message });
