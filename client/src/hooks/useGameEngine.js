@@ -175,11 +175,15 @@ export function useGameEngine(partyId) {
 
         // Don't show error toast for expected game state errors
         // These are normal game conditions, not actual errors
-        const isExpectedGameStateError = 
+        const isExpectedGameStateError =
           message.includes('No stealable gifts available') ||
           message.includes('Cannot steal gift: invalid action') ||
+          message === GAME_USER_COPY.cannotStealGift ||
+          message.includes('Cannot pick gift: invalid action') ||
+          message === GAME_USER_COPY.cannotOpenGift ||
           message.includes('already acted this turn') ||
-          message.includes('Cannot steal back');
+          message.includes('Cannot steal back') ||
+          message === GAME_USER_COPY.stealBackSameTurn;
 
         const isStateVersionConflict =
           code === 'GAME_STATE_CONFLICT' || message === 'Game state conflict; please retry';
@@ -198,18 +202,24 @@ export function useGameEngine(partyId) {
           } else if (
             message === GAME_USER_COPY.gameStateLoading ||
             message === GAME_USER_COPY.gameStateStaleMove ||
-            message === GAME_USER_COPY.gameStateLoadFailed
+            message === GAME_USER_COPY.gameStateLoadFailed ||
+            message === GAME_USER_COPY.actionFailedGeneric ||
+            message === GAME_USER_COPY.gameInactive ||
+            message === GAME_USER_COPY.notYourTurn ||
+            message === GAME_USER_COPY.cannotOpenGift ||
+            message === GAME_USER_COPY.cannotStealGift ||
+            message === GAME_USER_COPY.stealBackSameTurn ||
+            message === GAME_USER_COPY.giftNotInWrappedPile
           ) {
             userFriendlyMessage = message;
           } else if (message.includes('Game is not active')) {
-            userFriendlyMessage = "The game hasn't started, or it has already ended.";
-          } else if (
-            message.includes('Cannot steal back') ||
-            message.includes('same turn')
-          ) {
-            userFriendlyMessage = "You can't steal that gift back on the same turn.";
+            userFriendlyMessage = GAME_USER_COPY.gameInactive;
           } else if (message.includes('Socket not connected')) {
             userFriendlyMessage = 'Connection lost. Please refresh the page.';
+          } else if (message === 'Not your turn') {
+            userFriendlyMessage = GAME_USER_COPY.notYourTurn;
+          } else {
+            userFriendlyMessage = GAME_USER_COPY.actionFailedGeneric;
           }
           
           dispatch(gameActions.errorReceived(userFriendlyMessage));
