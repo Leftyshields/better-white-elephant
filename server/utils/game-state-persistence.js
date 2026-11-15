@@ -233,6 +233,11 @@ export async function resolvePartyTtlForGameState(partyId, gameState, requestedT
   return resolveRedisTtlSeconds(partyStatus, gameState.phase, requestedTtl);
 }
 
+/**
+ * @param {string} partyId
+ * @param {object} cleanedState
+ * @param {{ compactFailureLog?: boolean }} [logOptions]
+ */
 export async function saveGameStateToFirestore(partyId, cleanedState, logOptions = {}) {
   const compactFailure = logOptions.compactFailureLog === true;
   try {

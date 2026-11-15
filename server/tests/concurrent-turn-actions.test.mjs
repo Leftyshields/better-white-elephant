@@ -165,6 +165,8 @@ test('concurrent turns on two different parties both commit (isolated Redis conn
   assertGiftConservation(finalB);
   assert.equal(finalA.unwrappedGifts.length, 1);
   assert.equal(finalB.unwrappedGifts.length, 1);
+  assert.equal(finalA.wrappedGifts.length, 1);
+  assert.equal(finalB.wrappedGifts.length, 1);
 });
 
 test('Redis commit succeeds when Firestore persist fails after turn (Redis authoritative)', async () => {
