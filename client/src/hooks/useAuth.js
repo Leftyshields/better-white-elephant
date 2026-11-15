@@ -15,7 +15,7 @@ import {
 import { auth, db } from '../utils/firebase.js';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { trackLogin, trackSignUp } from '../utils/analytics.js';
-import { resolveSyncedFirestoreDisplayName } from '../../../lib/display-names.js';
+import { resolveSyncedFirestoreDisplayName } from '../../../server/lib/display-names.js';
 
 export function useAuth() {
   const [user, setUser] = useState(null);
