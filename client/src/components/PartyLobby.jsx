@@ -26,6 +26,7 @@ import {
   getDocs,
 } from 'firebase/firestore';
 import { db } from '../utils/firebase.js';
+import { filterVisiblePendingInvites, canResendPartyInvite } from '../utils/pendingInvites.js';
 
 export function PartyLobby({ partyId, onStartGame }) {
   const { user } = useAuth();
@@ -586,7 +587,7 @@ export function PartyLobby({ partyId, onStartGame }) {
       // Auto-advance to next step if participants requirement is met
       // Note: The participant count will update via real-time listener
       setTimeout(() => {
-        const displayedInvites = pendingInvites.filter(inv => inv.status === 'GOING' || inv.status !== 'ACCEPTED');
+        const displayedInvites = filterVisiblePendingInvites(pendingInvites, participants);
         const totalCount = participants.length + displayedInvites.length;
         if (totalCount >= 2 && isAdmin) {
           const currentIndex = setupSteps.findIndex(s => s.id === 'participants');
@@ -687,7 +688,7 @@ export function PartyLobby({ partyId, onStartGame }) {
       return !!(party?.config?.maxSteals);
     })() },
     { id: 'participants', label: 'Add participants', completed: (() => {
-      const displayedInvites = pendingInvites.filter(inv => inv.status === 'GOING' || inv.status !== 'ACCEPTED');
+      const displayedInvites = filterVisiblePendingInvites(pendingInvites, participants);
       return participants.length + displayedInvites.length >= 2;
     })() },
     { id: 'gift', label: 'Submit your gift', completed: !!userGift },
@@ -912,7 +913,7 @@ export function PartyLobby({ partyId, onStartGame }) {
                       <div className="mb-4">
                         <p className="text-slate-300 mb-4">
                           {(() => {
-                            const displayedInvites = pendingInvites.filter(inv => inv.status === 'GOING' || inv.status !== 'ACCEPTED');
+                            const displayedInvites = filterVisiblePendingInvites(pendingInvites, participants);
                             const totalCount = participants.length + displayedInvites.length;
                             return totalCount >= 2
                               ? `Great! You have ${totalCount} participants.`
@@ -1020,8 +1021,7 @@ export function PartyLobby({ partyId, onStartGame }) {
                             </div>
                           );
                         })}
-                        {pendingInvites
-                          .filter(inv => inv.status === 'GOING' || inv.status !== 'ACCEPTED')
+                        {filterVisiblePendingInvites(pendingInvites, participants)
                           .map((invite) => (
                             <div
                               key={invite.id}
@@ -1046,7 +1046,7 @@ export function PartyLobby({ partyId, onStartGame }) {
                                 )}
                               </div>
                               <div className="flex items-center gap-2">
-                                {(invite.emailFailed || !invite.sentAt) && (
+                                {canResendPartyInvite(invite, participants) && (
                                   <Button
                                     variant="secondary"
                                     onClick={async () => {
@@ -1122,7 +1122,7 @@ export function PartyLobby({ partyId, onStartGame }) {
                           ))}
                       </div>
                       
-                      {participants.length === 0 && pendingInvites.filter(inv => inv.status !== 'ACCEPTED').length === 0 && (
+                      {participants.length === 0 && filterVisiblePendingInvites(pendingInvites, participants).length === 0 && (
                         <p className="text-slate-400 text-center py-4">No one has joined yet. Send the share link, or add someone by email.</p>
                       )}
                     </div>
@@ -1633,7 +1633,7 @@ export function PartyLobby({ partyId, onStartGame }) {
                 const allReady = nonAdminParticipants.length > 0 && nonAdminParticipants.every((p) => p.ready === true);
                 const readyCount = nonAdminParticipants.filter((p) => p.ready === true).length;
                 const totalCount = nonAdminParticipants.length;
-                const displayedInvites = pendingInvites.filter(inv => inv.status === 'GOING' || inv.status !== 'ACCEPTED');
+                const displayedInvites = filterVisiblePendingInvites(pendingInvites, participants);
                 const totalParticipants = participants.length + displayedInvites.length;
                 
                 const hasShippingAddress = adminShippingAddress && adminShippingAddress.street && adminShippingAddress.city;

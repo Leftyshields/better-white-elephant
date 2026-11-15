@@ -2,7 +2,7 @@
  * Firebase Functions
  */
 import { onRequest } from 'firebase-functions/v2/https';
-import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
+import { onDocumentCreated, onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { defineSecret } from 'firebase-functions/params';
 import { Resend } from 'resend';
@@ -21,6 +21,7 @@ import {
   dedupeOperationsByDocumentPath,
   getAllDocumentsFromQuery,
 } from './dataRetentionBatch.js';
+import { markPendingInvitesAcceptedForParticipantJoin } from './acceptPendingInvitesLogic.js';
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -153,6 +154,25 @@ export const sendPartyInvite = onRequest(
       res.status(500).json({ error: 'Failed to send invite', message: error.message });
     }
   });
+
+/**
+ * Mark matching pendingInvites ACCEPTED when someone joins as a participant.
+ */
+export const acceptInviteOnParticipantJoin = onDocumentCreated(
+  'parties/{partyId}/participants/{participantId}',
+  async (event) => {
+    const partyId = event.params.partyId;
+    const participantId = event.params.participantId;
+    try {
+      await markPendingInvitesAcceptedForParticipantJoin(db, partyId, participantId);
+    } catch (error) {
+      console.error(
+        `acceptInviteOnParticipantJoin failed party=${partyId} participant=${participantId}:`,
+        error
+      );
+    }
+  }
+);
 
 /**
  * Notify gift submitter when winner updates address
