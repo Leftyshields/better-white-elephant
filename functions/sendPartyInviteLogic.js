@@ -5,13 +5,18 @@
 import { createHash } from 'node:crypto';
 import { pickDisplayName } from './displayName.js';
 
-/** Documented rate limits (see PR). */
+/**
+ * Documented rate limits (see PR). Fixed hour/day bucket counters (not rolling windows).
+ * Host limits apply per host Firebase uid (all parties that user hosts share one quota).
+ */
 export const PARTY_INVITE_RATE_LIMITS = {
   hostPerHour: 50,
   hostPerDay: 200,
   recipientPerHour: 10,
   recipientPerDay: 25,
 };
+
+export const INVITE_EMAIL_SUBJECT_MAX_LENGTH = 120;
 
 const MS_PER_HOUR = 60 * 60 * 1000;
 const MS_PER_DAY = 24 * MS_PER_HOUR;
@@ -41,6 +46,7 @@ export function normalizeInviteEmail(email) {
   return trimmed;
 }
 
+/** Matches client pendingInvites doc ids; do not change without a migration. */
 export function inviteDocIdForEmail(normalizedEmail) {
   return normalizedEmail.replace(/[^a-z0-9]/g, '_');
 }
@@ -164,21 +170,43 @@ export function buildGiftSubmitterNotifyHtml({ winnerDisplayName, shippingAddres
             `;
 }
 
-export function resolveClientUrl(origin, referer) {
-  let clientUrl = 'https://stealorreveal.com';
+const PRODUCTION_CLIENT_ORIGIN = 'https://stealorreveal.com';
+
+export function resolveClientUrl(origin, referer, options = {}) {
+  const inEmulator =
+    options.functionsEmulator === true ||
+    process.env.FUNCTIONS_EMULATOR === 'true';
+
+  if (!inEmulator) {
+    return PRODUCTION_CLIENT_ORIGIN;
+  }
+
   const source = origin || referer || '';
-  if (source && (source.includes('localhost') || source.includes('127.0.0.1'))) {
-    try {
-      const parsed = new URL(source);
-      clientUrl = parsed.origin;
-    } catch {
-      clientUrl = source.replace(/\/$/, '');
+  if (!source) {
+    return PRODUCTION_CLIENT_ORIGIN;
+  }
+
+  try {
+    const parsed = new URL(source);
+    const host = parsed.hostname;
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return parsed.origin.replace(/\/$/, '');
     }
+  } catch {
+    return PRODUCTION_CLIENT_ORIGIN;
   }
-  if (clientUrl.endsWith('/')) {
-    clientUrl = clientUrl.slice(0, -1);
+
+  return PRODUCTION_CLIENT_ORIGIN;
+}
+
+export function sanitizeEmailSubjectPart(value) {
+  if (value == null) {
+    return '';
   }
-  return clientUrl;
+  return String(value)
+    .replace(/[\x00-\x1f\x7f]/g, '')
+    .replace(/[<>]/g, '')
+    .trim();
 }
 
 export const SEND_PARTY_INVITE_ERRORS = {
@@ -203,12 +231,21 @@ export const SEND_PARTY_INVITE_ERRORS = {
     'That email address has gotten too many invites today. Try again tomorrow.',
 };
 
-/** Plain-text party title safe for email Subject headers (control chars / tags stripped). */
-export function inviteEmailSubject(partyTitle) {
-  const title =
-    typeof partyTitle === 'string' && partyTitle.trim()
-      ? partyTitle.trim()
-      : 'White Elephant Party';
-  const safe = title.replace(/[\x00-\x1f\x7f\r\n]/g, '').replace(/[<>]/g, '');
-  return `You're invited to ${safe}!`;
+/** Email Subject: sanitized partyTitle and hostName; capped length; CRLF/control chars stripped. */
+export function inviteEmailSubject(partyTitle, hostDisplayName) {
+  sanitizeEmailSubjectPart(hostDisplayName);
+  const title = sanitizeEmailSubjectPart(partyTitle) || 'White Elephant Party';
+  const prefix = "You're invited to ";
+  const suffix = '!';
+  let subject = `${prefix}${title}${suffix}`;
+  if (subject.length > INVITE_EMAIL_SUBJECT_MAX_LENGTH) {
+    const maxTitle =
+      INVITE_EMAIL_SUBJECT_MAX_LENGTH - prefix.length - suffix.length - 3;
+    const clipped = title.slice(0, Math.max(0, maxTitle));
+    subject = `${prefix}${clipped}...${suffix}`;
+    if (subject.length > INVITE_EMAIL_SUBJECT_MAX_LENGTH) {
+      subject = subject.slice(0, INVITE_EMAIL_SUBJECT_MAX_LENGTH);
+    }
+  }
+  return subject;
 }

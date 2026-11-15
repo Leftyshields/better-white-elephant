@@ -11,6 +11,9 @@ import {
   buildInviteEmailHtml,
   escapeHtml,
   inviteEmailSubject,
+  resolveClientUrl,
+  sanitizeEmailSubjectPart,
+  INVITE_EMAIL_SUBJECT_MAX_LENGTH,
   getRateLimitBuckets,
   hostDisplayNameForInvite,
   nextRateLimitState,
@@ -58,8 +61,61 @@ test('hostName and partyTitle are HTML-escaped in invite email body', () => {
 
 test('inviteEmailSubject strips markup from party title', () => {
   assert.equal(
-    inviteEmailSubject('Holiday <script>'),
+    inviteEmailSubject('Holiday <script>', 'Host'),
     "You're invited to Holiday script!",
+  );
+});
+
+test('inviteEmailSubject strips CRLF injection from party title and host name', () => {
+  const subject = inviteEmailSubject(
+    "Party\r\nBcc: evil@example.com",
+    "Host\r\nCc: spam@example.com",
+  );
+  assert.doesNotMatch(subject, /\r/);
+  assert.doesNotMatch(subject, /\n/);
+  assert.match(subject, /PartyBcc: evil@example.com/);
+});
+
+test('inviteEmailSubject caps total length', () => {
+  const longTitle = 'A'.repeat(200);
+  const subject = inviteEmailSubject(longTitle, 'Host');
+  assert.ok(subject.length <= INVITE_EMAIL_SUBJECT_MAX_LENGTH);
+  assert.match(subject, /\.\.\.!/);
+});
+
+test('sanitizeEmailSubjectPart removes control characters', () => {
+  assert.equal(sanitizeEmailSubjectPart('a\u0000b'), 'ab');
+});
+
+test('resolveClientUrl uses production origin outside emulator', () => {
+  assert.equal(
+    resolveClientUrl('https://localhost.attacker.com', null, {
+      functionsEmulator: false,
+    }),
+    'https://stealorreveal.com',
+  );
+  assert.equal(
+    resolveClientUrl('https://evil.com', 'https://evil.com', {
+      functionsEmulator: false,
+    }),
+    'https://stealorreveal.com',
+  );
+});
+
+test('resolveClientUrl allows localhost only in emulator', () => {
+  assert.equal(
+    resolveClientUrl('http://localhost:5173', null, { functionsEmulator: true }),
+    'http://localhost:5173',
+  );
+  assert.equal(
+    resolveClientUrl(null, 'http://127.0.0.1:5000/party', { functionsEmulator: true }),
+    'http://127.0.0.1:5000',
+  );
+  assert.equal(
+    resolveClientUrl('https://localhost.attacker.com', null, {
+      functionsEmulator: true,
+    }),
+    'https://stealorreveal.com',
   );
 });
 

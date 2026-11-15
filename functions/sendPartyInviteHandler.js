@@ -21,8 +21,9 @@ import {
   resolveClientUrl,
 } from './sendPartyInviteLogic.js';
 
-/** Rate-limit docs are written only via Admin SDK in Cloud Functions (no client rules). */
+/** Rate-limit docs: Admin SDK only; Firestore rules deny all client access to `_rateLimits`. */
 
+/** Host invite counters keyed by host user id (shared across every party they host). */
 function rateLimitHostRef(db, uid) {
   return db.collection('_rateLimits').doc('partyInviteHosts').collection('records').doc(uid);
 }
@@ -213,23 +214,6 @@ export async function handleSendPartyInviteRequest(req, deps) {
 
   const buckets = getRateLimitBuckets();
 
-  const hostLimit = await consumeRateLimit(
-    db,
-    rateLimitHostRef(db, callerUid),
-    buckets,
-    {
-      perHour: PARTY_INVITE_RATE_LIMITS.hostPerHour,
-      perDay: PARTY_INVITE_RATE_LIMITS.hostPerDay,
-    },
-  );
-  if (!hostLimit.allowed) {
-    const message =
-      hostLimit.reason === 'day'
-        ? SEND_PARTY_INVITE_ERRORS.rateLimitHostDay
-        : SEND_PARTY_INVITE_ERRORS.rateLimitHostHour;
-    return { status: 429, body: { error: 'Too many requests', message } };
-  }
-
   const recipientHash = hashRecipientForRateLimit(normalizedEmail);
   const recipientLimit = await consumeRateLimit(
     db,
@@ -245,6 +229,23 @@ export async function handleSendPartyInviteRequest(req, deps) {
       recipientLimit.reason === 'day'
         ? SEND_PARTY_INVITE_ERRORS.rateLimitRecipientDay
         : SEND_PARTY_INVITE_ERRORS.rateLimitRecipientHour;
+    return { status: 429, body: { error: 'Too many requests', message } };
+  }
+
+  const hostLimit = await consumeRateLimit(
+    db,
+    rateLimitHostRef(db, callerUid),
+    buckets,
+    {
+      perHour: PARTY_INVITE_RATE_LIMITS.hostPerHour,
+      perDay: PARTY_INVITE_RATE_LIMITS.hostPerDay,
+    },
+  );
+  if (!hostLimit.allowed) {
+    const message =
+      hostLimit.reason === 'day'
+        ? SEND_PARTY_INVITE_ERRORS.rateLimitHostDay
+        : SEND_PARTY_INVITE_ERRORS.rateLimitHostHour;
     return { status: 429, body: { error: 'Too many requests', message } };
   }
 
@@ -278,12 +279,12 @@ export async function handleSendPartyInviteRequest(req, deps) {
   const { data, error } = await resendClient.emails.send({
     from: fromEmail,
     to: normalizedEmail,
-    subject: inviteEmailSubject(partyTitle),
+    subject: inviteEmailSubject(partyTitle, hostDisplayName),
     html,
   });
 
   if (error) {
-    console.error('Resend error:', error);
+    console.error('Resend error:', { statusCode: error.statusCode });
 
     if (
       error.statusCode === 403 ||
@@ -300,7 +301,6 @@ export async function handleSendPartyInviteRequest(req, deps) {
           message: isTestingMode
             ? 'Resend is in testing mode. You can only send emails to verified email addresses. To send to other recipients, verify a domain at resend.com/domains'
             : 'Email sending is limited. Please verify your domain in Resend to send to all recipients.',
-          details: error,
           testingMode: isTestingMode,
         },
       };
@@ -308,7 +308,7 @@ export async function handleSendPartyInviteRequest(req, deps) {
 
     return {
       status: 500,
-      body: { error: 'Failed to send email', details: error },
+      body: { error: 'Failed to send email' },
     };
   }
 
