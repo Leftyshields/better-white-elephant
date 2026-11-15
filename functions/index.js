@@ -96,7 +96,10 @@ export const sendPartyInvite = onRequest(
 
       res.status(result.status).json(result.body);
     } catch (error) {
-      console.error('Error sending invite:', error?.message ?? error);
+      console.error('Error sending invite:', {
+        code: error?.code,
+        name: error?.name,
+      });
       res.status(500).json({ error: SEND_PARTY_INVITE_ERRORS.sendInviteServerError });
     }
   });
