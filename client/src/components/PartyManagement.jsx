@@ -447,7 +447,7 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
                   placeholder="e.g., Family Christmas Exchange 2025"
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
-                  className="bg-slate-950 border-slate-700 text-white placeholder:text-slate-500 focus:border-purple-500"
+                  className="bg-slate-950 border-slate-700 text-white placeholder:text-slate-400 focus-visible:border-purple-500"
                 />
                 <div className="flex gap-2">
                   <Button onClick={handleUpdateTitle}>Save</Button>
@@ -485,7 +485,7 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
                   type="datetime-local"
                   value={newDate}
                   onChange={(e) => setNewDate(e.target.value)}
-                  className="bg-slate-950 border-slate-700 text-white placeholder:text-slate-500 focus:border-purple-500"
+                  className="bg-slate-950 border-slate-700 text-white placeholder:text-slate-400 focus-visible:border-purple-500"
                 />
                 <div className="flex gap-2">
                   <Button onClick={handleUpdateDate}>Save</Button>
@@ -522,7 +522,7 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
                   value={maxSteals}
                   onChange={(e) => setMaxSteals(e.target.value)}
                   min="1"
-                  className="bg-slate-950 border-slate-700 text-white placeholder:text-slate-500 focus:border-purple-500"
+                  className="bg-slate-950 border-slate-700 text-white placeholder:text-slate-400 focus-visible:border-purple-500"
                 />
                 <Input
                   type="number"
@@ -532,7 +532,7 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
                   onChange={(e) => setPriceLimit(e.target.value)}
                   min="0"
                   step="0.01"
-                  className="bg-slate-950 border-slate-700 text-white placeholder:text-slate-500 focus:border-purple-500"
+                  className="bg-slate-950 border-slate-700 text-white placeholder:text-slate-400 focus-visible:border-purple-500"
                 />
                 <p className="text-xs text-slate-400">
                   Set a maximum price for gifts. Participants will see a warning if their gift exceeds this limit.
@@ -609,7 +609,7 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
                   placeholder="John Doe"
                   value={newPersonName}
                   onChange={(e) => setNewPersonName(e.target.value)}
-                  className="bg-slate-950 border-slate-700 text-white placeholder:text-slate-500 focus:border-purple-500"
+                  className="bg-slate-950 border-slate-700 text-white placeholder:text-slate-400 focus-visible:border-purple-500"
                 />
                 <div className="flex gap-2">
                   <Input
@@ -618,7 +618,7 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
                     placeholder="friend@example.com"
                     value={newPersonEmail}
                     onChange={(e) => setNewPersonEmail(e.target.value)}
-                    className="flex-1 bg-slate-950 border-slate-700 text-white placeholder:text-slate-500 focus:border-purple-500"
+                    className="flex-1 bg-slate-950 border-slate-700 text-white placeholder:text-slate-400 focus-visible:border-purple-500"
                   />
                   <div className="flex items-end gap-2">
                     <Button
@@ -687,7 +687,7 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
                       <select
                         value={participant.status || 'PENDING'}
                         onChange={(e) => handleUpdateParticipantStatus(participant.id, e.target.value)}
-                          className="text-sm border border-slate-700 rounded px-2 py-1 text-white bg-slate-950"
+                          className="text-sm border border-slate-700 rounded px-3 py-2 min-h-11 text-white bg-slate-950 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
                           disabled={isAdmin}
                       >
                         <option value="PENDING">PENDING</option>
@@ -743,7 +743,7 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
                         <select
                           value={invite.status || 'PENDING'}
                           onChange={(e) => handleOverrideStatus(invite.id, e.target.value)}
-                          className="text-sm border border-slate-700 rounded px-2 py-1 text-white bg-slate-950"
+                          className="text-sm border border-slate-700 rounded px-3 py-2 min-h-11 text-white bg-slate-950 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
                         >
                           <option value="PENDING">PENDING</option>
                           <option value="GOING">GOING</option>
