@@ -8,10 +8,13 @@ import { partyConverter, participantConverter, giftConverter } from '../utils/fi
 import { GameEngine } from '../engine.js';
 import redisClient from '../utils/redis.js';
 import { scrapeGiftMetadata } from '../utils/scraper.js';
-import { saveGameState, loadGameState, deleteGameState } from '../utils/game-state-persistence.js';
+import { loadGameState, deleteGameState } from '../utils/game-state-persistence.js';
+import { claimPartyLobbyForStart } from '../utils/game-start-lock.js';
+import { saveInitialGameStateOrRevertParty } from '../utils/game-start-commit.js';
 import { saveShippingFulfillmentSnapshot } from '../utils/shipping-fulfillment-snapshot.js';
 import { fetchWinnerShippingAddressForSender } from '../utils/winner-shipping-address.js';
 import { validateGameStartGiftAssignment } from '../utils/game-start-validation.js';
+import { GAME_START_FAILED_BODY } from '../utils/game-start-http.js';
 
 const router = express.Router();
 
@@ -45,7 +48,14 @@ router.post('/start', async (req, res) => {
       return res.status(403).json({ error: 'Only party admin can start the game' });
     }
 
-    if (party.status !== 'LOBBY') {
+    if (party.status === 'ACTIVE') {
+      const existingState = await loadGameState(partyId);
+      if (existingState) {
+        return res.json({ success: true, gameState: existingState, alreadyStarted: true });
+      }
+    }
+
+    if (party.status !== 'LOBBY' && party.status !== 'ACTIVE') {
       return res.status(400).json({ error: 'Game already started or ended' });
     }
 
@@ -151,17 +161,30 @@ router.post('/start', async (req, res) => {
       updatedAt: new Date().toISOString(), // ISO timestamp for easy comparison
     };
 
-    // Save to both Redis and Firestore
-    await saveGameState(partyId, gameState);
+    if (party.status === 'LOBBY') {
+      const claimOutcome = await claimPartyLobbyForStart(db, partyId);
+      if (claimOutcome === 'already_active') {
+        const existingState = await loadGameState(partyId);
+        if (existingState) {
+          return res.json({ success: true, gameState: existingState, alreadyStarted: true });
+        }
+      } else if (claimOutcome === 'not_lobby') {
+        return res.status(400).json({ error: 'Game already started or ended' });
+      }
+    }
 
-    // Update party status
-    await db.collection('parties').doc(partyId).update({
-      status: 'ACTIVE',
-      updatedAt: new Date(),
-    });
+    const { created, gameState: persistedState } = await saveInitialGameStateOrRevertParty(
+      db,
+      partyId,
+      gameState,
+    );
+    if (!created && persistedState) {
+      return res.json({ success: true, gameState: persistedState, alreadyStarted: true });
+    }
 
     // Emit socket event (handled in server.js)
-    req.io?.to(`party:${partyId}`).emit('game-started', gameState);
+    const stateToBroadcast = persistedState ?? gameState;
+    req.io?.to(`party:${partyId}`).emit('game-started', stateToBroadcast);
 
     // Schedule bot refresh simulation for all bots in the game
     setTimeout(async () => {
@@ -207,10 +230,12 @@ router.post('/start', async (req, res) => {
       }
     }, 2000);
 
-    res.json({ success: true, gameState });
+    res.json({ success: true, gameState: persistedState ?? gameState });
   } catch (error) {
-    console.error('Error starting game:', error);
-    res.status(500).json({ error: 'Failed to start game', message: error.message });
+    const errorCode = error?.code ?? 'n/a';
+    const errorName = error?.name ?? 'Error';
+    console.error('Error starting game:', { code: errorCode, name: errorName });
+    res.status(500).json(GAME_START_FAILED_BODY);
   }
 });
 

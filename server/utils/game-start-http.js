@@ -1,0 +1,1 @@
+export const GAME_START_FAILED_BODY = { error: 'Failed to start game' };

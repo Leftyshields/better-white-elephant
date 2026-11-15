@@ -260,8 +260,11 @@ export async function saveGameStateToFirestore(partyId, cleanedState, logOptions
       );
       return false;
     }
-    console.error(`❌ CRITICAL: Error saving game state to Firestore for party ${partyId}:`, error);
-    console.error(`   Error details:`, error.message, error.details);
+    const errorCode = error?.code ?? 'n/a';
+    const errorName = error?.name ?? 'Error';
+    console.error(
+      `❌ CRITICAL: Error saving game state to Firestore for party ${partyId}: ${JSON.stringify({ code: errorCode, name: errorName })}`,
+    );
     try {
       const debugStr = JSON.stringify(cleanedState, null, 2);
       console.error(`   Game state structure (first 1000 chars):`, debugStr.substring(0, 1000));
@@ -297,6 +300,35 @@ export async function saveGameState(partyId, gameState, ttl = null) {
       throw new Error(`Failed to save game state: Both Redis and Firestore failed`);
     }
   }
+}
+
+/**
+ * Save initial game state only if Redis key is absent (second concurrent start is a no-op).
+ * @returns {Promise<{ created: boolean, gameState: object | null }>}
+ */
+export async function saveGameStateIfAbsent(partyId, gameState, ttl = null) {
+  const { cleanedState, redisJsonString } = prepareGameStateForSave(partyId, gameState);
+  const redisKey = `game:${partyId}`;
+  ttl = await resolvePartyTtlForGameState(partyId, gameState, ttl);
+
+  try {
+    const created = await redisClient.set(redisKey, redisJsonString, { NX: true, EX: ttl });
+    if (created !== 'OK') {
+      const existing = await loadGameState(partyId);
+      return { created: false, gameState: existing };
+    }
+  } catch (error) {
+    const errorCode = error?.code ?? 'n/a';
+    const errorName = error?.name ?? 'Error';
+    console.error(
+      `❌ Error creating Redis game state for party ${partyId}: ${JSON.stringify({ code: errorCode, name: errorName })}`,
+    );
+    throw error;
+  }
+
+  await saveGameStateToFirestore(partyId, cleanedState);
+  console.log(`✅ Created game state in Redis for party ${partyId} (TTL: ${ttl}s)`);
+  return { created: true, gameState: JSON.parse(redisJsonString) };
 }
 
 /**
