@@ -1,7 +1,7 @@
 /**
  * Party Lobby Component
  */
-import { useState, useEffect, useId } from 'react';
+import { useState, useEffect, useId, useMemo } from 'react';
 import { useAuth } from '../hooks/useAuth.js';
 import { useParty } from '../hooks/useParty.js';
 import { Button } from './ui/Button.jsx';
@@ -29,9 +29,13 @@ import {
 import { db } from '../utils/firebase.js';
 import { filterVisiblePendingInvites, canResendPartyInvite } from '../utils/pendingInvites.js';
 import { getStartGameFailureMessage, START_GAME_GENERIC_ERROR } from '../utils/startGameResponse.js';
+import { computeLobbyReadiness } from '../utils/computeLobbyReadiness.js';
+import { HostLobbyStartStep } from './hostLobby/HostLobbyStartStep.jsx';
+import lobbySetupStrings from '../copy/lobbySetupStrings.js';
+import { formatHostStartCount } from '../utils/hostLobbyStartCopy.js';
 export function PartyLobby({ partyId, onStartGame }) {
   const { user } = useAuth();
-  const { party, participants, pendingInvites, gifts, loading } = useParty(partyId);
+  const { party, participants, pendingInvites, gifts, loading, error } = useParty(partyId);
   const { socket } = useGameSocket(partyId); // Get socket for simulation controls
   const [giftUrl, setGiftUrl] = useState('');
   const [scraping, setScraping] = useState(false);
@@ -403,12 +407,19 @@ export function PartyLobby({ partyId, onStartGame }) {
       return;
     }
 
-    // Check if all participants (except admin) are ready
-    const goingParticipants = participants.filter((p) => p.status === 'GOING' && p.id !== party?.adminId);
-    const allReady = goingParticipants.length > 0 && goingParticipants.every((p) => p.ready === true);
-    
-    if (!allReady) {
-      alert('Everyone needs to be marked ready before you can start.');
+    const addressesByUserId = {
+      [user.uid]: adminShippingAddress,
+    };
+    const readiness = computeLobbyReadiness({
+      party,
+      participants,
+      gifts,
+      addressesByUserId,
+      botIdsByUserId: userIsBot,
+    });
+
+    if (!readiness.hostStartStepComplete) {
+      alert(lobbySetupStrings['host.start.disabled']);
       return;
     }
 
@@ -435,8 +446,7 @@ export function PartyLobby({ partyId, onStartGame }) {
 
       if (data.success) {
         // Track game start with participant count
-        const participantCount = goingParticipants.length;
-        trackStartGame(partyId, participantCount);
+        trackStartGame(partyId, readiness.totalCount);
         onStartGame();
       } else {
         const errorMsg = data.error || START_GAME_GENERIC_ERROR;
@@ -657,6 +667,28 @@ export function PartyLobby({ partyId, onStartGame }) {
     }
   };
 
+  const addressesByUserId = useMemo(() => {
+    if (!user?.uid) {
+      return {};
+    }
+    return {
+      [user.uid]: isAdmin ? adminShippingAddress : userShippingAddress,
+    };
+  }, [user?.uid, isAdmin, adminShippingAddress, userShippingAddress]);
+
+  const lobbyReadiness = useMemo(() => {
+    if (!party) {
+      return null;
+    }
+    return computeLobbyReadiness({
+      party,
+      participants,
+      gifts,
+      addressesByUserId,
+      botIdsByUserId: userIsBot,
+    });
+  }, [party, participants, gifts, addressesByUserId, userIsBot]);
+
   // Calculate setup progress (must be before early returns to maintain hook order)
   const setupSteps = isAdmin ? [
     { id: 'rules', label: 'Set game rules', completed: (() => {
@@ -668,10 +700,7 @@ export function PartyLobby({ partyId, onStartGame }) {
       return participants.length + displayedInvites.length >= 2;
     })() },
     { id: 'gift', label: 'Submit your gift', completed: !!userGift },
-    { id: 'ready', label: 'All participants ready', completed: (() => {
-      const nonAdminParticipants = participants.filter((p) => p.status === 'GOING' && p.id !== party?.adminId);
-      return nonAdminParticipants.length > 0 && nonAdminParticipants.every((p) => p.ready === true);
-    })() },
+    { id: 'ready', label: 'All participants ready', completed: Boolean(lobbyReadiness?.hostStartStepComplete) },
   ] : [
     { id: 'gift', label: 'Submit your gift', completed: !!userGift },
     { id: 'ready', label: 'Mark yourself as ready', completed: currentParticipant?.ready === true },
@@ -1417,87 +1446,24 @@ export function PartyLobby({ partyId, onStartGame }) {
                     </div>
                   );
                 case 'ready':
-                  if (isAdmin) {
-                    const nonAdminParticipants = participants.filter((p) => p.status === 'GOING' && p.id !== party?.adminId);
-                    const allReady = nonAdminParticipants.length > 0 && nonAdminParticipants.every((p) => p.ready === true);
-                    const readyCount = nonAdminParticipants.filter((p) => p.ready === true).length;
-                    const totalCount = nonAdminParticipants.length;
-                    
+                  if (isAdmin && lobbyReadiness) {
                     return (
-                      <div className="p-6">
-                        {allReady ? (
-                          <div className="bg-green-500/10 border-2 border-green-500/30 rounded-lg p-4">
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className="text-green-400 font-semibold">✓ All Participants Ready</span>
-          </div>
-                            <p className="text-sm text-slate-300">
-                              All {totalCount} participant{totalCount !== 1 ? 's are' : ' is'} ready. You can start the game!
-                            </p>
-        </div>
-                        ) : totalCount === 0 ? (
-                          <div className="space-y-3">
-                            <p className="text-slate-300">
-                              Waiting for participants to join and mark themselves as ready.
-                            </p>
-                            <Button
-                              onClick={() => setShowShareModal(true)}
-                              className="w-full sm:w-auto"
-                            >
-                              📤 Share Party Link
-                            </Button>
-                          </div>
-                        ) : (
-                          <div className="space-y-3">
-                            <p className="text-slate-300">
-                              {readyCount} of {totalCount} participant{totalCount !== 1 ? 's are' : ' is'} ready.
-                            </p>
-                            <div className="space-y-2">
-                              {participants
-                                .filter((p) => p.status === 'GOING' && p.id !== party?.adminId)
-                                .map((participant) => {
-                                  const isBot = userIsBot[participant.id] || participant.id.startsWith('bot_');
-                                  const displayName = userNames[participant.id] && userNames[participant.id] !== participant.id 
-                  ? userNames[participant.id] 
-                                    : `Player ${participant.id.slice(0, 8)}`;
-            
-            return (
-                                    <div
-                key={participant.id}
-                                      className={`flex items-center justify-between p-3 rounded-lg ${
-                                        isBot ? 'bg-purple-900/30 border border-purple-500/30' : 'bg-slate-800/50'
-                                      }`}
-                                    >
-                                      <span className="text-white font-medium flex items-center gap-2">
-                                        {displayName}
-                                        {isBot && (
-                                          <span className="text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded border border-purple-500/30">
-                                            🤖 Bot
-                                          </span>
-                                        )}
-                                      </span>
-                                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                        participant.ready === true
-                          ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                          : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                                      }`}>
-                                        {participant.ready === true ? '✓ Ready' : 'Waiting...'}
-                    </span>
-                  </div>
-            );
-          })}
-                            </div>
-                            <Button
-                              onClick={() => setShowShareModal(true)}
-                              variant="secondary"
-                              className="w-full sm:w-auto"
-                            >
-                              📤 Share Party Link
-                            </Button>
-                  </div>
-                  )}
-                </div>
+                      <HostLobbyStartStep
+                        readiness={lobbyReadiness}
+                        displayNamesByUserId={userNames}
+                        startDisabled={!lobbyReadiness.hostStartStepComplete}
+                        onStartGame={handleStartGame}
+                        loadError={
+                          error
+                            ? {
+                                message: lobbySetupStrings['error.load'],
+                                onRetry: () => window.location.reload(),
+                              }
+                            : null
+                        }
+                      />
                     );
-                  } else {
+                  } else if (!isAdmin) {
                     return (
                       <div className="p-6">
                         {currentParticipant?.ready === true ? (
@@ -1603,16 +1569,14 @@ export function PartyLobby({ partyId, onStartGame }) {
           {isAdmin ? (
             <>
               {(() => {
-                const nonAdminParticipants = participants.filter((p) => p.status === 'GOING' && p.id !== party?.adminId);
-                const allReady = nonAdminParticipants.length > 0 && nonAdminParticipants.every((p) => p.ready === true);
-                const readyCount = nonAdminParticipants.filter((p) => p.ready === true).length;
-                const totalCount = nonAdminParticipants.length;
                 const displayedInvites = filterVisiblePendingInvites(pendingInvites, participants);
                 const totalParticipants = participants.length + displayedInvites.length;
-                
-                const hasShippingAddress = adminShippingAddress && adminShippingAddress.street && adminShippingAddress.city;
-                const hasGift = !!userGift;
-                const canStart = allReady && totalParticipants >= 2 && hasShippingAddress && hasGift;
+                const hasShippingAddress = lobbyReadiness?.hostHasAddress;
+                const hasGift = lobbyReadiness?.hostHasGift;
+                const allReady = Boolean(lobbyReadiness?.allReady);
+                const readyCount = lobbyReadiness?.readyCount ?? 0;
+                const totalCount = lobbyReadiness?.totalCount ?? 0;
+                const canStart = Boolean(lobbyReadiness?.hostStartStepComplete);
                 
                 return (
                   <div className="text-center space-y-4">
@@ -1651,7 +1615,9 @@ export function PartyLobby({ partyId, onStartGame }) {
                           {totalParticipants >= 2 && !allReady && totalCount > 0 && (
                             <li className="flex items-center gap-2">
                               <span className="text-amber-400">⏳</span>
-                              <span>Wait for all participants to be ready ({readyCount} of {totalCount} ready)</span>
+                              <span>
+                                {formatHostStartCount(readyCount, totalCount)}
+                              </span>
                             </li>
                           )}
                         </ul>
@@ -1660,8 +1626,9 @@ export function PartyLobby({ partyId, onStartGame }) {
                     
                     {canStart && (
                       <div className="bg-green-500/10 border-2 border-green-500/30 rounded-lg p-4 mb-4">
-                        <p className="text-green-400 font-semibold mb-1">You&apos;re ready to start.</p>
-                        <p className="text-sm text-slate-300">All participants are ready and all requirements are met.</p>
+                        <p className="text-green-400 font-semibold mb-1">
+                          {lobbySetupStrings['host.start.all_ready']}
+                        </p>
                       </div>
                     )}
                     
