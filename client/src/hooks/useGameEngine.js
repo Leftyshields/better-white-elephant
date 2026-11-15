@@ -12,6 +12,7 @@ import { auth } from '../utils/firebase.js';
 import { trackGameAction, trackGameComplete, trackError, trackEvent } from '../utils/analytics.js';
 import { SERVER_URL } from '../utils/config.js';
 import { canPlayerSkipTurn } from '../utils/skipTurnEligibility.js';
+import { GAME_USER_COPY } from '../utils/gameUserCopy.js';
 
 export function useGameEngine(partyId) {
   const { user } = useAuth();
@@ -180,19 +181,26 @@ export function useGameEngine(partyId) {
           message.includes('already acted this turn') ||
           message.includes('Cannot steal back');
 
-        const isTechnicalGameError =
-          code === 'GAME_STATE_CONFLICT' ||
-          message === 'Game state conflict; please retry' ||
-          message === 'Corrupted game state' ||
-          message === 'Mutation did not return game state';
+        const isStateVersionConflict =
+          code === 'GAME_STATE_CONFLICT' || message === 'Game state conflict; please retry';
+        const isCorruptedGameState =
+          message === 'Corrupted game state' || message === 'Mutation did not return game state';
         
         // Only show error toast for unexpected/critical errors
         if (!isExpectedGameStateError) {
           // Format user-friendly error messages
           let userFriendlyMessage = message;
 
-          if (isTechnicalGameError) {
-            userFriendlyMessage = "We're still loading the game. Refresh if this doesn't clear.";
+          if (isStateVersionConflict) {
+            userFriendlyMessage = GAME_USER_COPY.gameStateStaleMove;
+          } else if (isCorruptedGameState) {
+            userFriendlyMessage = GAME_USER_COPY.gameStateLoadFailed;
+          } else if (
+            message === GAME_USER_COPY.gameStateLoading ||
+            message === GAME_USER_COPY.gameStateStaleMove ||
+            message === GAME_USER_COPY.gameStateLoadFailed
+          ) {
+            userFriendlyMessage = message;
           } else if (message.includes('Game is not active')) {
             userFriendlyMessage = "The game hasn't started, or it has already ended.";
           } else if (

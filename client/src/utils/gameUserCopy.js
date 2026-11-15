@@ -5,6 +5,9 @@
 export const GAME_USER_COPY = {
   gameInactive: "The game hasn't started, or it has already ended.",
   gameStateLoading: "We're still loading the game. Refresh if this doesn't clear.",
+  gameStateStaleMove:
+    "That move didn't go through because the game just changed. Check the board and try again.",
+  gameStateLoadFailed: "We couldn't load the latest game. Refresh the page and try again.",
   endGameConfirm:
     'End the game now? The gifts people hold will be final, and leftover wrapped gifts will be assigned.',
   frozenGift: "This gift is frozen (3 steals). It can't be stolen again.",
