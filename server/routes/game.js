@@ -8,8 +8,9 @@ import { partyConverter, participantConverter, giftConverter } from '../utils/fi
 import { GameEngine } from '../engine.js';
 import redisClient from '../utils/redis.js';
 import { scrapeGiftMetadata } from '../utils/scraper.js';
-import { saveGameStateIfAbsent, loadGameState, deleteGameState } from '../utils/game-state-persistence.js';
+import { loadGameState, deleteGameState } from '../utils/game-state-persistence.js';
 import { claimPartyLobbyForStart } from '../utils/game-start-lock.js';
+import { saveInitialGameStateOrRevertParty } from '../utils/game-start-commit.js';
 import { saveShippingFulfillmentSnapshot } from '../utils/shipping-fulfillment-snapshot.js';
 import { fetchWinnerShippingAddressForSender } from '../utils/winner-shipping-address.js';
 import { validateGameStartGiftAssignment } from '../utils/game-start-validation.js';
@@ -54,7 +55,7 @@ router.post('/start', async (req, res) => {
       }
     }
 
-    if (party.status !== 'LOBBY') {
+    if (party.status !== 'LOBBY' && party.status !== 'ACTIVE') {
       return res.status(400).json({ error: 'Game already started or ended' });
     }
 
@@ -160,19 +161,23 @@ router.post('/start', async (req, res) => {
       updatedAt: new Date().toISOString(), // ISO timestamp for easy comparison
     };
 
-    const claimOutcome = await claimPartyLobbyForStart(db, partyId);
-    if (claimOutcome === 'already_active') {
-      const existingState = await loadGameState(partyId);
-      if (existingState) {
-        return res.json({ success: true, gameState: existingState, alreadyStarted: true });
+    if (party.status === 'LOBBY') {
+      const claimOutcome = await claimPartyLobbyForStart(db, partyId);
+      if (claimOutcome === 'already_active') {
+        const existingState = await loadGameState(partyId);
+        if (existingState) {
+          return res.json({ success: true, gameState: existingState, alreadyStarted: true });
+        }
+      } else if (claimOutcome === 'not_lobby') {
+        return res.status(400).json({ error: 'Game already started or ended' });
       }
-      return res.status(409).json({ error: 'Game already started' });
-    }
-    if (claimOutcome === 'not_lobby') {
-      return res.status(400).json({ error: 'Game already started or ended' });
     }
 
-    const { created, gameState: persistedState } = await saveGameStateIfAbsent(partyId, gameState);
+    const { created, gameState: persistedState } = await saveInitialGameStateOrRevertParty(
+      db,
+      partyId,
+      gameState,
+    );
     if (!created && persistedState) {
       return res.json({ success: true, gameState: persistedState, alreadyStarted: true });
     }

@@ -11,7 +11,7 @@ const proc = spawn('xvfb-run', ['-a', 'npx', 'playwright', 'test', '--ui', '--co
   env: {
     ...process.env,
     DEBUG: 'pw:browser,pw:protocol',
-    PLAYWRIGHT_UI_HOST: '0.0.0.0',
+    PLAYWRIGHT_UI_HOST: '127.0.0.1',
     PLAYWRIGHT_UI_PORT: '9323',
   }
 });

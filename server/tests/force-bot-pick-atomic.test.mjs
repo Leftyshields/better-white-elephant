@@ -97,3 +97,25 @@ test('atomicallyClearForcedBotTurnAction persists without saveGameState', async 
   const reloadedMap = new Map(reloaded.turnAction);
   assert.equal(reloadedMap.get(BOT_ID), null);
 });
+
+test('atomicallyClearForcedBotTurnAction rejects when bot is not the active player', async () => {
+  await store.saveGameState(
+    PARTY_ID,
+    buildStandardState({
+      partyId: PARTY_ID,
+      turnOrder: [BOT_ID, 'p2'],
+      currentTurnIndex: 1,
+      wrappedGifts: [],
+      turnAction: [
+        [BOT_ID, 'PICKED'],
+        ['p2', null],
+      ],
+    }),
+  );
+
+  await assert.rejects(
+    () => atomicallyClearForcedBotTurnAction(PARTY_ID, BOT_ID),
+    (err) => err.message === 'Bot is not the active player',
+  );
+  assert.equal(saveGameStateCalls, 0);
+});

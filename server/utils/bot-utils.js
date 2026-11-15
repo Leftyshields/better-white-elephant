@@ -4,6 +4,7 @@
 import redisClient from './redis.js';
 import { loadGameState, saveGameState } from './game-state-persistence.js';
 import { runAtomicGameMutation } from './atomic-game-action.mjs';
+import { GameEngine } from '../engine.js';
 import { db } from '../config/firebase-admin.js';
 import admin from 'firebase-admin';
 import { isBot } from './bot-ids.js';
@@ -1033,10 +1034,15 @@ export async function atomicallyClearForcedBotTurnAction(partyId, botPlayerId) {
     if (gameState.phase !== 'ACTIVE') {
       throw new Error('Game is not active');
     }
+    const config = gameState.config || { maxSteals: 3, returnToStart: false };
+    const engine = new GameEngine(gameState, config);
+    if (engine.calculateActivePlayer() !== botPlayerId) {
+      throw new Error('Bot is not the active player');
+    }
     const turnActionMap = new Map(gameState.turnAction);
     turnActionMap.set(botPlayerId, null);
     gameState.turnAction = Array.from(turnActionMap.entries());
-    gameState.config = gameState.config || { maxSteals: 3, returnToStart: false };
+    gameState.config = config;
     return gameState;
   });
 }

@@ -318,7 +318,11 @@ export async function saveGameStateIfAbsent(partyId, gameState, ttl = null) {
       return { created: false, gameState: existing };
     }
   } catch (error) {
-    console.error(`❌ Error creating Redis game state for party ${partyId}:`, error);
+    const errorCode = error?.code ?? 'n/a';
+    const errorName = error?.name ?? 'Error';
+    console.error(
+      `❌ Error creating Redis game state for party ${partyId}: ${JSON.stringify({ code: errorCode, name: errorName })}`,
+    );
     throw error;
   }
 
