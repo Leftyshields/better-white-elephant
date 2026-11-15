@@ -23,7 +23,7 @@ import { GiftIcon, EllipsisVerticalIcon } from '@heroicons/react/24/outline';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { collection, addDoc, doc, setDoc, query, where, onSnapshot, orderBy, collectionGroup, getDocs, deleteDoc, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from '../utils/firebase.js';
-import { sanitizeUserChosenDisplayName } from '../../../server/lib/display-names.js';
+import { resolveSyncedFirestoreDisplayName } from '../../../server/lib/display-names.js';
 import { trackCreateParty, trackSignUp, trackLogin, trackButtonClick, trackGameAbandoned, trackError } from '../utils/analytics.js';
 import { usePartyModal } from '../contexts/PartyModalContext.jsx';
 import { Footer } from '../components/Footer.jsx';
@@ -359,8 +359,9 @@ export function Home() {
         if (isSignUp && result.user) {
           try {
             await setDoc(doc(db, 'users', result.user.uid), {
-              displayName: sanitizeUserChosenDisplayName(
+              displayName: resolveSyncedFirestoreDisplayName(
                 displayName || result.user.displayName,
+                '',
               ),
               email: result.user.email || '',
               shippingAddress: shippingAddress,

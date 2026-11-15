@@ -5,6 +5,8 @@ import {
   emailLocalPart,
   pickDisplayName,
   pickHostNameForInvite,
+  PARTY_INVITE_INTRO_ANONYMOUS,
+  buildPartyInviteIntroParagraph,
   resolveSyncedFirestoreDisplayName,
   sanitizeUserChosenDisplayName,
 } from './display-names.js';
@@ -53,10 +55,17 @@ describe('display name privacy', () => {
     assert.equal(resolveSyncedFirestoreDisplayName('user@auth.com', ''), '');
     assert.equal(resolveSyncedFirestoreDisplayName('', 'stored@email.com'), '');
     assert.equal(resolveSyncedFirestoreDisplayName('stored@email.com', 'Backup Name'), 'Backup Name');
+    assert.equal(resolveSyncedFirestoreDisplayName('full@email.com', 'also@bad.com'), '');
   });
 
   test('sanitizeUserChosenDisplayName rejects full email strings', () => {
     assert.equal(sanitizeUserChosenDisplayName('user@domain.com'), '');
     assert.equal(sanitizeUserChosenDisplayName('  Real Name '), 'Real Name');
+  });
+
+  test('buildPartyInviteIntroParagraph omits Player fallback from email copy', () => {
+    const html = buildPartyInviteIntroParagraph('Player abcdefgh', 'abcdefgh123');
+    assert.ok(html.includes(PARTY_INVITE_INTRO_ANONYMOUS));
+    assert.ok(!html.includes('Player abcdefgh'));
   });
 });
