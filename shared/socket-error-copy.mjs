@@ -76,6 +76,9 @@ export const SOCKET_APPROVED_TOAST_MESSAGES = new Set([
  * @param {string} [code]
  */
 export function clientSafeSocketGameErrorMessage(message, code) {
+  if (typeof message !== 'string') {
+    return SOCKET_ACTION_FAILED_GENERIC_MESSAGE;
+  }
   if (code === 'GAME_STATE_CONFLICT' || GAME_STATE_CONFLICT_MESSAGES.has(message)) {
     return SOCKET_GAME_STATE_STALE_MOVE_MESSAGE;
   }
