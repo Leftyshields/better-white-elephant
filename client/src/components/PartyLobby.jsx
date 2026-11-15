@@ -1,7 +1,7 @@
 /**
  * Party Lobby Component
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId } from 'react';
 import { useAuth } from '../hooks/useAuth.js';
 import { useParty } from '../hooks/useParty.js';
 import { Button } from './ui/Button.jsx';
@@ -56,6 +56,7 @@ export function PartyLobby({ partyId, onStartGame }) {
   const [editingRules, setEditingRules] = useState(false);
   const [savingRules, setSavingRules] = useState(false);
   const [openStep, setOpenStep] = useState(null); // Track which step is open
+  const addPersonNameInputId = useId();
 
   const isAdmin = !!user && !!party && party.adminId === user.uid;
   const currentParticipant = participants.find((p) => p.id === user?.uid);
@@ -568,20 +569,9 @@ export function PartyLobby({ partyId, onStartGame }) {
 
       setNewPersonName('');
       setNewPersonEmail('');
-      setShowAddPeople(false);
-      
-      // Auto-advance to next step if participants requirement is met
-      // Note: The participant count will update via real-time listener
-      setTimeout(() => {
-        const displayedInvites = filterVisiblePendingInvites(pendingInvites, participants);
-        const totalCount = participants.length + displayedInvites.length;
-        if (totalCount >= 2 && isAdmin) {
-          const currentIndex = setupSteps.findIndex(s => s.id === 'participants');
-          if (currentIndex < setupSteps.length - 1) {
-            setOpenStep(setupSteps[currentIndex + 1].id);
-          }
-        }
-      }, 500);
+      requestAnimationFrame(() => {
+        document.getElementById(addPersonNameInputId)?.focus();
+      });
     } catch (error) {
       console.error('Error adding person:', error);
       alert('Failed to add person: ' + error.message);
@@ -920,6 +910,7 @@ export function PartyLobby({ partyId, onStartGame }) {
                         ) : (
                           <div className="space-y-3">
             <Input
+                              id={addPersonNameInputId}
                               type="text"
                               label="Name (optional)"
                               placeholder="John Doe"

@@ -1,7 +1,7 @@
 /**
  * Party Management Component - Admin only
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId } from 'react';
 import { Button } from './ui/Button.jsx';
 import { Input } from './ui/Input.jsx';
 import { Modal } from './ui/Modal.jsx';
@@ -31,6 +31,7 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
   const [sendingInvites, setSendingInvites] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [cancelConfirmationText, setCancelConfirmationText] = useState('');
+  const addPersonNameInputId = useId();
   
   // Update local state when party changes
   useEffect(() => {
@@ -198,7 +199,9 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
 
       setNewPersonName('');
       setNewPersonEmail('');
-      setShowAddPeople(false);
+      requestAnimationFrame(() => {
+        document.getElementById(addPersonNameInputId)?.focus();
+      });
     } catch (error) {
       console.error('Error adding person:', error);
       alert('Failed to add person: ' + error.message);
@@ -580,6 +583,7 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
             {showAddPeople ? (
               <div className="space-y-3">
                 <Input
+                  id={addPersonNameInputId}
                   type="text"
                   label="Name (optional)"
                   placeholder="John Doe"
