@@ -124,41 +124,9 @@ export class GameEngine {
     if (activePlayer !== playerId) return false;
     if (this.turnAction.get(playerId)) return false; // Already acted this turn
     if (this.wrappedGifts.length === 0) return false; // No wrapped gifts left
-    
-    // Check if player already has a gift
-    const playerHasGift = this.playerHasGift(playerId);
-    
-    // If there are wrapped gifts remaining, allow players to pick even if they have a gift
-    // This ensures all gifts are claimed before the game ends
-    if (playerHasGift && this.wrappedGifts.length > 0) {
-      // Allow picking wrapped gifts even if player has a gift (to claim all gifts)
-      return true;
-    }
-    
-    // If player doesn't have a gift, they can always pick
-    if (!playerHasGift) {
-      return true;
-    }
-    
-    // Exception 1: Player 1's Final Turn in Standard Mode (bookend exception)
-    // Per GAME_RULES.md Rule 1: "The Final Turn of Standard Mode (Player 1's second turn at the end of the queue).
-    // Player 1 acts as if in Boomerang phase, allowing them to pick or steal even though they already hold a gift."
-    const isLastIndex = this.currentTurnIndex === (this.turnQueue.length - 1);
-    const isPlayer1 = this.turnOrder && this.turnOrder[0] === playerId;
-    const isPlayer1FinalTurn = isLastIndex && isPlayer1;
-    
-    // Exception 2: First player in final boomerang turn can still act
-    // Compute boomerang phase dynamically (consistent with canSteal)
-    const isInBoomerangPhase = this.currentTurnIndex >= (this.turnOrder?.length || 0);
-    const isFirstPlayerFinalBoomerangTurn = isInBoomerangPhase && 
-      this.turnOrder[0] === playerId && 
-      activePlayer === playerId;
-    
-    if (isPlayer1FinalTurn || isFirstPlayerFinalBoomerangTurn) {
-      return true;
-    }
-    
-    return false;
+    if (this.playerHasGift(playerId)) return false;
+
+    return true;
   }
 
   /**
@@ -241,6 +209,10 @@ export class GameEngine {
    * Player picks a wrapped gift
    */
   pickGift(giftId, playerId) {
+    if (this.playerHasGift(playerId)) {
+      throw new Error('Cannot pick gift: player already holds an unwrapped gift');
+    }
+
     if (!this.canPick(playerId)) {
       throw new Error('Cannot pick gift: invalid action');
     }
@@ -249,21 +221,6 @@ export class GameEngine {
     const alreadyUnwrapped = this.unwrappedGifts.get(giftId);
     if (alreadyUnwrapped?.ownerId && alreadyUnwrapped.ownerId !== playerId) {
       throw new Error('Cannot pick gift: gift is already held by another player');
-    }
-
-    // If player already has a gift, re-wrap it (do not delete — that drops gifts from the game).
-    const playerHasGift = this.playerHasGift(playerId);
-    if (playerHasGift) {
-      for (const [existingGiftId, gift] of this.unwrappedGifts.entries()) {
-        if (gift.ownerId === playerId && existingGiftId !== giftId) {
-          this.unwrappedGifts.delete(existingGiftId);
-          if (!this.wrappedGifts.includes(existingGiftId)) {
-            this.wrappedGifts.push(existingGiftId);
-          }
-          console.log(`🔄 Player ${playerId} picking new gift - re-wrapped old gift ${existingGiftId}`);
-          break;
-        }
-      }
     }
 
     // Remove from wrapped pile

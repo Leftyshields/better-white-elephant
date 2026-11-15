@@ -427,7 +427,14 @@ export function gameReducer(state = initialState, action) {
         state.gameState?.isBoomerangPhase ||
         (state.currentTurnIndex >= (turnOrder.length || 0))
       );
-      const playerHasGift = Object.values(state.gifts).some(g => g.ownerId === userId);
+      const playerHasGift = Object.values(state.gifts).some(
+        (g) => !g.isWrapped && g.ownerId === userId,
+      );
+
+      if (playerHasGift) {
+        console.error(`VIOLATION: Player ${userId} already holds a gift! Pick move rejected.`);
+        return state;
+      }
       
       if (!canPlayerAct(userId, state.turnQueue, state.currentTurnIndex, turnOrder, isBoomerangPhase, playerHasGift)) {
         console.error(`VIOLATION: Player ${userId} cannot act! Pick move rejected.`);

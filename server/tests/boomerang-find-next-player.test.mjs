@@ -83,46 +83,47 @@ test('after last forward pick, reverse pass begins on duplicated last player (3 
   assert.equal(engine.currentPlayerId, 'p3');
 });
 
-test('reverse pass visits every player for 4-party boomerang picks', () => {
+test('reverse pass visits every player for 4-party boomerang (pick forward, skip reverse)', () => {
   const turnOrder = ['a', 'b', 'c', 'd'];
   const turnQueue = buildBoomerangTurnQueue(turnOrder);
-  const gifts = ['g0', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7'];
-  let wrapped = [...gifts];
-  const unwrapped = [];
+  const gifts = ['g0', 'g1', 'g2', 'g3'];
   const turnAction = turnOrder.map((id) => [id, null]);
 
   let state = buildBoomerangState({
     turnOrder,
     currentTurnIndex: 0,
-    wrappedGifts: wrapped,
-    unwrappedGifts: unwrapped,
+    wrappedGifts: [...gifts],
+    unwrappedGifts: [],
     turnAction,
   });
   state.currentPlayerId = 'a';
 
-  const playersInPickOrder = [
+  const playersInTurnOrder = [
     'a', 'b', 'c', 'd',
     'd', 'c', 'b', 'a',
   ];
 
-  for (const expected of playersInPickOrder) {
+  for (const expected of playersInTurnOrder) {
     const engine = engineFromState(state);
     const active = engine.calculateActivePlayer();
-    assert.equal(active, expected, `active before pick should be ${expected}`);
-    const giftId = engine.wrappedGifts[0];
-    assert.ok(giftId, `wrapped gift required for ${expected}`);
-    engine.pickGift(giftId, active);
+    assert.equal(active, expected, `active player before action should be ${expected}`);
+
+    if (engine.canPick(active)) {
+      const giftId = engine.wrappedGifts[0];
+      assert.ok(giftId, `wrapped gift required for ${expected}`);
+      engine.pickGift(giftId, active);
+    } else {
+      engine.currentPlayerId = active;
+      engine.endTurn();
+    }
     state = engine.getState();
-    wrapped = state.wrappedGifts;
   }
 
   const totalGifts =
-    state.wrappedGifts.length +
-  new Map(state.unwrappedGifts).size;
-  assert.equal(totalGifts, gifts.length, 're-wrap picks must not drop gifts from play');
-  // Queue is exhausted but wrapped gifts remain (reverse pass re-wraps), so index clamps per engine rules.
-  assert.equal(state.currentTurnIndex, turnQueue.length - 1);
-  assert.equal(state.currentPlayerId, 'a');
+    state.wrappedGifts.length + new Map(state.unwrappedGifts).size;
+  assert.equal(totalGifts, gifts.length, 'gift count must be conserved');
+  assert.equal(state.currentTurnIndex, turnQueue.length);
+  assert.equal(state.wrappedGifts.length, 0);
 });
 
 test('standard mode bookend pick still advances exactly one queue slot', () => {

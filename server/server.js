@@ -290,13 +290,6 @@ io.on('connection', (socket) => {
         return;
       }
 
-      // Emit action_started event BEFORE processing (for synchronized reveal animation)
-      io.to(`party:${partyId}`).emit('action_started', { 
-        type: 'pick', 
-        giftId, 
-        playerId: socket.userId 
-      });
-
       // CRITICAL: Validate gameState.partyId matches partyId parameter
       if (gameState.partyId && gameState.partyId !== partyId) {
         console.error(`❌ CRITICAL: partyId mismatch in pick-gift! Parameter: ${partyId}, gameState.partyId: ${gameState.partyId}`);
@@ -309,6 +302,27 @@ io.on('connection', (socket) => {
       // Ensure partyId is set in gameState before creating engine
       gameState.partyId = partyId;
       const engine = new GameEngine(gameState, config);
+
+      if (!engine.canPick(socket.userId)) {
+        const message = engine.playerHasGift(socket.userId)
+          ? 'Cannot pick gift: player already holds an unwrapped gift'
+          : 'Cannot pick gift: invalid action';
+        socket.emit('error', { message });
+        return;
+      }
+
+      const heldByOther = engine.unwrappedGifts.get(giftId);
+      if (heldByOther?.ownerId && heldByOther.ownerId !== socket.userId) {
+        socket.emit('error', { message: 'Cannot pick gift: gift is already held by another player' });
+        return;
+      }
+
+      // Emit action_started only after validation (no broadcast on rejected picks)
+      io.to(`party:${partyId}`).emit('action_started', {
+        type: 'pick',
+        giftId,
+        playerId: socket.userId,
+      });
 
       engine.pickGift(giftId, socket.userId);
       const newState = engine.getState();

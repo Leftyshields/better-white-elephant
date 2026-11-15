@@ -337,9 +337,12 @@ export function useGameEngine(partyId) {
 
   const canPick = useMemo(() => {
     if (!isMyTurn || state.status !== 'PLAYING') return false;
-    // Check if there are any wrapped gifts
-    return Object.values(state.gifts).some(gift => gift.isWrapped);
-  }, [isMyTurn, state.status, state.gifts]);
+    const hasWrapped = Object.values(state.gifts).some((gift) => gift.isWrapped);
+    const holdsUnwrapped = Object.values(state.gifts).some(
+      (gift) => !gift.isWrapped && gift.ownerId === user?.uid,
+    );
+    return hasWrapped && !holdsUnwrapped;
+  }, [isMyTurn, state.status, state.gifts, user?.uid]);
 
   const canSkipTurn = useMemo(() => {
     if (!isMyTurn || state.status !== 'PLAYING' || !user?.uid) {

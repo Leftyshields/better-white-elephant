@@ -16,6 +16,7 @@ export const GiftGrid = memo(function GiftGrid({
   userId,
   userNames = {},
   revealingGiftId = null,
+  canPick: canPickWrapped = false,
 }) {
   const giftList = Object.values(gifts || {});
   
@@ -52,7 +53,7 @@ export const GiftGrid = memo(function GiftGrid({
                   currentPlayerId={currentPlayerId}
                   userId={userId}
                   onPick={actions.pickGift}
-                  canPick={isMyTurn && gift.isWrapped}
+                  canPick={canPickWrapped && gift.isWrapped}
                   canSteal={false}
                   revealingGiftId={revealingGiftId}
                 />

@@ -1,7 +1,5 @@
 /**
- * Regression: pickGift must not delete a held gift when the picker already owns one.
- * When wrapped gifts remain, players may pick again (boomerang / claim-all-gifts paths).
- * Releasing the old gift must re-wrap it, not remove it from the game.
+ * Regression: pickGift must not delete or overwrite held gifts.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,17 +9,11 @@ import { buildStandardState, giftEntry } from './helpers/test-store.mjs';
 const PARTY_ID = 'party-pick-held-test';
 const BOOMERANG_CONFIG = { maxSteals: 3, returnToStart: true };
 
-function allGiftIds(engine) {
-  const unwrapped = [...engine.unwrappedGifts.keys()];
-  const wrapped = [...engine.wrappedGifts];
-  return { unwrapped, wrapped, union: new Set([...unwrapped, ...wrapped]) };
-}
-
 function countGifts(engine) {
   return engine.unwrappedGifts.size + engine.wrappedGifts.length;
 }
 
-test('pick while holding a gift re-wraps the old gift instead of deleting it', () => {
+test('pick is rejected when picker already holds an unwrapped gift', () => {
   const turnOrder = ['p1', 'p2', 'p3'];
   const turnQueue = [...turnOrder, ...[...turnOrder].reverse()];
   const state = {
@@ -51,22 +43,16 @@ test('pick while holding a gift re-wraps the old gift instead of deleting it', (
 
   const engine = new GameEngine(state, state.config);
   const beforeCount = countGifts(engine);
-  assert.ok(engine.canPick('p3'));
+  assert.equal(engine.canPick('p3'), false);
 
-  engine.pickGift('g-extra', 'p3');
+  assert.throws(
+    () => engine.pickGift('g-extra', 'p3'),
+    /already holds an unwrapped gift/i,
+  );
 
-  assert.equal(countGifts(engine), beforeCount, 'total gifts in play must not shrink');
-  assert.equal(engine.unwrappedGifts.get('g3'), undefined, 'released gift must leave unwrapped map');
-  assert.ok(
-    engine.wrappedGifts.includes('g3'),
-    'released gift must return to wrapped pile',
-  );
-  assert.equal(engine.unwrappedGifts.get('g-extra')?.ownerId, 'p3');
-  assert.equal(
-    [...engine.unwrappedGifts.values()].filter((g) => g.ownerId === 'p3').length,
-    1,
-    'picker owns exactly one gift',
-  );
+  assert.equal(countGifts(engine), beforeCount);
+  assert.equal(engine.unwrappedGifts.get('g3')?.ownerId, 'p3');
+  assert.ok(!engine.wrappedGifts.includes('g3'));
 });
 
 test('pick cannot overwrite a gift held by another player', () => {
