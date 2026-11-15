@@ -61,7 +61,6 @@ export function GameRoom({ partyId }) {
   const { state, actions, derived, socket, emitReaction, dispatch } = useGameEngine(partyId);
   const { playTurnNotification, playSteal, playUnwrap } = useGameSounds();
   const [userNames, setUserNames] = useState({});
-  const [userEmails, setUserEmails] = useState({});
   const [revealingGiftId, setRevealingGiftId] = useState(null);
   const [prizeImageError, setPrizeImageError] = useState(false);
   const prevIsMyTurnRef = useRef(false);
@@ -203,7 +202,6 @@ export function GameRoom({ partyId }) {
     const fetchUserNames = async () => {
       if (!state.participants || state.participants.length === 0) {
         setUserNames({});
-        setUserEmails({});
         return;
       }
 
@@ -217,18 +215,20 @@ export function GameRoom({ partyId }) {
 
         const response = await apiRequest('/api/users/batch', {
           method: 'POST',
-          body: JSON.stringify({ userIds: [...new Set(allUserIds)] }),
+          body: JSON.stringify({
+            partyId,
+            userIds: [...new Set(allUserIds)],
+          }),
         });
         
         if (response.users) setUserNames(response.users);
-        if (response.emails) setUserEmails(response.emails);
       } catch (error) {
         console.error('Error fetching user names:', error);
       }
     };
 
     fetchUserNames();
-  }, [state.participants, state.gifts]);
+  }, [partyId, state.participants, state.gifts]);
 
   // Calculate rounds remaining
   const calculateRoundsRemaining = () => {
@@ -286,7 +286,7 @@ export function GameRoom({ partyId }) {
 
   const getCurrentPlayerName = () => {
     if (currentPlayerId === user?.uid) return 'Your Turn!';
-    return userNames[currentPlayerId] || userEmails[currentPlayerId] || `Player ${currentPlayerId?.slice(0, 8)}`;
+    return userNames[currentPlayerId] || `Player ${currentPlayerId?.slice(0, 8)}`;
   };
 
   // Loading state
@@ -332,7 +332,7 @@ export function GameRoom({ partyId }) {
     const getWinnerName = (ownerId) => {
       if (!ownerId) return 'No Winner';
       if (ownerId === user?.uid) return 'You';
-      return userNames[ownerId] || userEmails[ownerId] || `User ${ownerId?.slice(0, 8)}`;
+      return userNames[ownerId] || `Player ${ownerId?.slice(0, 8)}`;
     };
 
     // Get all gifts as array
@@ -462,7 +462,6 @@ export function GameRoom({ partyId }) {
                     ? new Map(Array.isArray(state.gameState.unwrappedGifts) ? state.gameState.unwrappedGifts : []).get(myObligation.id)?.ownerId
                     : null))}
                   userNames={userNames}
-                  userEmails={userEmails}
                   isSelfWin={isSelfWin}
                 />
               </div>
@@ -593,7 +592,7 @@ export function GameRoom({ partyId }) {
                       const isCurrent = participant.id === state.activePlayerId;
                       const playerName = participant.id === user?.uid 
                         ? 'You' 
-                        : (userNames[participant.id] || userEmails[participant.id] || `Player ${participant.id.slice(0, 8)}`);
+                        : (userNames[participant.id] || `Player ${participant.id.slice(0, 8)}`);
                       const participantTurnIndex = state.turnQueue?.indexOf(participant.id) ?? index;
                       const isPast = isBoomerangPhaseForUi 
                         ? participantTurnIndex > state.currentTurnIndex
@@ -644,7 +643,6 @@ export function GameRoom({ partyId }) {
               currentPlayerId={currentPlayerId}
               userId={user?.uid}
               userNames={userNames}
-              userEmails={userEmails}
               revealingGiftId={revealingGiftId}
             />
           </div>
@@ -656,7 +654,6 @@ export function GameRoom({ partyId }) {
             <GamePlayByPlay
               state={state}
               userNames={userNames}
-              userEmails={userEmails}
             />
           </div>
         )}

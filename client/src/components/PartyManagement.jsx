@@ -23,7 +23,6 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
   const [returnToStart, setReturnToStart] = useState(party?.config?.returnToStart ?? false);
   const [priceLimit, setPriceLimit] = useState(party?.config?.priceLimit ?? '');
   const [userNames, setUserNames] = useState({});
-  const [userEmails, setUserEmails] = useState({});
   const [showAddPeople, setShowAddPeople] = useState(false);
   const [newPersonName, setNewPersonName] = useState('');
   const [newPersonEmail, setNewPersonEmail] = useState('');
@@ -40,42 +39,35 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
     }
   }, [party]);
 
-  // Fetch user names and emails for participants
+  // Fetch user names for participants
   useEffect(() => {
     const fetchUserInfo = async () => {
       if (participants.length === 0) {
         setUserNames({});
-        setUserEmails({});
         return;
       }
 
       try {
-        // Fetch user names from server (uses Firebase Admin SDK)
         const userIds = participants.map(p => p.id);
         const response = await apiRequest('/api/users/batch', {
           method: 'POST',
-          body: JSON.stringify({ userIds }),
+          body: JSON.stringify({ partyId: party.id, userIds }),
         });
         if (response.users) {
           setUserNames(response.users);
         }
-        if (response.emails) {
-          setUserEmails(response.emails);
-        }
       } catch (error) {
         console.error('Error fetching user names:', error);
-        // Fallback to participant IDs
         const names = {};
         participants.forEach(p => {
           names[p.id] = p.id;
         });
         setUserNames(names);
-        setUserEmails({});
       }
     };
 
     fetchUserInfo();
-  }, [participants]);
+  }, [participants, party?.id]);
 
   const handleUpdateTitle = async () => {
     try {
@@ -680,7 +672,7 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
                     <p className="font-medium text-white break-words">
                       {userNames[participant.id] && userNames[participant.id] !== participant.id
                         ? userNames[participant.id]
-                        : `User ${participant.id.slice(0, 8)}...`}
+                        : `Player ${participant.id.slice(0, 8)}`}
                     </p>
                         {isAdmin && (
                           <span className="text-xs bg-indigo-600/30 text-indigo-300 px-2 py-1 rounded border border-indigo-500/30">
@@ -728,15 +720,7 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
                   // Don't show if already accepted
                   if (inv.status === 'ACCEPTED') return false;
                   
-                  // Don't show if there's a participant with matching userId
                   if (inv.userId && participants.some(p => p.id === inv.userId)) return false;
-                  
-                  // Don't show if there's a participant with matching email
-                  const inviteEmail = inv.email?.toLowerCase();
-                  if (inviteEmail) {
-                    const participantEmails = Object.values(userEmails).map(e => e?.toLowerCase());
-                    if (participantEmails.includes(inviteEmail)) return false;
-                  }
                   
                   return true;
                 })

@@ -4,7 +4,7 @@
  */
 import { useState, useEffect, useRef } from 'react';
 
-export function GameTicker({ activities, gifts, userNames, userEmails }) {
+export function GameTicker({ activities, gifts, userNames }) {
   const [animatedItems, setAnimatedItems] = useState(new Set());
   const prevActivitiesRef = useRef([]);
 
@@ -36,7 +36,6 @@ export function GameTicker({ activities, gifts, userNames, userEmails }) {
   const getPlayerName = (playerId) => {
     if (!playerId) return 'Unknown';
     if (userNames && userNames[playerId]) return userNames[playerId];
-    if (userEmails && userEmails[playerId]) return userEmails[playerId].split('@')[0];
     return `Player ${playerId.slice(0, 8)}`;
   };
 

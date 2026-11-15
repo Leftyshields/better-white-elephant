@@ -15,7 +15,6 @@ export const GiftGrid = memo(function GiftGrid({
   currentPlayerId,
   userId,
   userNames = {},
-  userEmails = {},
   revealingGiftId = null,
 }) {
   const giftList = Object.values(gifts || {});
@@ -71,7 +70,7 @@ export const GiftGrid = memo(function GiftGrid({
           <div className="flex flex-wrap justify-center gap-6 w-full max-w-7xl mx-auto">
             {unwrappedGifts.map((gift) => {
               const ownerName = gift.ownerId 
-                ? (userNames[gift.ownerId] || userEmails[gift.ownerId] || null)
+                ? (userNames[gift.ownerId] || null)
                 : null;
               
               
@@ -108,7 +107,6 @@ export const GiftGrid = memo(function GiftGrid({
     prevProps.currentPlayerId === nextProps.currentPlayerId &&
     prevProps.userId === nextProps.userId &&
     prevProps.userNames === nextProps.userNames &&
-    prevProps.userEmails === nextProps.userEmails &&
     prevProps.revealingGiftId === nextProps.revealingGiftId
   );
 });

@@ -2,7 +2,7 @@
  * Game Audit Trail Component
  * Shows a fun, engaging history of all picks and steals
  */
-export function GameAuditTrail({ history, gifts, userNames, userEmails }) {
+export function GameAuditTrail({ history, gifts, userNames }) {
   if (!history || history.length === 0) {
     return null;
   }
@@ -16,7 +16,6 @@ export function GameAuditTrail({ history, gifts, userNames, userEmails }) {
   const getPlayerName = (playerId) => {
     if (!playerId) return 'Unknown';
     if (userNames[playerId]) return userNames[playerId];
-    if (userEmails[playerId]) return userEmails[playerId].split('@')[0];
     return `Player ${playerId.slice(0, 8)}`;
   };
 

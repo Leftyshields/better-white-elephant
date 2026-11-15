@@ -35,7 +35,6 @@ export function GameBoard({ partyId, onEndTurn }) {
   const { gifts, participants, party } = useParty(partyId);
   const { playTurnNotification, playSteal, playUnwrap, playVictory } = useGameSounds();
   const [userNames, setUserNames] = useState({});
-  const [userEmails, setUserEmails] = useState({});
   const [revealingGiftId, setRevealingGiftId] = useState(null);
   const prevIsMyTurnRef = useRef(false);
   const activePlayerRef = useRef(null);
@@ -189,16 +188,11 @@ export function GameBoard({ partyId, onEndTurn }) {
       try {
         const response = await apiRequest('/api/users/batch', {
           method: 'POST',
-          body: JSON.stringify({ userIds: userIdsArray }),
+          body: JSON.stringify({ partyId, userIds: userIdsArray }),
         });
         
         if (response.users) {
-          // Merge with existing names to preserve them
           setUserNames(prev => ({ ...prev, ...response.users }));
-        }
-        if (response.emails) {
-          // Merge with existing emails to preserve them
-          setUserEmails(prev => ({ ...prev, ...response.emails }));
         }
       } catch (error) {
         console.error('Error fetching user names:', error);
@@ -206,7 +200,7 @@ export function GameBoard({ partyId, onEndTurn }) {
     };
 
     fetchUserNames();
-  }, [gameState, participants, party?.gameHistory, gifts]);
+  }, [partyId, gameState, participants, party?.gameHistory, gifts]);
 
   // Scroll active player into view
   useEffect(() => {
@@ -329,7 +323,7 @@ export function GameBoard({ partyId, onEndTurn }) {
     const getWinnerName = (ownerId) => {
       if (!ownerId) return 'No Winner';
       if (ownerId === user?.uid) return 'You';
-      return userNames[ownerId] || userEmails[ownerId] || `User ${ownerId.slice(0, 8)}`;
+      return userNames[ownerId] || `Player ${ownerId.slice(0, 8)}`;
     };
 
     return (
@@ -420,7 +414,6 @@ export function GameBoard({ partyId, onEndTurn }) {
                   winnerId={myObligation.winnerId}
                   winnerName={getWinnerName(myObligation.winnerId)}
                   userNames={userNames}
-                  userEmails={userEmails}
                   isSelfWin={isSelfWin}
                 />
               </div>
@@ -575,7 +568,6 @@ export function GameBoard({ partyId, onEndTurn }) {
             history={party?.gameHistory || []}
             gifts={gifts}
             userNames={userNames}
-            userEmails={userEmails}
           />
 
           {/* Developer Simulation Controls (includes Audit Trail & Reset) - Only visible when ?sim=true */}
@@ -865,7 +857,7 @@ export function GameBoard({ partyId, onEndTurn }) {
     const getWinnerName = (ownerId) => {
       if (!ownerId) return 'No Winner';
       if (ownerId === user?.uid) return 'You';
-      return userNames[ownerId] || userEmails[ownerId] || `User ${ownerId.slice(0, 8)}`;
+      return userNames[ownerId] || `Player ${ownerId.slice(0, 8)}`;
     };
 
     // When game is ended, use gift.winnerId from Firestore OR unwrappedMap from gameState
@@ -971,7 +963,6 @@ export function GameBoard({ partyId, onEndTurn }) {
                 winnerId={myObligation.winnerId || unwrappedMap.get(myObligation.id)?.ownerId}
                 winnerName={getWinnerName(myObligation.winnerId || unwrappedMap.get(myObligation.id)?.ownerId)}
                 userNames={userNames}
-                userEmails={userEmails}
                 isSelfWin={isSelfWin}
               />
             </div>
@@ -1118,7 +1109,6 @@ export function GameBoard({ partyId, onEndTurn }) {
           history={party?.gameHistory || gameState?.history || []}
           gifts={gifts}
           userNames={userNames}
-          userEmails={userEmails}
         />
 
         {/* Developer Simulation Controls (includes Audit Trail & Reset) - Only visible when ?sim=true */}
@@ -1170,7 +1160,7 @@ export function GameBoard({ partyId, onEndTurn }) {
         const fallbackPlayerId = gameState.turnQueue[gameState.currentTurnIndex];
         if (fallbackPlayerId) {
           if (fallbackPlayerId === user?.uid) return 'Your Turn!';
-          return userNames[fallbackPlayerId] || userEmails[fallbackPlayerId] || `Player ${fallbackPlayerId.slice(0, 8)}`;
+          return userNames[fallbackPlayerId] || `Player ${fallbackPlayerId.slice(0, 8)}`;
         }
       }
       // If still no player, check if game should have ended
@@ -1180,7 +1170,7 @@ export function GameBoard({ partyId, onEndTurn }) {
       return 'Syncing...';
     }
     if (currentPlayerId === user?.uid) return 'Your Turn!';
-    return userNames[currentPlayerId] || userEmails[currentPlayerId] || `Player ${currentPlayerId.slice(0, 8)}`;
+    return userNames[currentPlayerId] || `Player ${currentPlayerId.slice(0, 8)}`;
   };
 
   // Game Over Modal - Show when game ends but viewResults is false
@@ -1290,7 +1280,7 @@ export function GameBoard({ partyId, onEndTurn }) {
                     const isCurrent = playerId === currentPlayerId;
                     const playerName = playerId === user?.uid 
                       ? 'You' 
-                      : (userNames[playerId] || userEmails[playerId] || (playerId ? `Player ${playerId.slice(0, 8)}` : 'Unknown'));
+                      : (userNames[playerId] || (playerId ? `Player ${playerId.slice(0, 8)}` : 'Unknown'));
                     const currentPlayerIndex = currentPlayerId ? gameState.turnOrder.indexOf(currentPlayerId) : -1;
                     const isPast = isBoomerangPhase 
                       ? index > currentPlayerIndex
@@ -1369,7 +1359,7 @@ export function GameBoard({ partyId, onEndTurn }) {
                     const getOwnerName = () => {
                       if (!ownerId) return null;
                       if (ownerId === user?.uid) return 'You';
-                      return userNames[ownerId] || userEmails[ownerId] || null;
+                      return userNames[ownerId] || null;
                     };
                     
                     return (
@@ -1413,7 +1403,6 @@ export function GameBoard({ partyId, onEndTurn }) {
                 gameState: gameState,
               }}
               userNames={userNames}
-              userEmails={userEmails}
             />
           </div>
         )}

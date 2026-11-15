@@ -4,7 +4,7 @@
  */
 import { useState, useEffect, useRef } from 'react';
 
-export function useGameReferee(gameState, userNames = {}, userEmails = {}) {
+export function useGameReferee(gameState, userNames = {}) {
   const [auditLog, setAuditLog] = useState([]);
   const prevStateRef = useRef(null);
   const logIdCounter = useRef(0);
@@ -16,11 +16,6 @@ export function useGameReferee(gameState, userNames = {}, userEmails = {}) {
     // First, try to get the name from userNames (this works for both bots and real users)
     if (userNames[playerId] && userNames[playerId] !== playerId) {
       return userNames[playerId];
-    }
-    
-    // Fallback to email if available
-    if (userEmails[playerId]) {
-      return userEmails[playerId];
     }
     
     // For bots, extract a readable identifier from the bot ID

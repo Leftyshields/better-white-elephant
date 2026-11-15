@@ -30,7 +30,6 @@ export function SimulationControls({ socket, partyId, gameState }) {
   const [showAuditTrail, setShowAuditTrail] = useState(isGameFinished);
   const [lastGameState, setLastGameState] = useState(null);
   const [userNames, setUserNames] = useState({});
-  const [userEmails, setUserEmails] = useState({});
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportDescription, setReportDescription] = useState('');
   const [minimalMode, setMinimalMode] = useState(false);
@@ -76,7 +75,6 @@ export function SimulationControls({ socket, partyId, gameState }) {
     const fetchUserNames = async () => {
       if (!lastGameState || participants.length === 0) {
         setUserNames({});
-        setUserEmails({});
         return;
       }
 
@@ -94,14 +92,11 @@ export function SimulationControls({ socket, partyId, gameState }) {
 
         const response = await apiRequest('/api/users/batch', {
           method: 'POST',
-          body: JSON.stringify({ userIds: allUserIds }),
+          body: JSON.stringify({ partyId, userIds: allUserIds }),
         });
         
         if (response.users) {
           setUserNames(response.users);
-        }
-        if (response.emails) {
-          setUserEmails(response.emails);
         }
       } catch (error) {
         console.error('Error fetching user names:', error);
@@ -109,11 +104,11 @@ export function SimulationControls({ socket, partyId, gameState }) {
     };
 
     fetchUserNames();
-  }, [lastGameState, participants]);
+  }, [lastGameState, participants, partyId]);
   
   // Always call the hook (React hooks must be called unconditionally)
   // Pass null if no game state available - the hook handles null gracefully
-  const { auditLog, addSnapshotEntry, addLogEntry } = useGameReferee(lastGameState, userNames, userEmails);
+  const { auditLog, addSnapshotEntry, addLogEntry } = useGameReferee(lastGameState, userNames);
 
   // Listen for bot addition success, autoplay updates, and errors
   useEffect(() => {
