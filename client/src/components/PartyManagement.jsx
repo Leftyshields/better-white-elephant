@@ -9,6 +9,7 @@ import { doc, updateDoc, deleteDoc, collection, query, where, getDocs, getDoc, s
 import { db } from '../utils/firebase.js';
 import { useAuth } from '../hooks/useAuth.js';
 import { apiRequest } from '../utils/api.js';
+import { filterVisiblePendingInvites } from '../utils/pendingInvites.js';
 
 export function PartyManagement({ party, participants, pendingInvites = [] }) {
   const { user } = useAuth();
@@ -651,8 +652,8 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
           <div>
             <h3 className="font-semibold mb-3 text-white">
               Participants ({
-                participants.length + 
-                pendingInvites.filter(inv => inv.status !== 'ACCEPTED').length
+                participants.length +
+                filterVisiblePendingInvites(pendingInvites, participants).length
               })
             </h3>
             <p className="text-xs text-slate-400 mb-3">
@@ -715,15 +716,7 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
                 );
               })}
               {/* All pending invites - show in participants list so they can be managed */}
-              {pendingInvites
-                .filter(inv => {
-                  // Don't show if already accepted
-                  if (inv.status === 'ACCEPTED') return false;
-                  
-                  if (inv.userId && participants.some(p => p.id === inv.userId)) return false;
-                  
-                  return true;
-                })
+              {filterVisiblePendingInvites(pendingInvites, participants)
                 .map((invite) => (
                   <div
                     key={invite.id}

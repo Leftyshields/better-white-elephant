@@ -76,6 +76,10 @@ jobs:
         working-directory: ./functions
         run: npm test
 
+      - name: Functions isolated deploy load smoke
+        working-directory: ./functions
+        run: node scripts/ci-isolated-load.mjs
+
   build:
     name: Build
     runs-on: ubuntu-latest
