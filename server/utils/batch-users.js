@@ -5,7 +5,7 @@
 import {
   pickDisplayName,
   playerFallbackForUserId,
-} from '../../lib/display-names.js';
+} from '../lib/display-names.js';
 
 export {
   looksLikeEmail,
@@ -15,7 +15,7 @@ export {
   displayNameMatchesEmailLocalPart,
   pickHostNameForInvite,
   resolveSyncedFirestoreDisplayName,
-} from '../../lib/display-names.js';
+} from '../lib/display-names.js';
 
 export function isValidPartyId(partyId) {
   return (

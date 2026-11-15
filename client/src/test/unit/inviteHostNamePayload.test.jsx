@@ -4,7 +4,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { PartyLobby } from '../../components/PartyLobby.jsx';
-import { pickHostNameForInvite } from '../../../../lib/display-names.js';
+import { pickHostNameForInvite } from '../../../../server/lib/display-names.js';
 
 const HOST_UID = 'invite-host-uid1234';
 const PARTY_ID = 'invite-privacy-party';

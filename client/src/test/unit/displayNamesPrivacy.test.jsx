@@ -4,7 +4,7 @@ import {
   pickHostNameForInvite,
   playerFallbackForUserId,
   resolveSyncedFirestoreDisplayName,
-} from '../../../../lib/display-names.js';
+} from '../../../../server/lib/display-names.js';
 
 const HOST_UID = 'privacy-host-uid12';
 
