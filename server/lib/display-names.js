@@ -75,21 +75,9 @@ export function pickHostNameForInvite(adminId, hostNameCandidate, ownerEmail) {
   return pickDisplayName(adminId, candidate);
 }
 
-/**
- * Firestore user sync: Auth profile first, then existing doc — never email local-part.
- */
-export function resolveSyncedFirestoreDisplayName(authDisplayName, existingDisplayName) {
-  const fromAuth = typeof authDisplayName === 'string' ? authDisplayName.trim() : '';
-  if (fromAuth && !looksLikeEmail(fromAuth)) {
-    return fromAuth;
-  }
-  const fromExisting =
-    typeof existingDisplayName === 'string' ? existingDisplayName.trim() : '';
-  if (fromExisting && !looksLikeEmail(fromExisting)) {
-    return fromExisting;
-  }
-  return '';
-}
+/** Copywriter-approved invite intro when the host has no usable public name. */
+export const PARTY_INVITE_INTRO_ANONYMOUS =
+  'Your host invited you to a Steal or Reveal game.';
 
 /** User-entered profile / signup display name — never persist an email string. */
 export function sanitizeUserChosenDisplayName(value) {
@@ -98,4 +86,36 @@ export function sanitizeUserChosenDisplayName(value) {
     return '';
   }
   return trimmed;
+}
+
+/**
+ * Firestore user sync: Auth profile first, then existing doc — never email-shaped.
+ */
+export function resolveSyncedFirestoreDisplayName(authDisplayName, existingDisplayName) {
+  const fromAuth = sanitizeUserChosenDisplayName(authDisplayName);
+  if (fromAuth) {
+    return fromAuth;
+  }
+  return sanitizeUserChosenDisplayName(existingDisplayName);
+}
+
+/** True when the value is only the synthetic Player-id fallback (not for public email copy). */
+export function isSyntheticPlayerDisplayName(hostName, userId) {
+  if (hostName === 'Player unknown') {
+    return true;
+  }
+  if (typeof hostName !== 'string' || !hostName.trim()) {
+    return true;
+  }
+  return hostName === playerFallbackForUserId(userId);
+}
+
+/**
+ * Party invite email intro: named host when possible; otherwise anonymous Copywriter line.
+ */
+export function buildPartyInviteIntroParagraph(safeHostName, adminId) {
+  if (isSyntheticPlayerDisplayName(safeHostName, adminId)) {
+    return `<p>${PARTY_INVITE_INTRO_ANONYMOUS}</p>`;
+  }
+  return `<p>${safeHostName} has invited you to a White Elephant gift exchange party.</p>`;
 }

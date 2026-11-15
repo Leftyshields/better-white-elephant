@@ -69,20 +69,39 @@ export function pickHostNameForInvite(adminId, hostNameCandidate, ownerEmail) {
   return pickDisplayName(adminId, candidate);
 }
 
-export function resolveSyncedFirestoreDisplayName(authDisplayName, existingDisplayName) {
-  const fromAuth = typeof authDisplayName === 'string' ? authDisplayName.trim() : '';
-  if (fromAuth && !looksLikeEmail(fromAuth)) {
-    return fromAuth;
+/** Copywriter-approved invite intro when the host has no usable public name. */
+export const PARTY_INVITE_INTRO_ANONYMOUS =
+  'Your host invited you to a Steal or Reveal game.';
+
+export function sanitizeUserChosenDisplayName(value) {
+  const trimmed = typeof value === 'string' ? value.trim() : '';
+  if (!trimmed || looksLikeEmail(trimmed)) {
+    return '';
   }
-  const fromExisting =
-    typeof existingDisplayName === 'string' ? existingDisplayName.trim() : '';
-  if (fromExisting && !looksLikeEmail(fromExisting)) {
-    return fromExisting;
-  }
-  return '';
+  return trimmed;
 }
 
-/** Same HTML fragment shape as sendPartyInvite in index.js (for tests). */
-export function buildPartyInviteIntroParagraph(safeHostName) {
+export function resolveSyncedFirestoreDisplayName(authDisplayName, existingDisplayName) {
+  const fromAuth = sanitizeUserChosenDisplayName(authDisplayName);
+  if (fromAuth) {
+    return fromAuth;
+  }
+  return sanitizeUserChosenDisplayName(existingDisplayName);
+}
+
+export function isSyntheticPlayerDisplayName(hostName, userId) {
+  if (hostName === 'Player unknown') {
+    return true;
+  }
+  if (typeof hostName !== 'string' || !hostName.trim()) {
+    return true;
+  }
+  return hostName === playerFallbackForUserId(userId);
+}
+
+export function buildPartyInviteIntroParagraph(safeHostName, adminId) {
+  if (isSyntheticPlayerDisplayName(safeHostName, adminId)) {
+    return `<p>${PARTY_INVITE_INTRO_ANONYMOUS}</p>`;
+  }
   return `<p>${safeHostName} has invited you to a White Elephant gift exchange party.</p>`;
 }
