@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import admin from 'firebase-admin';
 import {
   batchUsersLookup,
-  getCoParticipantUserIds,
+  getPartyMemberUserIds,
+  verifyCallerPartyAccess,
+  isValidPartyId,
 } from '../utils/batch-users.js';
 
 const CALLER_ID = 'caller-user';
@@ -11,7 +12,13 @@ const CO_PARTICIPANT_ID = 'co-participant';
 const STRANGER_ID = 'stranger-user';
 const PARTY_ID = 'party-shared';
 
-function buildMockDb({ callerIsAdmin = true, callerIsParticipant = true } = {}) {
+function buildMockDb({
+  callerIsAdmin = true,
+  callerIsParticipant = true,
+  partyExists = true,
+} = {}) {
+  const docGets = [];
+
   const users = {
     [CO_PARTICIPANT_ID]: {
       displayName: 'Co Participant',
@@ -23,11 +30,13 @@ function buildMockDb({ callerIsAdmin = true, callerIsParticipant = true } = {}) 
     },
   };
 
-  const parties = {
-    [PARTY_ID]: {
-      adminId: callerIsAdmin ? CALLER_ID : 'other-admin',
-    },
-  };
+  const parties = partyExists
+    ? {
+        [PARTY_ID]: {
+          adminId: callerIsAdmin ? CALLER_ID : 'other-admin',
+        },
+      }
+    : {};
 
   const participantsByParty = {
     [PARTY_ID]: {
@@ -42,47 +51,30 @@ function buildMockDb({ callerIsAdmin = true, callerIsParticipant = true } = {}) 
       doc(userId) {
         return {
           async get() {
+            docGets.push(`parties/${partyId}/participants/${userId}`);
             const row = rows[userId];
             return { exists: Boolean(row), data: () => row };
           },
         };
       },
       async get() {
+        docGets.push(`parties/${partyId}/participants (list)`);
         return {
-          docs: Object.keys(rows).map((id) => ({
-            id,
-            ref: {
-              parent: { parent: { id: partyId } },
-            },
-          })),
+          docs: Object.keys(rows).map((id) => ({ id })),
         };
       },
     };
   }
 
-  return {
+  const db = {
+    docGets,
     collection(name) {
       if (name === 'parties') {
         return {
-          where(field, op, value) {
-            assert.equal(field, 'adminId');
-            assert.equal(op, '==');
-            return {
-              async get() {
-                const docs = Object.entries(parties)
-                  .filter(([, data]) => data.adminId === value)
-                  .map(([id, data]) => ({
-                    id,
-                    data: () => data,
-                    ref: { parent: { parent: { id } } },
-                  }));
-                return { docs };
-              },
-            };
-          },
           doc(partyId) {
             return {
               async get() {
+                docGets.push(`parties/${partyId}`);
                 const row = parties[partyId];
                 return { exists: Boolean(row), data: () => row };
               },
@@ -99,6 +91,7 @@ function buildMockDb({ callerIsAdmin = true, callerIsParticipant = true } = {}) 
           doc(userId) {
             return {
               async get() {
+                docGets.push(`users/${userId}`);
                 const row = users[userId];
                 return { exists: Boolean(row), data: () => row };
               },
@@ -109,50 +102,58 @@ function buildMockDb({ callerIsAdmin = true, callerIsParticipant = true } = {}) 
       throw new Error(`unexpected collection ${name}`);
     },
     collectionGroup(name) {
-      assert.equal(name, 'participants');
-      return {
-        where(fieldPath, op, value) {
-          assert.equal(fieldPath, admin.firestore.FieldPath.documentId());
-          assert.equal(op, '==');
-          return {
-            async get() {
-              const docs = [];
-              for (const [partyId, rows] of Object.entries(participantsByParty)) {
-                if (rows[value]) {
-                  docs.push({
-                    id: value,
-                    ref: {
-                      parent: {
-                        parent: { id: partyId },
-                      },
-                    },
-                  });
-                }
-              }
-              return { docs };
-            },
-          };
-        },
-      };
+      throw new Error(
+        `collectionGroup('${name}') must not be used — party-scoped access only`,
+      );
     },
   };
+
+  return db;
 }
 
 const mockAuth = {
   async getUser(userId) {
-    const emails = {
-      [CO_PARTICIPANT_ID]: 'co-from-auth@secret.example',
-      [STRANGER_ID]: 'stranger-from-auth@secret.example',
-      [CALLER_ID]: 'caller@secret.example',
-    };
     return {
       uid: userId,
       displayName: null,
-      email: emails[userId] || null,
       photoURL: null,
     };
   },
 };
+
+test('isValidPartyId rejects invalid ids', () => {
+  assert.equal(isValidPartyId(''), false);
+  assert.equal(isValidPartyId('valid-party_1'), true);
+  assert.equal(isValidPartyId('bad/slash'), false);
+});
+
+test('verifyCallerPartyAccess uses parties/{id} and participants/{callerUid} doc gets', async () => {
+  const db = buildMockDb({ callerIsAdmin: false, callerIsParticipant: true });
+
+  const allowed = await verifyCallerPartyAccess(db, PARTY_ID, CALLER_ID);
+  assert.equal(allowed, true);
+  assert.deepEqual(db.docGets, [
+    `parties/${PARTY_ID}`,
+    `parties/${PARTY_ID}/participants/${CALLER_ID}`,
+  ]);
+});
+
+test('verifyCallerPartyAccess fails closed when caller is not admin or participant', async () => {
+  const db = buildMockDb({ callerIsAdmin: false, callerIsParticipant: false });
+
+  const allowed = await verifyCallerPartyAccess(db, PARTY_ID, CALLER_ID);
+  assert.equal(allowed, false);
+});
+
+test('getPartyMemberUserIds lists admin and participant document ids', async () => {
+  const db = buildMockDb();
+  const members = await getPartyMemberUserIds(db, PARTY_ID);
+
+  assert.ok(members.has(CALLER_ID));
+  assert.ok(members.has(CO_PARTICIPANT_ID));
+  assert.ok(db.docGets.includes(`parties/${PARTY_ID}`));
+  assert.ok(db.docGets.includes(`parties/${PARTY_ID}/participants (list)`));
+});
 
 test('batchUsersLookup never includes an emails field', async () => {
   const db = buildMockDb();
@@ -160,6 +161,7 @@ test('batchUsersLookup never includes an emails field', async () => {
     db,
     mockAuth,
     CALLER_ID,
+    PARTY_ID,
     [CO_PARTICIPANT_ID, STRANGER_ID],
   );
 
@@ -169,22 +171,28 @@ test('batchUsersLookup never includes an emails field', async () => {
   assert.ok(!(STRANGER_ID in result.users));
 });
 
-test('excludes users who do not share a party with the caller', async () => {
+test('excludes user IDs that are not party admin or participants', async () => {
   const db = buildMockDb();
-  const allowed = await getCoParticipantUserIds(db, CALLER_ID);
-  assert.ok(allowed.has(CO_PARTICIPANT_ID));
-  assert.ok(!allowed.has(STRANGER_ID));
-
-  const result = await batchUsersLookup(db, mockAuth, CALLER_ID, [STRANGER_ID]);
+  const result = await batchUsersLookup(db, mockAuth, CALLER_ID, PARTY_ID, [
+    STRANGER_ID,
+  ]);
   assert.equal(Object.keys(result.users).length, 0);
 });
 
-test('includes co-participants who share a party', async () => {
+test('includes co-participants in the same party', async () => {
   const db = buildMockDb();
-  const result = await batchUsersLookup(db, mockAuth, CALLER_ID, [
+  const result = await batchUsersLookup(db, mockAuth, CALLER_ID, PARTY_ID, [
     CO_PARTICIPANT_ID,
   ]);
   assert.deepEqual(result.users, { [CO_PARTICIPANT_ID]: 'Co Participant' });
   assert.deepEqual(result.bots, { [CO_PARTICIPANT_ID]: false });
   assert.ok('photos' in result);
+});
+
+test('batchUsersLookup fails closed when caller lacks party access', async () => {
+  const db = buildMockDb({ callerIsAdmin: false, callerIsParticipant: false });
+  const result = await batchUsersLookup(db, mockAuth, CALLER_ID, PARTY_ID, [
+    CO_PARTICIPANT_ID,
+  ]);
+  assert.deepEqual(result.users, {});
 });

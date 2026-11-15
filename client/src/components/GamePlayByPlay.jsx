@@ -6,7 +6,7 @@
 import { GameTicker } from './GameTicker.jsx';
 import { ChatBubbleLeftEllipsisIcon } from '@heroicons/react/24/outline';
 
-export function GamePlayByPlay({ state, userNames, userEmails }) {
+export function GamePlayByPlay({ state, userNames }) {
   // Always render when status is PLAYING, even if no entries yet
   if (!state) {
     return null;
@@ -33,7 +33,6 @@ export function GamePlayByPlay({ state, userNames, userEmails }) {
             activities={state.activities}
             gifts={giftsArray}
             userNames={userNames}
-            userEmails={userEmails}
           />
         ) : (
           <div className="flex flex-col items-center justify-center h-48 text-center px-6">

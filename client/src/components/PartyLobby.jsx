@@ -43,7 +43,6 @@ export function PartyLobby({ partyId, onStartGame }) {
   const [inviteEmail, setInviteEmail] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
   const [userNames, setUserNames] = useState({});
-  const [userEmails, setUserEmails] = useState({});
   const [userIsBot, setUserIsBot] = useState({});
   const [newPersonName, setNewPersonName] = useState('');
   const [newPersonEmail, setNewPersonEmail] = useState('');
@@ -69,7 +68,6 @@ export function PartyLobby({ partyId, onStartGame }) {
     const fetchUserInfo = async () => {
       if (participants.length === 0) {
         setUserNames({});
-        setUserEmails({});
         return;
       }
 
@@ -77,14 +75,11 @@ export function PartyLobby({ partyId, onStartGame }) {
         const userIds = participants.map(p => p.id);
         const response = await apiRequest('/api/users/batch', {
           method: 'POST',
-          body: JSON.stringify({ userIds }),
+          body: JSON.stringify({ partyId, userIds }),
         });
         
         if (response.users) {
           setUserNames(response.users);
-        }
-        if (response.emails) {
-          setUserEmails(response.emails);
         }
         if (response.bots) {
           setUserIsBot(response.bots);
@@ -101,7 +96,7 @@ export function PartyLobby({ partyId, onStartGame }) {
     };
 
     fetchUserInfo();
-  }, [participants]);
+  }, [participants, partyId]);
 
   // Fetch admin shipping address
   useEffect(() => {
@@ -989,8 +984,6 @@ export function PartyLobby({ partyId, onStartGame }) {
                             : (userNames[participant.id] && userNames[participant.id] !== participant.id 
                                 ? userNames[participant.id] 
                                 : null);
-                          const email = userEmails[participant.id] || null;
-                          
                           return (
                             <div
                               key={participant.id}
@@ -1001,7 +994,7 @@ export function PartyLobby({ partyId, onStartGame }) {
                               <div className="flex items-center gap-3">
                                 <div>
                                   <span className="text-white font-medium flex items-center gap-2">
-                                    {displayName || email || `User ${participant.id.slice(0, 8)}`}
+                                    {displayName || `User ${participant.id.slice(0, 8)}`}
                                     {isBot && (
                                       <span className="text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded border border-purple-500/30">
                                         🤖 Bot
@@ -1494,7 +1487,7 @@ export function PartyLobby({ partyId, onStartGame }) {
                                   const isBot = userIsBot[participant.id] || participant.id.startsWith('bot_');
                                   const displayName = userNames[participant.id] && userNames[participant.id] !== participant.id 
                   ? userNames[participant.id] 
-                                    : (userEmails[participant.id] || `User ${participant.id.slice(0, 8)}`);
+                                    : `User ${participant.id.slice(0, 8)}`;
             
             return (
                                     <div

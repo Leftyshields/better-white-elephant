@@ -9,7 +9,7 @@ import { CheckBadgeIcon } from '@heroicons/react/24/solid';
 import { fetchWinnerShippingAddress } from '../utils/api.js';
 import { SHIPPING_ADDRESS_WINNER_NOT_SHARED_GIFT_TO_SEND } from '../utils/shippingAddressCopy.js';
 
-export function GiftToSendCard({ gift, winnerId, winnerName, userNames, userEmails, isSelfWin = false }) {
+export function GiftToSendCard({ gift, winnerId, winnerName, userNames, isSelfWin = false }) {
   const [address, setAddress] = useState(null);
   const [loadingAddress, setLoadingAddress] = useState(true);
   const [addressUnavailable, setAddressUnavailable] = useState(false);

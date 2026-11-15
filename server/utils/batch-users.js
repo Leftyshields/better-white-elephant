@@ -1,80 +1,84 @@
-import admin from 'firebase-admin';
+/**
+ * Party-scoped batch user display lookup (no email / cross-party leakage).
+ */
+
+export function isValidPartyId(partyId) {
+  return (
+    typeof partyId === 'string' &&
+    partyId.length > 0 &&
+    partyId.length <= 128 &&
+    /^[a-zA-Z0-9_-]+$/.test(partyId)
+  );
+}
 
 /**
- * User IDs the caller may resolve via batch lookup: self, party admins, and
- * participants in parties where the caller is admin or a participant.
- *
  * @param {import('firebase-admin/firestore').Firestore} db
+ * @param {string} partyId
  * @param {string} callerUid
- * @returns {Promise<Set<string>>}
+ * @returns {Promise<boolean>}
  */
-export async function getCoParticipantUserIds(db, callerUid) {
-  if (!callerUid) {
-    return new Set();
+export async function verifyCallerPartyAccess(db, partyId, callerUid) {
+  if (!partyId || !callerUid) {
+    return false;
   }
 
   try {
-    const partyIds = new Set();
+    const partyDoc = await db.collection('parties').doc(partyId).get();
+    if (!partyDoc.exists) {
+      return false;
+    }
 
-    const adminPartiesSnap = await db
+    const adminId = partyDoc.data()?.adminId;
+    if (adminId === callerUid) {
+      return true;
+    }
+
+    const participantDoc = await db
       .collection('parties')
-      .where('adminId', '==', callerUid)
+      .doc(partyId)
+      .collection('participants')
+      .doc(callerUid)
       .get();
 
-    for (const doc of adminPartiesSnap.docs) {
-      partyIds.add(doc.id);
-    }
+    return participantDoc.exists;
+  } catch (error) {
+    console.error('batch-users: party access check failed:', error);
+    return false;
+  }
+}
 
-    let participantMembershipSnap;
-    try {
-      participantMembershipSnap = await db
-        .collectionGroup('participants')
-        .where(admin.firestore.FieldPath.documentId(), '==', callerUid)
-        .get();
-    } catch (groupError) {
-      console.error('batch-users: collectionGroup participants lookup failed:', groupError);
-      participantMembershipSnap = { docs: [] };
-    }
+/**
+ * @param {import('firebase-admin/firestore').Firestore} db
+ * @param {string} partyId
+ * @returns {Promise<Set<string>>}
+ */
+export async function getPartyMemberUserIds(db, partyId) {
+  const allowed = new Set();
 
-    for (const doc of participantMembershipSnap.docs) {
-      const partyRef = doc.ref.parent?.parent;
-      if (partyRef?.id) {
-        partyIds.add(partyRef.id);
-      }
-    }
-
-    const allowed = new Set();
-    if (partyIds.size === 0) {
+  try {
+    const partyDoc = await db.collection('parties').doc(partyId).get();
+    if (!partyDoc.exists) {
       return allowed;
     }
 
-    allowed.add(callerUid);
+    const adminId = partyDoc.data()?.adminId;
+    if (adminId) {
+      allowed.add(adminId);
+    }
 
-    await Promise.all(
-      [...partyIds].map(async (partyId) => {
-        const partyDoc = await db.collection('parties').doc(partyId).get();
-        if (partyDoc.exists) {
-          const adminId = partyDoc.data()?.adminId;
-          if (adminId) {
-            allowed.add(adminId);
-          }
-        }
+    const participantsSnap = await db
+      .collection('parties')
+      .doc(partyId)
+      .collection('participants')
+      .get();
 
-        const participantsSnap = await db
-          .collection('parties')
-          .doc(partyId)
-          .collection('participants')
-          .get();
-
-        for (const participantDoc of participantsSnap.docs) {
-          allowed.add(participantDoc.id);
-        }
-      }),
-    );
+    for (const participantDoc of participantsSnap.docs) {
+      allowed.add(participantDoc.id);
+    }
 
     return allowed;
   } catch (error) {
-    console.error('batch-users: failed to resolve co-participants:', error);
+    console.error('batch-users: failed to load party members:', error);
     return new Set();
   }
 }
@@ -142,11 +146,17 @@ export async function fetchDisplayProfilesForUserIds(db, auth, userIds) {
  * @param {import('firebase-admin/firestore').Firestore} db
  * @param {import('firebase-admin/auth').Auth} auth
  * @param {string} callerUid
+ * @param {string} partyId
  * @param {string[]} userIds
  * @returns {Promise<{ users: Record<string, string>, bots: Record<string, boolean>, photos: Record<string, string|null> }>}
  */
-export async function batchUsersLookup(db, auth, callerUid, userIds) {
-  const allowedIds = await getCoParticipantUserIds(db, callerUid);
+export async function batchUsersLookup(db, auth, callerUid, partyId, userIds) {
+  const hasAccess = await verifyCallerPartyAccess(db, partyId, callerUid);
+  if (!hasAccess) {
+    return { users: {}, bots: {}, photos: {} };
+  }
+
+  const allowedIds = await getPartyMemberUserIds(db, partyId);
   const visibleUserIds = userIds.filter((id) => allowedIds.has(id));
   return fetchDisplayProfilesForUserIds(db, auth, visibleUserIds);
 }
