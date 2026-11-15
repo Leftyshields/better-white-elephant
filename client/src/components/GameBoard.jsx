@@ -767,8 +767,7 @@ export function GameBoard({ partyId, onEndTurn }) {
   // Check if a gift was originally submitted by the current user
   const isMyGift = (gift) => gift?.submitterId === user?.uid;
   
-  const canPick = currentAction === null && wrappedGifts.length > 0 && 
-    (!playerHasGift || wrappedGifts.length > 0 || isPlayer1FinalTurn);
+  const canPick = currentAction === null && wrappedGifts.length > 0 && !playerHasGift;
   
   const canSteal = (giftId) => {
     // In boomerang phase or Player 1's final turn, players can steal even after picking

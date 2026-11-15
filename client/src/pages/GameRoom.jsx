@@ -630,6 +630,7 @@ export function GameRoom({ partyId }) {
             <GiftGrid
               gifts={state.gifts}
               isMyTurn={derived.isMyTurn}
+              canPick={derived.canPick}
               canSteal={derived.canSteal}
               getStealBlockReason={derived.getStealBlockReason}
               actions={actions}

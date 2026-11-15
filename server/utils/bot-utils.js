@@ -126,10 +126,7 @@ export function botMakeDecision(gameState) {
     (currentTurnIndex >= (turnOrder?.length || 0))
   );
 
-  // CRITICAL: If queue is exhausted but wrapped gifts remain, bot MUST pick a wrapped gift
-  // This prevents the game from getting stuck in an infinite loop
-  if (isQueueExhausted && wrappedGifts && wrappedGifts.length > 0) {
-    // Bot can pick a wrapped gift even if they have a gift (to claim all gifts)
+  if (isQueueExhausted && wrappedGifts && wrappedGifts.length > 0 && !botHasGift) {
     const randomGift = wrappedGifts[Math.floor(Math.random() * wrappedGifts.length)];
     return { action: 'pick', giftId: randomGift };
   }
@@ -148,19 +145,11 @@ export function botMakeDecision(gameState) {
     // Check if bot is a victim (received gift from exchange)
     const isVictim = gameState.currentVictim === currentPlayerId;
     
-    // Check if there are wrapped gifts remaining (Exception 2: can pick to claim all gifts)
     const hasWrappedGifts = wrappedGifts && wrappedGifts.length > 0;
-    
-    // If Player 1 final turn OR wrapped gifts remain, bot can act
-    if (isPlayer1FinalTurn || hasWrappedGifts) {
-      // Bot can pick a wrapped gift even though they have a gift
-      if (hasWrappedGifts && wrappedGifts.length > 0) {
-        const randomGift = wrappedGifts[Math.floor(Math.random() * wrappedGifts.length)];
-        return { action: 'pick', giftId: randomGift };
-      }
-      
+
+    if (isPlayer1FinalTurn) {
       // If Player 1 final turn and no wrapped gifts, try to steal
-      if (isPlayer1FinalTurn && (!hasWrappedGifts || wrappedGifts.length === 0)) {
+      if (!hasWrappedGifts || wrappedGifts.length === 0) {
         // Find stealable gifts (not frozen, not owned by bot, and not U-Turn violation)
         const stealableGifts = [];
         for (const [giftId, gift] of unwrappedMap.entries()) {
@@ -260,7 +249,8 @@ export function botMakeDecision(gameState) {
   }
 
   // 50% chance to steal, 50% chance to pick (when both options available)
-  const hasBothOptions = stealableGifts.length > 0 && wrappedGifts.length > 0;
+  const hasBothOptions =
+    stealableGifts.length > 0 && wrappedGifts.length > 0 && !botHasGift;
   if (hasBothOptions) {
     // Randomly choose between steal and pick (50/50)
     if (Math.random() < 0.5) {
@@ -280,8 +270,8 @@ export function botMakeDecision(gameState) {
     return { action: 'steal', giftId: randomGift };
   }
   
-  // Otherwise pick a wrapped gift
-  if (wrappedGifts.length > 0) {
+  // Otherwise pick a wrapped gift (only when bot does not already hold one)
+  if (wrappedGifts.length > 0 && !botHasGift) {
     const randomGift = wrappedGifts[Math.floor(Math.random() * wrappedGifts.length)];
     return { action: 'pick', giftId: randomGift };
   }
