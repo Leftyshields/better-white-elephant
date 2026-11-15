@@ -15,6 +15,7 @@ import {
 import { auth, db } from '../utils/firebase.js';
 import { doc, setDoc, getDoc, deleteField } from 'firebase/firestore';
 import { trackLogin, trackSignUp } from '../utils/analytics.js';
+import { displayNameForFirestoreDoc } from '../utils/firestoreDisplayName.js';
 
 export function useAuth() {
   const [user, setUser] = useState(null);
@@ -36,7 +37,10 @@ export function useAuth() {
           
           // Update or create user document with Auth data
           await setDoc(userDocRef, {
-            displayName: user.displayName || existingData.displayName || user.email?.split('@')[0] || '',
+            displayName: displayNameForFirestoreDoc({
+              authDisplayName: user.displayName,
+              existingDisplayName: existingData.displayName,
+            }),
             email: deleteField(),
             // Preserve existing shippingAddress if it exists
             shippingAddress: existingData.shippingAddress || null,

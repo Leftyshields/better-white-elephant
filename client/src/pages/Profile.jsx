@@ -25,6 +25,7 @@ import { Button } from '../components/ui/Button.jsx';
 import { Input } from '../components/ui/Input.jsx';
 import { Modal } from '../components/ui/Modal.jsx';
 import { LockClosedIcon } from '@heroicons/react/24/outline';
+import { displayNameForFirestoreDoc } from '../utils/firestoreDisplayName.js';
 
 const SHIPPING_FIELD_KEYS = ['name', 'street', 'city', 'state', 'zip', 'country'];
 
@@ -119,7 +120,7 @@ export function Profile() {
           setHadPersistedShippingAddress(false);
           setHadGrantedSenderShareConsent(false);
           await setDoc(doc(db, 'users', user.uid), {
-            displayName: user.displayName || '',
+            displayName: displayNameForFirestoreDoc({ authDisplayName: user.displayName }),
             createdAt: new Date(),
             updatedAt: new Date(),
           });
@@ -147,7 +148,10 @@ export function Profile() {
 
     try {
       const profileUpdate = {
-        displayName: displayName || user.email || '',
+        displayName: displayNameForFirestoreDoc({
+          authDisplayName: user.displayName,
+          formDisplayName: displayName,
+        }),
         updatedAt: new Date(),
         shippingAddressSenderShareConsentAt: deleteField(),
       };
@@ -180,7 +184,10 @@ export function Profile() {
       }
 
       const profileUpdate = {
-        displayName: displayName || user.email || '',
+        displayName: displayNameForFirestoreDoc({
+          authDisplayName: user.displayName,
+          formDisplayName: displayName,
+        }),
         updatedAt: new Date(),
       };
 
