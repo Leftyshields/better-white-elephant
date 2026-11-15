@@ -42,9 +42,9 @@ export function PartyInviteLanding({ partyId }) {
               const hostDoc = await getDoc(doc(db, 'users', data.adminId));
               if (hostDoc.exists()) {
                 const hostData = hostDoc.data();
-                setHostName(publicDisplayNameFromUserDoc(hostData.displayName) || 'Party Host');
+                setHostName(publicDisplayNameFromUserDoc(hostData.displayName) || 'Name not shared');
               } else {
-                setHostName('Party Host');
+                setHostName('Name not shared');
               }
             } catch (error) {
               // If permission denied or other error, just use default
@@ -206,7 +206,7 @@ export function PartyInviteLanding({ partyId }) {
           <div className="space-y-4 mb-8 relative z-10">
             <div className="bg-slate-950/50 border border-white/5 rounded-lg p-4">
               <p className="text-sm text-slate-400 mb-1">Host</p>
-              <p className="text-lg font-semibold text-white">{hostName || 'Party Host'}</p>
+              <p className="text-lg font-semibold text-white">{hostName || 'Name not shared'}</p>
             </div>
             
             <div className="bg-slate-950/50 border border-white/5 rounded-lg p-4">

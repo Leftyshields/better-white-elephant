@@ -98,7 +98,7 @@ beforeEach(async () => {
   });
 });
 
-describe('users collection — owner access', () => {
+describe('users collection - owner access', () => {
   it('owner can read and write their own profile including shippingAddress', async () => {
     const db = authedDb(OWNER_ID);
     await assertSucceeds(getDoc(doc(db, 'users', OWNER_ID)));
@@ -118,7 +118,7 @@ describe('users collection — owner access', () => {
   });
 });
 
-describe('users collection — non-owner single-document reads', () => {
+describe('users collection - non-owner single-document reads', () => {
   it('another authenticated user cannot get a profile that contains shippingAddress', async () => {
     const db = authedDb(OTHER_ID);
     await assertFails(getDoc(doc(db, 'users', VICTIM_ID)));
@@ -155,7 +155,7 @@ describe('users collection — non-owner single-document reads', () => {
   });
 });
 
-describe('users collection — non-owner queries (PII regression)', () => {
+describe('users collection - non-owner queries (PII regression)', () => {
   it('rejects authenticated collection query with limit (regression for main query bypass)', async () => {
     const db = authedDb(OTHER_ID);
     const usersQuery = query(collection(db, 'users'), limit(10));

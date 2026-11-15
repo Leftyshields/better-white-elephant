@@ -50,7 +50,7 @@ export function displayNameForFirestoreDoc({
 }
 
 /**
- * displayName from a public users/{uid} read — hide legacy email-shaped values.
+ * displayName from a public users/{uid} read - hide legacy email-shaped values.
  */
 export function publicDisplayNameFromUserDoc(displayName) {
   const value = trimmed(displayName);
