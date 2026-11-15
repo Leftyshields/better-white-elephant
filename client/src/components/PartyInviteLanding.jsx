@@ -10,7 +10,11 @@ import { db } from '../utils/firebase.js';
 import { trackParticipantJoin, trackError } from '../utils/analytics.js';
 import { GiftIcon } from '@heroicons/react/24/outline';
 import { Snowflakes } from './Snowflakes.jsx';
-import { pickDisplayName } from '../../../server/lib/display-names.js';
+import {
+  INVITE_LANDING_HOST_NAME_NOT_SHARED,
+  isSyntheticPlayerDisplayName,
+  isValidPublicHostDisplayName,
+} from '../../../server/lib/display-names.js';
 
 export function PartyInviteLanding({ partyId }) {
   const { user, signInWithGoogle, loading: authLoading } = useAuth();
@@ -35,24 +39,20 @@ export function PartyInviteLanding({ partyId }) {
             adminId: data.adminId,
           });
 
-          // Fetch host name if we have adminId
-          // Note: User profile read requires authentication, so we'll try but fallback gracefully
-          if (data.adminId) {
-            try {
-              const hostDoc = await getDoc(doc(db, 'users', data.adminId));
-              if (hostDoc.exists()) {
-                const hostData = hostDoc.data();
-                setHostName(
-                  pickDisplayName(data.adminId, hostData.displayName),
-                );
-              } else {
-                setHostName('Party Host');
-              }
-            } catch (error) {
-              // If permission denied or other error, just use default
-              console.warn('Could not fetch host name (may require auth):', error.message);
-              setHostName('Party Host');
-            }
+          const storedHostName =
+            typeof data.hostDisplayName === 'string'
+              ? data.hostDisplayName.trim()
+              : '';
+          const adminId = data.adminId;
+          if (
+            storedHostName &&
+            adminId &&
+            !isSyntheticPlayerDisplayName(storedHostName, adminId) &&
+            isValidPublicHostDisplayName(storedHostName)
+          ) {
+            setHostName(storedHostName);
+          } else {
+            setHostName(null);
           }
         } else {
           setPartyInfo(null);
@@ -208,7 +208,9 @@ export function PartyInviteLanding({ partyId }) {
           <div className="space-y-4 mb-8 relative z-10">
             <div className="bg-slate-950/50 border border-white/5 rounded-lg p-4">
               <p className="text-sm text-slate-400 mb-1">Host</p>
-              <p className="text-lg font-semibold text-white">{hostName || 'Party Host'}</p>
+              <p className="text-lg font-semibold text-white">
+                {hostName || INVITE_LANDING_HOST_NAME_NOT_SHARED}
+              </p>
             </div>
             
             <div className="bg-slate-950/50 border border-white/5 rounded-lg p-4">

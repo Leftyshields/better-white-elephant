@@ -23,7 +23,11 @@ import { GiftIcon, EllipsisVerticalIcon } from '@heroicons/react/24/outline';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { collection, addDoc, doc, setDoc, query, where, onSnapshot, orderBy, collectionGroup, getDocs, deleteDoc, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from '../utils/firebase.js';
-import { resolveSyncedFirestoreDisplayName } from '../../../server/lib/display-names.js';
+import {
+  hostDisplayNameForPartyDoc,
+  isValidPublicHostDisplayName,
+  resolveSyncedFirestoreDisplayName,
+} from '../../../server/lib/display-names.js';
 import { trackCreateParty, trackSignUp, trackLogin, trackButtonClick, trackGameAbandoned, trackError } from '../utils/analytics.js';
 import { usePartyModal } from '../contexts/PartyModalContext.jsx';
 import { Footer } from '../components/Footer.jsx';
@@ -288,7 +292,12 @@ export function Home() {
     }
 
     try {
-      const partyRef = await addDoc(collection(db, 'parties'), {
+      const hostDisplayName = hostDisplayNameForPartyDoc(
+        user.uid,
+        user.displayName,
+        user.email,
+      );
+      const partyPayload = {
         adminId: user.uid,
         title: partyTitle.trim() || null,
         date: new Date(partyDate),
@@ -299,7 +308,11 @@ export function Home() {
         },
         createdAt: new Date(),
         updatedAt: new Date(),
-      });
+      };
+      if (hostDisplayName != null && isValidPublicHostDisplayName(hostDisplayName)) {
+        partyPayload.hostDisplayName = hostDisplayName;
+      }
+      const partyRef = await addDoc(collection(db, 'parties'), partyPayload);
 
       // Create participant entry for admin (if not exists)
       const participantRef = doc(db, 'parties', partyRef.id, 'participants', user.uid);

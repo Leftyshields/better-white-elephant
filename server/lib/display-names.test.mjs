@@ -4,6 +4,8 @@ import {
   displayNameMatchesEmailLocalPart,
   emailLocalPart,
   pickDisplayName,
+  hostDisplayNameForPartyDoc,
+  isValidPublicHostDisplayName,
   pickHostNameForInvite,
   PARTY_INVITE_INTRO_ANONYMOUS,
   buildPartyInviteIntroParagraph,
@@ -46,6 +48,39 @@ describe('display name privacy', () => {
       pickDisplayName('u1', 'user@domain.com', 'Visible'),
       'Visible',
     );
+  });
+
+  test('hostDisplayNameForPartyDoc matches trimmed invite host picker', () => {
+    const uid = 'party-host-abcd1234';
+    assert.equal(
+      hostDisplayNameForPartyDoc(uid, 'Display', 'nope@example.com'),
+      pickHostNameForInvite(uid, 'Display', 'nope@example.com'),
+    );
+  });
+
+  test('isValidPublicHostDisplayName matches Firestore validHostDisplayName', () => {
+    assert.equal(isValidPublicHostDisplayName('Good Name'), true);
+    assert.equal(isValidPublicHostDisplayName('bad@mail.com'), false);
+    assert.equal(isValidPublicHostDisplayName('x'.repeat(65)), false);
+    assert.equal(isValidPublicHostDisplayName(''), false);
+    assert.equal(isValidPublicHostDisplayName(' padded '), false);
+    assert.equal(isValidPublicHostDisplayName('A'), true);
+  });
+
+  test('hostDisplayNameForPartyDoc trims after slice so a space at position 64 is not stored', () => {
+    const uid = 'party-host-abcd1234';
+    const long = `${'L'.repeat(63)} ${'x'.repeat(6)}`;
+    assert.equal(long.length, 70);
+    const value = hostDisplayNameForPartyDoc(uid, long, 'safe@example.com');
+    assert.equal(value, 'L'.repeat(63));
+    assert.equal(isValidPublicHostDisplayName(value), true);
+    assert.ok(!value.endsWith(' '));
+  });
+
+  test('hostDisplayNameForPartyDoc returns null when trimmed value is not rule-safe', () => {
+    const uid = 'party-host-abcd1234';
+    assert.equal(hostDisplayNameForPartyDoc(uid, 'Host\tName', 'safe@example.com'), null);
+    assert.equal(hostDisplayNameForPartyDoc(uid, 'Host\nName', 'safe@example.com'), null);
   });
 
   test('resolveSyncedFirestoreDisplayName never derives from email', () => {
