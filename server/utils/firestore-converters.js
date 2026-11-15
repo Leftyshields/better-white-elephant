@@ -39,6 +39,7 @@ export const userConverter = {
 export const partyConverter = {
   toFirestore: (party) => ({
     adminId: party.adminId,
+    hostDisplayName: party.hostDisplayName || null,
     title: party.title || null,
     date: party.date,
     status: party.status || 'LOBBY', // LOBBY, ACTIVE, ENDED
@@ -55,6 +56,7 @@ export const partyConverter = {
     return {
       id: snapshot.id,
       adminId: data.adminId,
+      hostDisplayName: data.hostDisplayName || null,
       title: data.title || null,
       date: data.date?.toDate() || null,
       status: data.status || 'LOBBY',

@@ -4,6 +4,8 @@ import {
   displayNameMatchesEmailLocalPart,
   emailLocalPart,
   pickDisplayName,
+  hostDisplayNameForPartyDoc,
+  isValidPublicHostDisplayName,
   pickHostNameForInvite,
   PARTY_INVITE_INTRO_ANONYMOUS,
   buildPartyInviteIntroParagraph,
@@ -45,6 +47,36 @@ describe('display name privacy', () => {
     assert.equal(
       pickDisplayName('u1', 'user@domain.com', 'Visible'),
       'Visible',
+    );
+  });
+
+  test('hostDisplayNameForPartyDoc matches trimmed invite host picker', () => {
+    const uid = 'party-host-abcd1234';
+    assert.equal(
+      hostDisplayNameForPartyDoc(uid, 'Display', 'nope@example.com'),
+      pickHostNameForInvite(uid, 'Display', 'nope@example.com'),
+    );
+  });
+
+  test('isValidPublicHostDisplayName matches Firestore validHostDisplayName', () => {
+    assert.equal(isValidPublicHostDisplayName('Good Name'), true);
+    assert.equal(isValidPublicHostDisplayName('bad@mail.com'), false);
+    assert.equal(isValidPublicHostDisplayName('x'.repeat(65)), false);
+    assert.equal(isValidPublicHostDisplayName(''), false);
+    assert.equal(isValidPublicHostDisplayName(' padded '), false);
+    assert.equal(isValidPublicHostDisplayName('A'), true);
+  });
+
+  test('hostDisplayNameForPartyDoc caps values longer than 64 characters', () => {
+    const uid = 'party-host-abcd1234';
+    const long = 'L'.repeat(80);
+    assert.equal(
+      hostDisplayNameForPartyDoc(uid, long, 'safe@example.com').length,
+      64,
+    );
+    assert.equal(
+      isValidPublicHostDisplayName(hostDisplayNameForPartyDoc(uid, long, 'safe@example.com')),
+      true,
     );
   });
 

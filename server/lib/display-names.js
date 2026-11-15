@@ -67,6 +67,8 @@ export function displayNameMatchesEmailLocalPart(displayName, email) {
 /**
  * Host line in invite emails — never falls back to the email local-part.
  */
+export const MAX_PUBLIC_HOST_DISPLAY_NAME_LENGTH = 64;
+
 export function pickHostNameForInvite(adminId, hostNameCandidate, ownerEmail) {
   let candidate = hostNameCandidate;
   if (displayNameMatchesEmailLocalPart(candidate, ownerEmail)) {
@@ -86,6 +88,28 @@ export function sanitizeUserChosenDisplayName(value) {
     return '';
   }
   return trimmed;
+}
+
+/**
+ * Trimmed party.hostDisplayName for Firestore writes (invite landing reads this field).
+ */
+/** Matches firestore.rules validHostDisplayName (trimmed, 1–64, no @, no edge whitespace). */
+export function isValidPublicHostDisplayName(value) {
+  if (typeof value !== 'string' || looksLikeEmail(value)) {
+    return false;
+  }
+  if (value.length > MAX_PUBLIC_HOST_DISPLAY_NAME_LENGTH) {
+    return false;
+  }
+  return /^\S(.{0,62}\S)?$/.test(value);
+}
+
+export function hostDisplayNameForPartyDoc(adminId, displayName, email) {
+  let value = pickHostNameForInvite(adminId, displayName, email).trim();
+  if (value.length > MAX_PUBLIC_HOST_DISPLAY_NAME_LENGTH) {
+    value = value.slice(0, MAX_PUBLIC_HOST_DISPLAY_NAME_LENGTH);
+  }
+  return value;
 }
 
 /**

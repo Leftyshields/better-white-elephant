@@ -10,14 +10,14 @@ import { db } from '../utils/firebase.js';
 import { trackParticipantJoin, trackError } from '../utils/analytics.js';
 import { GiftIcon } from '@heroicons/react/24/outline';
 import { Snowflakes } from './Snowflakes.jsx';
-import { pickDisplayName } from '../../../server/lib/display-names.js';
+import { isSyntheticPlayerDisplayName } from '../../../server/lib/display-names.js';
 
 export function PartyInviteLanding({ partyId }) {
   const { user, signInWithGoogle, loading: authLoading } = useAuth();
   const [partyInfo, setPartyInfo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
-  const [hostName, setHostName] = useState(null);
+  const [hostName, setHostName] = useState('Party Host');
 
   // Fetch public party info
   useEffect(() => {
@@ -35,24 +35,19 @@ export function PartyInviteLanding({ partyId }) {
             adminId: data.adminId,
           });
 
-          // Fetch host name if we have adminId
-          // Note: User profile read requires authentication, so we'll try but fallback gracefully
-          if (data.adminId) {
-            try {
-              const hostDoc = await getDoc(doc(db, 'users', data.adminId));
-              if (hostDoc.exists()) {
-                const hostData = hostDoc.data();
-                setHostName(
-                  pickDisplayName(data.adminId, hostData.displayName),
-                );
-              } else {
-                setHostName('Party Host');
-              }
-            } catch (error) {
-              // If permission denied or other error, just use default
-              console.warn('Could not fetch host name (may require auth):', error.message);
-              setHostName('Party Host');
-            }
+          const storedHostName =
+            typeof data.hostDisplayName === 'string'
+              ? data.hostDisplayName.trim()
+              : '';
+          const adminId = data.adminId;
+          if (
+            storedHostName &&
+            adminId &&
+            !isSyntheticPlayerDisplayName(storedHostName, adminId)
+          ) {
+            setHostName(storedHostName);
+          } else {
+            setHostName('Party Host');
           }
         } else {
           setPartyInfo(null);

@@ -13,9 +13,19 @@ import {
   signOut as firebaseSignOut,
 } from 'firebase/auth';
 import { auth, db } from '../utils/firebase.js';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  setDoc,
+  updateDoc,
+  where,
+} from 'firebase/firestore';
 import { trackLogin, trackSignUp } from '../utils/analytics.js';
 import {
+  hostDisplayNameForPartyDoc,
   resolveSyncedFirestoreDisplayName,
   sanitizeUserChosenDisplayName,
 } from '../../../server/lib/display-names.js';
@@ -39,11 +49,12 @@ export function useAuth() {
           const existingData = userDoc.exists() ? userDoc.data() : {};
           
           // Update or create user document with Auth data
+          const syncedDisplayName = resolveSyncedFirestoreDisplayName(
+            user.displayName,
+            existingData.displayName,
+          );
           await setDoc(userDocRef, {
-            displayName: resolveSyncedFirestoreDisplayName(
-              user.displayName,
-              existingData.displayName,
-            ),
+            displayName: syncedDisplayName,
             email: user.email || existingData.email || '',
             // Preserve existing shippingAddress if it exists
             shippingAddress: existingData.shippingAddress || null,
@@ -51,6 +62,25 @@ export function useAuth() {
             createdAt: existingData.createdAt || new Date(),
             updatedAt: new Date(),
           }, { merge: true });
+
+          const hostDisplayName = hostDisplayNameForPartyDoc(
+            user.uid,
+            syncedDisplayName,
+            user.email || existingData.email || '',
+          );
+          const hostedPartiesQuery = query(
+            collection(db, 'parties'),
+            where('adminId', '==', user.uid),
+          );
+          const hostedParties = await getDocs(hostedPartiesQuery);
+          await Promise.all(
+            hostedParties.docs.map((partyDoc) =>
+              updateDoc(partyDoc.ref, {
+                hostDisplayName,
+                updatedAt: new Date(),
+              }),
+            ),
+          );
         } catch (error) {
           // Don't block auth flow if Firestore sync fails
           console.error('Error syncing user data to Firestore:', error);
