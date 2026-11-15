@@ -95,6 +95,49 @@ beforeEach(async () => {
       displayName: 'Email Only',
       email: 'emailonly@example.com',
     });
+    await setDoc(doc(db, 'users', 'public-host-null-shipping'), {
+      displayName: 'Null Shipping Host',
+      shippingAddress: null,
+    });
+    await setDoc(doc(db, 'users', 'public-host-no-shipping-field'), {
+      displayName: 'No Shipping Field Host',
+    });
+    await setDoc(doc(db, 'users', 'public-host-empty-shipping'), {
+      displayName: 'Empty Shipping Host',
+      shippingAddress: '',
+    });
+    await setDoc(doc(db, 'users', 'email-with-null-shipping'), {
+      displayName: 'Email Null Ship',
+      email: 'leak@example.com',
+      shippingAddress: null,
+    });
+  });
+});
+
+describe('users collection - public get shippingAddress shapes', () => {
+  it('allows unauthenticated get when shippingAddress field is missing and no email', async () => {
+    const db = unauthedDb();
+    await assertSucceeds(getDoc(doc(db, 'users', 'public-host-no-shipping-field')));
+  });
+
+  it('allows unauthenticated get when shippingAddress is null and no email', async () => {
+    const db = unauthedDb();
+    await assertSucceeds(getDoc(doc(db, 'users', 'public-host-null-shipping')));
+  });
+
+  it('denies unauthenticated get when shippingAddress is a real object', async () => {
+    const db = unauthedDb();
+    await assertFails(getDoc(doc(db, 'users', VICTIM_ID)));
+  });
+
+  it('denies unauthenticated get when shippingAddress is empty string', async () => {
+    const db = unauthedDb();
+    await assertFails(getDoc(doc(db, 'users', 'public-host-empty-shipping')));
+  });
+
+  it('denies unauthenticated get when email key is present even if shippingAddress is null', async () => {
+    const db = unauthedDb();
+    await assertFails(getDoc(doc(db, 'users', 'email-with-null-shipping')));
   });
 });
 
@@ -152,6 +195,25 @@ describe('users collection - non-owner single-document reads', () => {
     const snap = await assertSucceeds(getDoc(doc(db, 'users', 'public-host')));
     assert.strictEqual(snap.data().displayName, 'Public Host');
     assert.strictEqual(snap.data().email, undefined);
+  });
+
+  it('unauthenticated user can get profile with shippingAddress explicitly null (invite host name)', async () => {
+    const db = unauthedDb();
+    const snap = await assertSucceeds(getDoc(doc(db, 'users', 'public-host-null-shipping')));
+    assert.strictEqual(snap.data().displayName, 'Null Shipping Host');
+    assert.strictEqual(snap.data().shippingAddress, null);
+  });
+
+  it('unauthenticated user can get profile with no shippingAddress field', async () => {
+    const db = unauthedDb();
+    const snap = await assertSucceeds(getDoc(doc(db, 'users', 'public-host-no-shipping-field')));
+    assert.strictEqual(snap.data().displayName, 'No Shipping Field Host');
+    assert.strictEqual(snap.data().shippingAddress, undefined);
+  });
+
+  it('unauthenticated user cannot get profile with present shippingAddress', async () => {
+    const db = unauthedDb();
+    await assertFails(getDoc(doc(db, 'users', VICTIM_ID)));
   });
 });
 

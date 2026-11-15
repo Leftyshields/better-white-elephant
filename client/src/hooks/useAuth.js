@@ -35,19 +35,21 @@ export function useAuth() {
           // Get current Firestore data to preserve shippingAddress if it exists
           const existingData = userDoc.exists() ? userDoc.data() : {};
           
-          // Update or create user document with Auth data
-          await setDoc(userDocRef, {
+          const syncPayload = {
             displayName: displayNameForFirestoreDoc({
               authDisplayName: user.displayName,
               existingDisplayName: existingData.displayName,
             }),
             email: deleteField(),
-            // Preserve existing shippingAddress if it exists
-            shippingAddress: existingData.shippingAddress || null,
-            // Preserve createdAt if document exists, otherwise set it
             createdAt: existingData.createdAt || new Date(),
             updatedAt: new Date(),
-          }, { merge: true });
+          };
+
+          if (existingData.shippingAddress != null) {
+            syncPayload.shippingAddress = existingData.shippingAddress;
+          }
+
+          await setDoc(userDocRef, syncPayload, { merge: true });
         } catch (error) {
           // Don't block auth flow if Firestore sync fails
           console.error('Error syncing user data to Firestore:', error);

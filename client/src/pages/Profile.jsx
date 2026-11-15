@@ -25,7 +25,12 @@ import { Button } from '../components/ui/Button.jsx';
 import { Input } from '../components/ui/Input.jsx';
 import { Modal } from '../components/ui/Modal.jsx';
 import { LockClosedIcon } from '@heroicons/react/24/outline';
-import { displayNameForFirestoreDoc } from '../utils/firestoreDisplayName.js';
+import {
+  PROFILE_DISPLAY_NAME_EMAIL_ERROR,
+  PROFILE_DISPLAY_NAME_HELPER,
+  PROFILE_DISPLAY_NAME_PLACEHOLDER,
+} from '../utils/profileDisplayNameCopy.js';
+import { displayNameForFirestoreDoc, looksLikeEmail } from '../utils/firestoreDisplayName.js';
 
 const SHIPPING_FIELD_KEYS = ['name', 'street', 'city', 'state', 'zip', 'country'];
 
@@ -64,6 +69,7 @@ export function Profile() {
   const [showIncompleteShareOffMessage, setShowIncompleteShareOffMessage] = useState(false);
   const [showDeleteAddressConfirm, setShowDeleteAddressConfirm] = useState(false);
   const [persistedStoredAddress, setPersistedStoredAddress] = useState(null);
+  const [displayNameEmailError, setDisplayNameEmailError] = useState(false);
 
   const hasShippingFields = hasCompleteShippingFields(address);
   const saveDisabled = saving;
@@ -101,7 +107,11 @@ export function Profile() {
         const userDoc = await getDoc(doc(db, 'users', user.uid));
         if (userDoc.exists()) {
           const userData = userDoc.data();
-          setDisplayName(user.displayName || userData.displayName || '');
+          setDisplayName(
+            Object.prototype.hasOwnProperty.call(userData, 'displayName')
+              ? (userData.displayName || '')
+              : (user.displayName || ''),
+          );
           const loadedAddress = userData.shippingAddress || {};
           if (userData.shippingAddress) {
             setAddress(userData.shippingAddress);
@@ -138,6 +148,16 @@ export function Profile() {
     }
   }, [user, authLoading, navigate]);
 
+  const validateAndResolveDisplayNameForSave = () => {
+    const trimmedName = displayName.trim();
+    if (trimmedName && looksLikeEmail(trimmedName)) {
+      setDisplayNameEmailError(true);
+      return null;
+    }
+    setDisplayNameEmailError(false);
+    return displayNameForFirestoreDoc({ formDisplayName: displayName });
+  };
+
   const persistConsentWithdrawOnly = async () => {
     if (!user) return;
 
@@ -147,16 +167,22 @@ export function Profile() {
     setShowIncompleteShareOffMessage(false);
 
     try {
+      const storedDisplayName = validateAndResolveDisplayNameForSave();
+      if (storedDisplayName === null) {
+        setSaving(false);
+        return;
+      }
+
+      await updateProfile(auth.currentUser, { displayName: storedDisplayName || null });
+
       const profileUpdate = {
-        displayName: displayNameForFirestoreDoc({
-          authDisplayName: user.displayName,
-          formDisplayName: displayName,
-        }),
+        displayName: storedDisplayName,
         updatedAt: new Date(),
         shippingAddressSenderShareConsentAt: deleteField(),
       };
 
       await updateDoc(doc(db, 'users', user.uid), profileUpdate);
+      setDisplayName(storedDisplayName);
 
       setHadGrantedSenderShareConsent(false);
       setShowSavedAddressNeedsConsentNote(false);
@@ -179,15 +205,16 @@ export function Profile() {
     setSuccessMessage('');
 
     try {
-      if (displayName && displayName !== user.displayName) {
-        await updateProfile(auth.currentUser, { displayName });
+      const storedDisplayName = validateAndResolveDisplayNameForSave();
+      if (storedDisplayName === null) {
+        setSaving(false);
+        return;
       }
 
+      await updateProfile(auth.currentUser, { displayName: storedDisplayName || null });
+
       const profileUpdate = {
-        displayName: displayNameForFirestoreDoc({
-          authDisplayName: user.displayName,
-          formDisplayName: displayName,
-        }),
+        displayName: storedDisplayName,
         updatedAt: new Date(),
       };
 
@@ -208,6 +235,7 @@ export function Profile() {
       }
 
       await updateDoc(doc(db, 'users', user.uid), profileUpdate);
+      setDisplayName(storedDisplayName);
 
       if (deleteAddress) {
         setShowSavedAddressNeedsConsentNote(false);
@@ -291,9 +319,18 @@ export function Profile() {
           <Input
             label="Display Name"
             value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            placeholder={user.email || 'Enter your name'}
+            onChange={(e) => {
+              setDisplayNameEmailError(false);
+              setDisplayName(e.target.value);
+            }}
+            placeholder={PROFILE_DISPLAY_NAME_PLACEHOLDER}
           />
+          <p className="mt-1 text-sm text-slate-400">{PROFILE_DISPLAY_NAME_HELPER}</p>
+          {displayNameEmailError && (
+            <p className="mt-1 text-sm text-amber-300" role="alert">
+              {PROFILE_DISPLAY_NAME_EMAIL_ERROR}
+            </p>
+          )}
         </div>
 
         {/* Email (read-only) */}

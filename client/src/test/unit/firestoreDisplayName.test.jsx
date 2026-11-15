@@ -10,39 +10,31 @@ import {
 
 const clientSrc = join(dirname(fileURLToPath(import.meta.url)), '../..');
 
-describe('displayNameForFirestoreDoc', () => {
-  it('never returns a value containing @', () => {
-    const cases = [
-      displayNameForFirestoreDoc({ authDisplayName: 'alice@example.com' }),
-      displayNameForFirestoreDoc({ existingDisplayName: 'bob@corp.test' }),
-      displayNameForFirestoreDoc({ formDisplayName: '' }),
-      displayNameForFirestoreDoc({
-        authDisplayName: 'charlie@example.com',
-        formDisplayName: '',
-      }),
-    ];
-    for (const value of cases) {
-      expect(looksLikeEmail(value)).toBe(false);
-      expect(value).not.toContain('@');
-    }
+describe('looksLikeEmail', () => {
+  it('uses includes(@) for read and persist checks', () => {
+    expect(looksLikeEmail('a@b.com')).toBe(true);
+    expect(looksLikeEmail('Alex @ Home')).toBe(true);
+    expect(looksLikeEmail('jane @ example.com')).toBe(true);
+    expect(looksLikeEmail('River Host')).toBe(false);
   });
+});
 
-  it('profile save with empty form and no auth displayName stores empty string', () => {
+describe('displayNameForFirestoreDoc', () => {
+  it('profile save with empty form stores empty string without auth fallback', () => {
     const stored = displayNameForFirestoreDoc({
-      authDisplayName: null,
+      authDisplayName: 'Google Name',
       formDisplayName: '',
     });
     expect(stored).toBe('');
-    expect(stored).not.toContain('@');
   });
 
-  it('uses non-email auth displayName when form is empty', () => {
-    expect(
-      displayNameForFirestoreDoc({
-        authDisplayName: 'River Host',
-        formDisplayName: '',
-      }),
-    ).toBe('River Host');
+  it('rejects any display name containing @', () => {
+    expect(displayNameForFirestoreDoc({ formDisplayName: 'a@b.com' })).toBe('');
+    expect(displayNameForFirestoreDoc({ formDisplayName: 'Alex @ Home' })).toBe('');
+  });
+
+  it('allows normal names on profile save', () => {
+    expect(displayNameForFirestoreDoc({ formDisplayName: 'Alex' })).toBe('Alex');
   });
 
   it('rejects legacy email-shaped existing displayName on auth sync', () => {
@@ -57,6 +49,7 @@ describe('displayNameForFirestoreDoc', () => {
   it('hides email-shaped names on public user-doc reads', () => {
     expect(publicDisplayNameFromUserDoc('Host Name')).toBe('Host Name');
     expect(publicDisplayNameFromUserDoc('legacy@example.com')).toBeNull();
+    expect(publicDisplayNameFromUserDoc('Alex @ Home')).toBeNull();
   });
 });
 

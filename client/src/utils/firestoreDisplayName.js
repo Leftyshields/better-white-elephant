@@ -26,14 +26,10 @@ export function displayNameForFirestoreDoc({
 } = {}) {
   if (formDisplayName !== undefined) {
     const form = trimmed(formDisplayName);
-    if (form && !looksLikeEmail(form)) {
-      return form;
+    if (!form) {
+      return '';
     }
-    const auth = trimmed(authDisplayName);
-    if (auth && !looksLikeEmail(auth)) {
-      return auth;
-    }
-    return '';
+    return looksLikeEmail(form) ? '' : form;
   }
 
   const auth = trimmed(authDisplayName);
