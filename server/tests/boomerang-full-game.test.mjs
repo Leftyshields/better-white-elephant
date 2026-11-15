@@ -177,5 +177,8 @@ test('engine rejects pick when picker already holds an unwrapped gift', () => {
   state.currentPlayerId = 'p2';
 
   const engine = new GameEngine(state, CONFIG);
-  assert.throws(() => engine.pickGift('g-extra', 'p2'), /already holds an unwrapped gift/i);
+  assert.throws(
+    () => engine.pickGift('g-extra', 'p2'),
+    /You already have a gift, so you can't open another one/,
+  );
 });

@@ -210,7 +210,7 @@ export class GameEngine {
    */
   pickGift(giftId, playerId) {
     if (this.playerHasGift(playerId)) {
-      throw new Error('Cannot pick gift: player already holds an unwrapped gift');
+      throw new Error("You already have a gift, so you can't open another one. Steal one instead, or skip your turn.");
     }
 
     if (!this.canPick(playerId)) {
@@ -220,7 +220,7 @@ export class GameEngine {
     // Do not pick a gift that is already held by someone else (including duplicate wrapped/unwrapped state).
     const alreadyUnwrapped = this.unwrappedGifts.get(giftId);
     if (alreadyUnwrapped?.ownerId && alreadyUnwrapped.ownerId !== playerId) {
-      throw new Error('Cannot pick gift: gift is already held by another player');
+      throw new Error("That gift is already open, so you can't open it again.");
     }
 
     // Remove from wrapped pile

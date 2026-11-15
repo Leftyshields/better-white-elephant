@@ -305,7 +305,7 @@ io.on('connection', (socket) => {
 
       if (!engine.canPick(socket.userId)) {
         const message = engine.playerHasGift(socket.userId)
-          ? 'Cannot pick gift: player already holds an unwrapped gift'
+          ? "You already have a gift, so you can't open another one. Steal one instead, or skip your turn."
           : 'Cannot pick gift: invalid action';
         socket.emit('error', { message });
         return;
@@ -313,7 +313,7 @@ io.on('connection', (socket) => {
 
       const heldByOther = engine.unwrappedGifts.get(giftId);
       if (heldByOther?.ownerId && heldByOther.ownerId !== socket.userId) {
-        socket.emit('error', { message: 'Cannot pick gift: gift is already held by another player' });
+        socket.emit('error', { message: "That gift is already open, so you can't open it again." });
         return;
       }
 

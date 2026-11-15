@@ -47,7 +47,7 @@ test('pick is rejected when picker already holds an unwrapped gift', () => {
 
   assert.throws(
     () => engine.pickGift('g-extra', 'p3'),
-    /already holds an unwrapped gift/i,
+    /You already have a gift, so you can't open another one/,
   );
 
   assert.equal(countGifts(engine), beforeCount);
@@ -73,7 +73,7 @@ test('pick cannot overwrite a gift held by another player', () => {
 
   assert.throws(
     () => engine.pickGift('g1', 'p1'),
-    /already held|invalid action/i,
+    /That gift is already open/,
     'pick must not stomp another owner',
   );
   assert.equal(engine.unwrappedGifts.get('g1')?.ownerId, 'p2');
