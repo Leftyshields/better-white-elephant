@@ -24,6 +24,7 @@ import { apiRequest } from '../utils/api.js';
 import { trackGameAction } from '../utils/analytics.js';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../utils/firebase.js';
+import { canPlayerSkipTurn } from '../utils/skipTurnEligibility.js';
 
 export function GameBoard({ partyId, onEndTurn }) {
   const { user } = useAuth();
@@ -770,7 +771,26 @@ export function GameBoard({ partyId, onEndTurn }) {
     const giftData = unwrappedMap.get(gift.id);
     return giftData?.ownerId === user?.uid;
   });
-  
+
+  const giftsRecord = {};
+  for (const giftId of wrappedGifts || []) {
+    giftsRecord[giftId] = { isWrapped: true, ownerId: null, isFrozen: false, lastOwnerId: null };
+  }
+  for (const [giftId, giftData] of unwrappedMap.entries()) {
+    giftsRecord[giftId] = { isWrapped: false, ...giftData };
+  }
+  const canSkipTurn =
+    phase === 'ACTIVE' &&
+    currentPlayerId === user?.uid &&
+    canPlayerSkipTurn({
+      gifts: giftsRecord,
+      gameState,
+      currentTurnIndex: gameState?.currentTurnIndex,
+      turnQueue: gameState?.turnQueue,
+      userId: user?.uid,
+      activePlayerId: currentPlayerId,
+    });
+
   // Check if a gift was originally submitted by the current user
   const isMyGift = (gift) => gift?.submitterId === user?.uid;
   
@@ -1243,9 +1263,8 @@ export function GameBoard({ partyId, onEndTurn }) {
                       Your Turn!
                     </p>
                     {/* Action Buttons */}
-                    <div className="mt-4 flex gap-3 justify-center items-center">
-                      {/* Skip Turn Button - Always visible when it's your turn */}
-                      {!currentAction && (
+                    {canSkipTurn && (
+                      <div className="mt-4 flex gap-3 justify-center items-center">
                         <button
                           onClick={handleEndTurn}
                           className="bg-slate-700 text-white hover:bg-slate-600 hover:scale-105 rounded-full px-6 py-2 font-bold shadow-[0_0_15px_rgba(148,163,184,0.3)] transition-all duration-300 transform"
@@ -1253,17 +1272,8 @@ export function GameBoard({ partyId, onEndTurn }) {
                         >
                           Skip Turn
                         </button>
-                      )}
-                      {/* End Turn Button - Shows after you've acted */}
-                      {currentAction && (
-                        <button
-                          onClick={handleEndTurn}
-                          className="bg-white text-indigo-900 hover:bg-indigo-50 hover:scale-105 rounded-full px-8 py-2 font-bold shadow-[0_0_20px_rgba(255,255,255,0.3)] transition-all duration-300 transform animate-fade-in-up"
-                        >
-                          End Turn
-                        </button>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </>
                 ) : (
                   <p className="text-xl text-slate-300 animate-pulse whitespace-nowrap truncate">

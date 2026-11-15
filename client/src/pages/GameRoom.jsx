@@ -558,18 +558,11 @@ export function GameRoom({ partyId }) {
                     <p className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-white to-purple-300 drop-shadow-[0_0_10px_rgba(255,255,255,0.5)] animate-pulse">
                       Your Turn!
                     </p>
-                    {/* Action Buttons */}
-                    {state.gameState?.turnAction && state.gameState.turnAction.some(([id]) => id === currentPlayerId) ? (
+                    {derived.canSkipTurn && (
                       <div className="mt-4">
-                        <Button onClick={actions.endTurn} variant="primary" className="px-8">
-                          End Turn
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="mt-4">
-                        <Button 
-                          onClick={actions.endTurn} 
-                          variant="secondary" 
+                        <Button
+                          onClick={actions.endTurn}
+                          variant="secondary"
                           className="px-6"
                         >
                           Skip Turn
