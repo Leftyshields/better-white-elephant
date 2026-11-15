@@ -68,7 +68,7 @@ export async function markPendingInvitesAcceptedForParticipantJoin(
       const code = error?.code;
       if (code === 5 || code === 'not-found' || code === 'NOT_FOUND') {
         console.warn(
-          `acceptInviteOnJoin: invite ${inviteDoc.id} was removed before accept in party ${partyId}`
+          `acceptInviteOnJoin: invite was removed before accept partyId=${partyId} participantId=${participantId}: ${error.message}`
         );
         continue;
       }

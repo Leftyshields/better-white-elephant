@@ -172,8 +172,7 @@ export const acceptInviteOnParticipantJoin = onDocumentCreated(
       );
     } catch (error) {
       console.error(
-        `acceptInviteOnParticipantJoin failed party=${partyId} participant=${participantId}:`,
-        error
+        `acceptInviteOnParticipantJoin failed partyId=${partyId} participantId=${participantId}: ${error?.message ?? 'unknown error'}`
       );
     }
   }
