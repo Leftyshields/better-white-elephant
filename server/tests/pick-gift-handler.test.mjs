@@ -7,6 +7,7 @@ import { mock } from 'node:test';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { END_TURN_GAME_NOT_FOUND } from '../utils/end-turn-guards.js';
+import { SOCKET_GAME_STATE_LOADING_MESSAGE } from '../utils/socket-error-copy.js';
 import {
   PICK_GIFT_ALREADY_HOLDING,
   PICK_GIFT_ALREADY_OPEN,
@@ -264,7 +265,7 @@ test('failed executePick: no action_started or game-updated', async () => {
     },
   });
 
-  assert.equal(socketErrors[0]?.message, 'persist failed');
+  assert.equal(socketErrors[0]?.message, SOCKET_GAME_STATE_LOADING_MESSAGE);
   const roomEvents = io.emissions.filter((e) => e.event !== 'error');
   assert.equal(roomEvents.filter((e) => e.event === 'action_started').length, 0);
   assert.equal(roomEvents.filter((e) => e.event === 'game-updated').length, 0);
