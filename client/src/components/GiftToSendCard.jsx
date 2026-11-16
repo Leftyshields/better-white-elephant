@@ -8,6 +8,7 @@ import { CheckIcon } from '@heroicons/react/24/solid';
 import { CheckBadgeIcon } from '@heroicons/react/24/solid';
 import { fetchWinnerShippingAddress } from '../utils/api.js';
 import { SHIPPING_ADDRESS_WINNER_NOT_SHARED_GIFT_TO_SEND } from '../utils/shippingAddressCopy.js';
+import { GiftImage } from './GiftImage.jsx';
 
 export function GiftToSendCard({ gift, winnerId, winnerName, userNames, isSelfWin = false }) {
   const [address, setAddress] = useState(null);
@@ -88,16 +89,13 @@ export function GiftToSendCard({ gift, winnerId, winnerName, userNames, isSelfWi
         </div>
       )}
       <div className="flex gap-6">
-        {gift.image && (
-          <img
-            src={gift.image}
-            alt={gift.title || 'Gift'}
-            className="w-32 h-32 object-cover rounded-lg shadow-md"
-            onError={(e) => {
-              e.target.style.display = 'none';
-            }}
-          />
-        )}
+        <GiftImage
+          src={gift.image}
+          alt={gift.title || 'Gift'}
+          className="w-32 h-32 rounded-lg shadow-md flex-shrink-0"
+          placeholderClassName="w-32 h-32 rounded-lg"
+          iconSize="w-10 h-10"
+        />
         <div className="flex-1">
           <h3 className="text-white text-xl font-bold mb-2">{gift.title || 'Gift'}</h3>
           {gift.url && (

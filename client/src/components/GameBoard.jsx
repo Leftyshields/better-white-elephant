@@ -14,6 +14,7 @@ import { Button } from './ui/Button.jsx';
 import { AddressModal } from './AddressModal.jsx';
 import { ShippingAddressViewModal } from './ShippingAddressViewModal.jsx';
 import { GiftToSendCard } from './GiftToSendCard.jsx';
+import { GiftImage } from './GiftImage.jsx';
 import { GameAuditTrail } from './GameAuditTrail.jsx';
 import { GamePlayByPlay } from './GamePlayByPlay.jsx';
 import { ReactionBar } from './ReactionBar.jsx';
@@ -38,7 +39,6 @@ export function GameBoard({ partyId, onEndTurn }) {
   const prevIsMyTurnRef = useRef(false);
   const activePlayerRef = useRef(null);
   const [showAddressModal, setShowAddressModal] = useState(false);
-  const [prizeImageError, setPrizeImageError] = useState(false);
   const [selectedGift, setSelectedGift] = useState(null);
   const [showAddressViewModal, setShowAddressViewModal] = useState(false);
   const [selectedWinnerAddress, setSelectedWinnerAddress] = useState(null);
@@ -362,20 +362,13 @@ export function GameBoard({ partyId, onEndTurn }) {
                   className="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-[0_0_30px_-10px_rgba(234,179,8,0.3)] hover:border-white/20 transition-all"
                 >
                   <div className="flex gap-6">
-                    <div className="relative w-32 h-32 rounded-lg overflow-hidden bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex-shrink-0">
-                      {myPrize.image && !prizeImageError ? (
-                        <img
-                          src={myPrize.image}
-                          alt={myPrize.title || 'Gift'}
-                          className="w-full h-full object-cover"
-                          onError={() => setPrizeImageError(true)}
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <GiftIcon className="w-12 h-12 text-white opacity-50" />
-                        </div>
-                      )}
-                    </div>
+                    <GiftImage
+                      src={myPrize.image}
+                      alt={myPrize.title || 'Gift'}
+                      className="relative w-32 h-32 rounded-lg overflow-hidden flex-shrink-0"
+                      placeholderClassName="w-32 h-32 rounded-lg"
+                      iconSize="w-12 h-12"
+                    />
                     <div className="flex-1">
                       <h3 className="text-white text-3xl font-bold mb-2">{myPrize.title || 'Gift'}</h3>
                       {myPrize.url && (
@@ -511,20 +504,13 @@ export function GameBoard({ partyId, onEndTurn }) {
                         <div className="flex items-center justify-between gap-4">
                           <div className="flex items-center gap-4 flex-1 min-w-0">
                             <div className="flex-shrink-0">
-                              <div className="w-12 h-12 rounded-lg overflow-hidden bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center">
-                                {result.gift.image ? (
-                                  <img
-                                    src={result.gift.image}
-                                    alt={result.gift.title || 'Gift'}
-                                    className="w-full h-full object-cover"
-                                    onError={(e) => {
-                                      e.target.style.display = 'none';
-                                    }}
-                                  />
-                                ) : (
-                                  <GiftIcon className="w-6 h-6 text-white opacity-50" />
-                                )}
-                              </div>
+                              <GiftImage
+                                src={result.gift.image}
+                                alt={result.gift.title || 'Gift'}
+                                className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0"
+                                placeholderClassName="w-12 h-12 rounded-lg"
+                                iconSize="w-6 h-6"
+                              />
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-1">
@@ -904,20 +890,13 @@ export function GameBoard({ partyId, onEndTurn }) {
                 className="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-[0_0_30px_-10px_rgba(234,179,8,0.3)] hover:border-white/20 transition-all"
               >
                 <div className="flex gap-6">
-                  <div className="relative w-32 h-32 rounded-lg overflow-hidden bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex-shrink-0">
-                    {myPrize.image && !prizeImageError ? (
-                      <img
-                        src={myPrize.image}
-                        alt={myPrize.title || 'Gift'}
-                        className="w-full h-full object-cover"
-                        onError={() => setPrizeImageError(true)}
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <GiftIcon className="w-12 h-12 text-white opacity-50" />
-                      </div>
-                    )}
-                  </div>
+                  <GiftImage
+                    src={myPrize.image}
+                    alt={myPrize.title || 'Gift'}
+                    className="relative w-32 h-32 rounded-lg overflow-hidden flex-shrink-0"
+                    placeholderClassName="w-32 h-32 rounded-lg"
+                    iconSize="w-12 h-12"
+                  />
                   <div className="flex-1">
                     <h3 className="text-white text-3xl font-bold mb-2">{myPrize.title || 'Gift'}</h3>
                     {myPrize.url && (
@@ -1045,20 +1024,13 @@ export function GameBoard({ partyId, onEndTurn }) {
                       <div className="flex items-center justify-between gap-4">
                         <div className="flex items-center gap-4 flex-1 min-w-0">
                           <div className="flex-shrink-0">
-                            <div className="w-12 h-12 rounded-lg overflow-hidden bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center">
-                              {result.gift.image ? (
-                                <img
-                                  src={result.gift.image}
-                                  alt={result.gift.title || 'Gift'}
-                                  className="w-full h-full object-cover"
-                                  onError={(e) => {
-                                    e.target.style.display = 'none';
-                                  }}
-                                />
-                              ) : (
-                                <GiftIcon className="w-6 h-6 text-white opacity-50" />
-                              )}
-                            </div>
+                            <GiftImage
+                              src={result.gift.image}
+                              alt={result.gift.title || 'Gift'}
+                              className="w-12 h-12 rounded-lg overflow-hidden"
+                              placeholderClassName="w-12 h-12 rounded-lg"
+                              iconSize="w-6 h-6"
+                            />
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
