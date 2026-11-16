@@ -209,21 +209,24 @@ export function Home() {
     };
   }, [user]);
 
-  // Subscribe to participant counts for each party
+  // Subscribe to participant counts only for legacy parties that lack participantCount.
   useEffect(() => {
-    if (!user || myParties.length === 0) {
-      setParticipantCounts({});
+    if (!user) {
       return;
     }
 
     const unsubscribes = [];
-    const counts = {};
+    const legacyParties = myParties.filter(
+      (party) => typeof party.participantCount !== 'number',
+    );
 
-    myParties.forEach(party => {
+    legacyParties.forEach((party) => {
       const participantsQuery = query(collection(db, 'parties', party.id, 'participants'));
       const unsubscribe = onSnapshot(participantsQuery, (snapshot) => {
-        counts[party.id] = snapshot.size;
-        setParticipantCounts({ ...counts });
+        setParticipantCounts((prev) => ({
+          ...prev,
+          [party.id]: snapshot.size,
+        }));
       }, (error) => {
         console.error(`Error fetching participants for party ${party.id}:`, error);
       });
@@ -231,7 +234,7 @@ export function Home() {
     });
 
     return () => {
-      unsubscribes.forEach(unsubscribe => unsubscribe());
+      unsubscribes.forEach((unsubscribe) => unsubscribe());
     };
   }, [user, myParties]);
 
@@ -694,7 +697,9 @@ export function Home() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {myParties.map((party) => {
               const canDelete = hostCanDeletePartyFromHome(party);
-              const participantCount = participantCounts[party.id] || 0;
+              const participantCount = typeof party.participantCount === 'number'
+                ? party.participantCount
+                : participantCounts[party.id];
               
               return (
                 <div
@@ -727,7 +732,7 @@ export function Home() {
                         </div>
                         <div className="flex items-center gap-2 text-sm text-indigo-200">
                           <span className="text-base">👥</span>
-                          <span>{participantCount} Joined</span>
+                          <span>{typeof participantCount === 'number' ? `${participantCount} Joined` : 'Joined'}</span>
                         </div>
                       </div>
                       <div className="flex items-start gap-2 flex-shrink-0">
