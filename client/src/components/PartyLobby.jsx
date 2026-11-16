@@ -45,7 +45,7 @@ const INVITE_ROTATE_FOCUS_RING =
   'focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950';
 
 const SHARE_LINK_FIELD_CLASSES =
-  'w-full min-h-11 px-3 py-2 bg-slate-950/50 border border-slate-700 rounded-md shadow-sm text-white font-mono text-sm break-all whitespace-pre-wrap resize-none focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 focus-visible:border-purple-500';
+  'w-full min-h-11 px-3 py-2 bg-slate-950/50 border border-slate-700 rounded-md shadow-sm text-white font-mono text-sm break-all whitespace-pre-wrap resize-none overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 focus-visible:border-purple-500';
 
 export function PartyLobby({ partyId, onStartGame }) {
   const { user } = useAuth();
@@ -87,6 +87,7 @@ export function PartyLobby({ partyId, onStartGame }) {
   const inviteRotateHelperId = useId();
   const inviteRotateCtaRef = useRef(null);
   const inviteRotateCancelRef = useRef(null);
+  const shareLinkFieldRef = useRef(null);
   const shareCopyButtonRef = useRef(null);
   const rotatingInviteRef = useRef(false);
   const focusInviteRotateCtaAfterCancelRef = useRef(false);
@@ -152,6 +153,21 @@ export function PartyLobby({ partyId, onStartGame }) {
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [inviteRotateConfirming, rotatingInvite]);
+
+  useEffect(() => {
+    if (!showShareModal) return undefined;
+    const el = shareLinkFieldRef.current;
+    if (!el) return undefined;
+
+    const fitShareLinkHeight = () => {
+      el.style.height = 'auto';
+      el.style.height = `${el.scrollHeight}px`;
+    };
+
+    fitShareLinkHeight();
+    window.addEventListener('resize', fitShareLinkHeight);
+    return () => window.removeEventListener('resize', fitShareLinkHeight);
+  }, [showShareModal, inviteToken]);
 
   const resetInviteRotateUi = () => {
     setInviteLoadFailed(false);
@@ -1927,14 +1943,14 @@ export function PartyLobby({ partyId, onStartGame }) {
           <p id={shareIntroId} className="text-slate-300">
             Share this link with friends to let them join your party. Anyone with the link can join!
           </p>
-          <div className="flex gap-2 items-start">
+          <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-start">
             <textarea
+              ref={shareLinkFieldRef}
               readOnly
-              rows={3}
               value={inviteToken ? buildPartyShareLink(window.location.origin, partyId, inviteToken) : ''}
               aria-labelledby={shareModalTitleId}
               aria-describedby={shareIntroId}
-              className={`flex-1 ${SHARE_LINK_FIELD_CLASSES}`}
+              className={`sm:flex-1 ${SHARE_LINK_FIELD_CLASSES}`}
             />
             <Button
               ref={shareCopyButtonRef}
@@ -1959,6 +1975,7 @@ export function PartyLobby({ partyId, onStartGame }) {
               }}
               variant={linkCopied ? 'secondary' : 'primary'}
               disabled={!inviteToken}
+              className="w-full min-h-11 sm:w-auto"
             >
               {linkCopied ? 'Copied!' : 'Copy'}
             </Button>

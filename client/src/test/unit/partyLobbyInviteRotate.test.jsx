@@ -302,6 +302,31 @@ describe('PartyLobby invite link rotate', () => {
     expect(expectedLink).toContain(`#t=${OLD_TOKEN}`);
   });
 
+  it('stacks the invite field above Copy below sm and auto-sizes height to the full URL', async () => {
+    await openShareModalAsGoogleHost();
+
+    const linkField = screen.getByRole('textbox', { name: 'Share Party Link' });
+    const copyButton = screen.getByRole('button', { name: 'Copy' });
+    const row = linkField.parentElement;
+
+    expect(row.className).toMatch(/flex-col/);
+    expect(row.className).toMatch(/sm:flex-row/);
+    expect(copyButton.className).toMatch(/w-full/);
+    expect(copyButton.className).toMatch(/sm:w-auto/);
+    expect(copyButton.className).toMatch(/min-h-11/);
+    expect(linkField).not.toHaveAttribute('rows');
+    expect(linkField.className).toMatch(/overflow-hidden/);
+
+    Object.defineProperty(linkField, 'scrollHeight', {
+      configurable: true,
+      get: () => 120,
+    });
+    fireEvent(window, new Event('resize'));
+    await waitFor(() => {
+      expect(linkField.style.height).toBe('120px');
+    });
+  });
+
   it('after rotate the full new URL is visible and different from the old link', async () => {
     const rotateCta = await openShareModalAsGoogleHost();
     const oldLink = buildPartyShareLink(window.location.origin, PARTY_ID, OLD_TOKEN);
