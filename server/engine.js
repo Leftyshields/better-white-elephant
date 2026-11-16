@@ -1,6 +1,8 @@
 /**
  * Game Engine - White Elephant Game Logic
  */
+import { isOwnGiftBlocked, PICK_GIFT_OWN_GIFT } from './utils/pick-gift-guards.js';
+
 export class GameEngine {
   constructor(gameState, config) {
     // CRITICAL: Validate partyId exists in gameState
@@ -35,6 +37,8 @@ export class GameEngine {
     this.history = gameState.history || [];
     // Initialize reaction count to track emoji reactions (hype level)
     this.reactionCount = gameState.reactionCount || 0;
+    // giftId -> submitterId, set at game start. Missing on games started before the own-gift rule (allow).
+    this.giftSubmitters = gameState.giftSubmitters || null;
     
     // Calculate active player based on victim-first priority
     this.currentPlayerId = this.calculateActivePlayer();
@@ -116,15 +120,16 @@ export class GameEngine {
   }
 
   /**
-   * Check if player can pick a wrapped gift
+   * Check if player can pick a wrapped gift (and, when giftId is given, that specific gift)
    */
-  canPick(playerId) {
+  canPick(playerId, giftId) {
     // CRITICAL: Use calculated active player (victim-first priority)
     const activePlayer = this.calculateActivePlayer();
     if (activePlayer !== playerId) return false;
     if (this.turnAction.get(playerId)) return false; // Already acted this turn
     if (this.wrappedGifts.length === 0) return false; // No wrapped gifts left
     if (this.playerHasGift(playerId)) return false;
+    if (giftId !== undefined && isOwnGiftBlocked(this, playerId, giftId)) return false;
 
     return true;
   }
@@ -137,32 +142,22 @@ export class GameEngine {
     const activePlayer = this.calculateActivePlayer();
     if (activePlayer !== playerId) return false;
     
+    // A turn is one action: pick OR steal. Picking ends the turn in every phase,
+    // including boomerang and Player 1's final turn.
+    if (this.turnAction.get(playerId)) return false;
+
     // Check if player is in second half of boomerang queue
     const isInSecondHalf = this.turnQueue && 
       this.currentTurnIndex >= (this.turnOrder?.length || 0);
-    
-    // Calculate Player 1's final turn (bookend exception)
-    const isLastIndex = this.currentTurnIndex === (this.turnQueue.length - 1);
-    const isPlayer1 = this.turnOrder && this.turnOrder[0] === playerId;
-    const isPlayer1FinalTurn = isLastIndex && isPlayer1;
-    
-    // In boomerang phase or Player 1's final turn, players can steal even after picking
-    // This allows swapping (picking then stealing in boomerang phase)
-    if (this.turnAction.get(playerId) && !isInSecondHalf && !isPlayer1FinalTurn) {
-      return false; // Already acted this turn (only in standard phase)
-    }
     
     const gift = this.unwrappedGifts.get(giftId);
     if (!gift) return false; // Gift doesn't exist or is wrapped
     if (gift.isFrozen) return false; // Gift is frozen
     if (gift.ownerId === playerId) return false; // Can't steal your own gift
     
-    // RULE 4: The "Immediate Steal-Back" Rule (Updated)
-    // Prevent immediate steal-back on the SAME turn
-    // Once the turn advances (any player acts), you can steal back gifts you lost
-    // Per user request: "Only lock re-stealing on next turn"
-    // Check if the player was the last owner of this gift
-    // Note: lastOwnerId is cleared when turns advance, allowing re-stealing on next turn
+    // RULE 4: The "Immediate Steal-Back" Rule
+    // You can't steal back the gift you just lost. The lock clears once the turn passes to
+    // someone else (see releaseStealBackLocks); it stays if the same player goes again right away.
     if (gift.lastOwnerId === playerId) {
       throw new Error('Cannot steal back a gift immediately after losing it on the same turn');
     }
@@ -213,6 +208,10 @@ export class GameEngine {
       throw new Error("You already have a gift, so you can't open another one. Steal one instead, or skip your turn.");
     }
 
+    if (isOwnGiftBlocked(this, playerId, giftId)) {
+      throw new Error(PICK_GIFT_OWN_GIFT);
+    }
+
     if (!this.canPick(playerId)) {
       throw new Error('Cannot pick gift: invalid action');
     }
@@ -257,13 +256,6 @@ export class GameEngine {
     // 3. Check if game should end
     
     this.currentVictim = null; // Chain is broken - victim resolved by picking
-    
-    // Clear lastOwnerId for all gifts when turn advances
-    // This allows players to steal back gifts they lost once a turn has passed
-    // Per user request: "Only lock re-stealing on next turn"
-    for (const [giftId, gift] of this.unwrappedGifts.entries()) {
-      gift.lastOwnerId = null;
-    }
     
     // Increment turn index to next position
     this.currentTurnIndex = (this.currentTurnIndex || 0) + 1;
@@ -313,6 +305,7 @@ export class GameEngine {
     
     // Recalculate active player (victim-first priority)
     this.currentPlayerId = this.calculateActivePlayer();
+    this.releaseStealBackLocks(playerId);
 
     return this.getState();
   }
@@ -322,6 +315,10 @@ export class GameEngine {
    * When you steal, the previous owner gets your current gift
    */
   stealGift(giftId, playerId) {
+    // Picking a wrapped gift ends the turn, so a steal can never follow a pick.
+    if (this.turnAction.get(playerId) === 'PICKED') {
+      throw new Error('Cannot steal gift: invalid action');
+    }
     if (!this.canSteal(giftId, playerId)) {
       throw new Error('Cannot steal gift: invalid action');
     }
@@ -827,13 +824,6 @@ export class GameEngine {
     // When victim skips, we resume from that paused position
     this.currentTurnIndex = (this.currentTurnIndex || 0) + 1;
     
-    // Clear lastOwnerId for all gifts when turn advances
-    // This allows players to steal back gifts they lost once a turn has passed
-    // Per user request: "Only lock re-stealing on next turn"
-    for (const [giftId, gift] of this.unwrappedGifts.entries()) {
-      gift.lastOwnerId = null;
-    }
-    
     // DEBUG: Log if we're resuming from a steal chain
     if (wasVictim) {
       const victimIndexInQueue = this.turnQueue.indexOf(skippingPlayerId);
@@ -907,8 +897,23 @@ export class GameEngine {
     
     // Recalculate active player (victim-first priority)
     this.currentPlayerId = this.calculateActivePlayer();
+    this.releaseStealBackLocks(skippingPlayerId);
 
     return this.getState();
+  }
+
+  /**
+   * RULE 4 (U-turn): after a pick or skip, steal-back locks clear because the turn has passed.
+   * Exception: when the same player is up again right away (bookend [P1, P2, P1] or the
+   * boomerang turnaround), that is a new turn, but they still can't take back the gift they just lost.
+   * @param {string} actorId - player who just picked or skipped
+   */
+  releaseStealBackLocks(actorId) {
+    const sameTurnHolderAgain = this.phase !== 'ENDED' && this.calculateActivePlayer() === actorId;
+    for (const gift of this.unwrappedGifts.values()) {
+      if (sameTurnHolderAgain && gift.lastOwnerId === actorId) continue;
+      gift.lastOwnerId = null;
+    }
   }
 
   /**
@@ -945,6 +950,7 @@ export class GameEngine {
       config: this.config || { maxSteals: 3, returnToStart: false }, // Include config in state
       history: [...this.history], // Include history in state
       reactionCount: this.reactionCount || 0, // Track emoji reactions (hype level)
+      giftSubmitters: this.giftSubmitters, // giftId -> submitterId (own-gift pick rule); null on older games
       stateVersion: stateVersion, // Add timestamp for state versioning
       updatedAt: new Date().toISOString(), // ISO timestamp for easy comparison
     };

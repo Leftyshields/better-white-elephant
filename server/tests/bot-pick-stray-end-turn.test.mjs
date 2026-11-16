@@ -83,7 +83,7 @@ mock.module(persistencePath, {
   },
 });
 
-const { forceBotMove, forceBotSteal, checkAndMakeBotMove, clearBotState } = await import(
+const { forceBotMove, forceBotSteal, checkAndMakeBotMove, clearBotState, botMakeDecision } = await import(
   path.join(serverRoot, 'utils/bot-utils.js')
 );
 
@@ -296,4 +296,57 @@ test('checkAndMakeBotMove autoplay path continues after bot pick (no stray endBo
   } finally {
     Math.random = randomOriginal;
   }
+});
+
+test('bot does not pick its own wrapped gift while others remain, and may when it is the last', () => {
+  const bot = 'bot_party_own';
+  const state = buildStandardState({
+    turnOrder: [bot, 'human_a', 'human_b'],
+    currentTurnIndex: 0,
+    wrappedGifts: ['gift_bot', 'gift_a', 'gift_b'],
+  });
+  state.giftSubmitters = { gift_bot: bot, gift_a: 'human_a', gift_b: 'human_b' };
+
+  const randomOriginal = Math.random;
+  Math.random = () => 0; // would choose wrappedGifts[0] (the bot's own) without the rule
+  try {
+    const decision = botMakeDecision(state);
+    assert.equal(decision.action, 'pick');
+    assert.notEqual(decision.giftId, 'gift_bot');
+
+    state.wrappedGifts = ['gift_bot'];
+    assert.deepEqual(botMakeDecision(state), { action: 'pick', giftId: 'gift_bot' });
+  } finally {
+    Math.random = randomOriginal;
+  }
+});
+
+test('forceBotSteal refuses a steal after the bot already picked this turn (boomerang phase)', async () => {
+  const bot = 'bot_party_picker';
+  const partyId = 'party-test';
+  const turnOrder = ['human_a', bot];
+  const state = {
+    ...buildStandardState({
+      partyId,
+      turnOrder,
+      currentTurnIndex: 3,
+      wrappedGifts: [],
+      unwrappedGifts: [giftEntry('gift_a', 'human_a'), giftEntry('gift_bot', bot)],
+      turnAction: [
+        ['human_a', null],
+        [bot, 'PICKED'],
+      ],
+    }),
+    config: { maxSteals: 3, returnToStart: true },
+    turnQueue: ['human_a', bot, bot, 'human_a'],
+    isBoomerangPhase: true,
+  };
+  state.currentTurnIndex = 2;
+  state.currentPlayerId = bot;
+  await store.saveGameState(partyId, state);
+
+  await assert.rejects(() => forceBotSteal(partyId, mockIo()), /already acted/);
+  const after = await store.loadGameState(partyId);
+  assert.equal(after.history.filter((h) => h.type === 'STEAL').length, 0);
+  assert.equal(new Map(after.unwrappedGifts).get('gift_a').ownerId, 'human_a');
 });

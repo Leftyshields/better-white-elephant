@@ -19,6 +19,7 @@ export const GiftCard = memo(function GiftCard({
   canPick,
   canSteal,
   stealBlockReason,
+  pickBlockReason = null,
   ownerName,
   darkMode = false,
   compact = false,
@@ -31,6 +32,13 @@ export const GiftCard = memo(function GiftCard({
   // Recalculate isMyGift from gift prop to avoid stale prop values
   // This ensures the badge always shows correctly even if the passed prop is stale
   const computedIsMyGift = gift?.submitterId === userId || isMyGift;
+  // Own wrapped gift on your turn: shown as unavailable (aria-disabled, still focusable) with a visible reason
+  const pickLocked = isCurrentPlayer && Boolean(pickBlockReason);
+  const pickReasonId = `gift-${gift.id}-pick-reason`;
+  const isPickTarget = compact && (isWrapped || isRevealing) && isCurrentPlayer && (canPick || pickLocked);
+  const pickIfAllowed = () => {
+    if (canPick && !pickLocked) onPick(gift.id);
+  };
   const [imageError, setImageError] = useState(false);
   const [isRevealing, setIsRevealing] = useState(false);
   const revealTimerRef = useRef(null);
@@ -90,7 +98,7 @@ export const GiftCard = memo(function GiftCard({
   return (
     <div
       id={`gift-${gift.id}`}
-      className={`bg-white/5 backdrop-blur-md border rounded-xl overflow-hidden hover:border-white/30 transition-all ${
+      className={`bg-white/5 backdrop-blur-md border rounded-xl overflow-hidden hover:border-white/30 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 focus-visible:overflow-visible focus-visible:z-10 ${
         compact && shouldShowWrapped
           ? 'p-2 aspect-square h-24 cursor-pointer'
           : 'p-4 w-full sm:w-[280px] md:w-[320px]'
@@ -102,19 +110,42 @@ export const GiftCard = memo(function GiftCard({
           : computedIsMyGift && !shouldShowWrapped
           ? 'border-amber-400/40'
           : 'border-white/10'
-      } ${isOwned ? 'ring-2 ring-indigo-500/50' : ''} ${revealShakeClass} ${revealScaleClass}`}
-      onClick={compact && shouldShowWrapped && isCurrentPlayer && canPick ? () => onPick(gift.id) : undefined}
+      } ${isOwned ? 'ring-2 ring-indigo-500/50' : ''} ${pickLocked ? 'cursor-not-allowed' : ''} ${revealShakeClass} ${revealScaleClass}`}
+      onClick={isPickTarget ? pickIfAllowed : undefined}
+      role={isPickTarget ? 'button' : undefined}
+      tabIndex={isPickTarget ? 0 : undefined}
+      aria-disabled={isPickTarget && pickLocked ? 'true' : undefined}
+      aria-describedby={pickLocked ? pickReasonId : undefined}
+      onKeyDown={
+        isPickTarget
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                pickIfAllowed();
+              }
+            }
+          : undefined
+      }
     >
       {shouldShowWrapped ? (
         compact ? (
           <div className="relative h-full flex items-center justify-center">
-            <div className="text-4xl">🎁</div>
+            {pickLocked ? (
+              <div
+                id={pickReasonId}
+                className="px-1 text-amber-200 text-[11px] font-semibold leading-tight text-center"
+              >
+                {pickBlockReason}
+              </div>
+            ) : (
+              <div className="text-4xl">🎁</div>
+            )}
             {giftNumber && (
               <div className="absolute top-1 right-1 bg-slate-800/80 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-white/20">
                 #{giftNumber}
               </div>
             )}
-            {computedIsMyGift && (
+            {!pickLocked && computedIsMyGift && (
               <div className="absolute bottom-1 left-1 bg-amber-500/90 text-white shadow-lg shadow-amber-500/50 text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 z-10 border border-amber-300/50 whitespace-nowrap">
                 <span className="text-[8px]">⚠️</span>
                 <span>Your Gift</span>
@@ -153,6 +184,14 @@ export const GiftCard = memo(function GiftCard({
               >
                 Pick Gift
               </Button>
+            )}
+            {pickLocked && !isRevealing && (
+              <div
+                id={pickReasonId}
+                className="mt-4 w-full px-3 py-2 text-center text-sm text-slate-300 bg-slate-800/50 border border-slate-700 rounded-lg"
+              >
+                {pickBlockReason}
+              </div>
             )}
           </div>
         )
@@ -270,6 +309,7 @@ export const GiftCard = memo(function GiftCard({
     prevProps.gift.stealCount === nextProps.gift.stealCount &&
     prevProps.canPick === nextProps.canPick &&
     prevProps.canSteal === nextProps.canSteal &&
+    prevProps.pickBlockReason === nextProps.pickBlockReason &&
     prevProps.currentPlayerId === nextProps.currentPlayerId &&
     prevProps.userId === nextProps.userId &&
     prevProps.compact === nextProps.compact &&

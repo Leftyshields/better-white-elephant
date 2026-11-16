@@ -6,6 +6,7 @@ import { loadGameState, saveGameState } from './game-state-persistence.js';
 import { db } from '../config/firebase-admin.js';
 import admin from 'firebase-admin';
 import { isBot } from './bot-ids.js';
+import { pickableWrappedGifts } from './pick-gift-guards.js';
 
 // Track active bot move timers to prevent duplicate moves
 const activeBotTimers = new Map();
@@ -67,7 +68,9 @@ export { isBot } from './bot-ids.js';
  * Handles boomerang phase where bots with gifts can swap
  */
 export function botMakeDecision(gameState) {
-  const { wrappedGifts, unwrappedGifts, currentPlayerId, currentTurnIndex, turnOrder, config, currentVictim } = gameState;
+  const { unwrappedGifts, currentPlayerId, currentTurnIndex, turnOrder, config, currentVictim } = gameState;
+  // Only wrapped gifts this bot may open (not its own unless it's the last one left)
+  const wrappedGifts = pickableWrappedGifts(gameState, currentPlayerId);
   const unwrappedMap = new Map(unwrappedGifts);
 
   // Check if bot already has a gift
@@ -910,18 +913,16 @@ export async function forceBotSteal(partyId, io) {
     fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'bot-utils.js:forceBotSteal:beforeCheck',message:'Checking turnAction for steal',data:{currentPlayerId,isVictim,hasActed,isBoomerangPhase,isPlayer1FinalTurn,returnToStart,currentTurnIndex:gameState.currentTurnIndex,turnOrderLength:gameState.turnOrder?.length,turnActionMap:Array.from(turnActionMap.entries())},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
     // #endregion
     
-    // Only block if they're not a victim AND they've already acted AND we're not in boomerang phase
-    // In boomerang phase or Player 1's final turn, players can steal even after picking (swap mechanic)
-    if (!isVictim && hasActed && !isBoomerangPhase && !isPlayer1FinalTurn) {
+    // A turn is pick OR steal: a bot that already acted this turn can't steal, in any phase
+    if (!isVictim && hasActed) {
       // #region agent log
       fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'bot-utils.js:forceBotSteal:blocked',message:'Bot already acted - blocking steal',data:{currentPlayerId,hasActed,isVictim,isBoomerangPhase,isPlayer1FinalTurn},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
       // #endregion
       throw new Error('Bot has already acted this turn');
     }
     
-    // If they're a victim or have stale data, ensure turnAction is cleared
-    // In boomerang phase, we allow stealing after acting, so we may need to clear stale turnAction
-    if (isVictim || (hasActed && (isBoomerangPhase || isPlayer1FinalTurn))) {
+    // If they're a victim with stale data, ensure turnAction is cleared
+    if (isVictim) {
       // Clear stale turnAction - the engine will handle setting it correctly
       turnActionMap.set(currentPlayerId, null);
       gameState.turnAction = Array.from(turnActionMap.entries());
@@ -1134,8 +1135,9 @@ export async function forceBotPick(partyId, io) {
       throw new Error('No wrapped gifts available');
     }
 
-    // Pick a random wrapped gift
-    const giftId = gameState.wrappedGifts[Math.floor(Math.random() * gameState.wrappedGifts.length)];
+    // Pick a random wrapped gift the bot is allowed to open (not its own unless it's the last one)
+    const pickable = pickableWrappedGifts(gameState, currentPlayerId);
+    const giftId = pickable[Math.floor(Math.random() * pickable.length)];
 
     console.log(`🤖 [FORCED PICK] Bot ${currentPlayerId} picking gift ${giftId}`);
 

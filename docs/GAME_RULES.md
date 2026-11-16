@@ -48,8 +48,11 @@ This document defines the complete set of rules for the White Elephant Gift Exch
 - If a player has a gift and tries to pick/steal in standard phase, the move is rejected
 
 ### Rule 2: Turn Termination Logic
+A turn is **one** action: pick a wrapped gift **OR** steal an opened one. A pick and a steal are never the same turn, in any phase (standard, boomerang, or Player 1's final turn). The server enforces this: once `turnAction[playerId] === 'PICKED'`, both pick and steal are rejected for that player.
+
 **After PICK**:
 - Player's turn is **OVER** immediately
+- If the next queue slot is the same player (2-player bookend `[P1, P2, P1]`, or the boomerang turnaround), that is a **new** turn that starts once the pick settles. On it they can steal another eligible gift or keep (skip), but never the gift they just lost (Rule 4)
 - `currentTurnIndex` increments to next valid player
 - `currentPlayerId` set to next player in queue
 - Next player must not already have a gift (in standard phase)
@@ -78,12 +81,16 @@ This document defines the complete set of rules for the White Elephant Gift Exch
 - Players **CAN** pick wrapped gifts even if they hold a gift
 
 ### Rule 4: Immediate Steal-Back Prevention (U-Turn Rule)
-- A player **CANNOT** steal a gift that was just stolen from them on the **SAME turn**
-- Once a player acts (picks or steals), they **CAN** steal back gifts they lost
-- Check: `gift.lastOwnerId === playerId` AND player hasn't acted this turn → reject move
+- A player **CANNOT** steal back a gift that was just stolen from them
+- Check: `gift.lastOwnerId === playerId` → reject move
 - After a steal, `gift.lastOwnerId` is set to the previous owner
-- When a player acts (picks or steals), all `lastOwnerId` values for gifts they lost are cleared
-- This allows players to steal back gifts on their next turn, but prevents immediate "revenge steals"
+- After a pick or skip, the turn passes and `lastOwnerId` locks are cleared, so a player can steal back a lost gift on a later turn
+- **Exception**: if the player who just picked or skipped is up again right away (bookend or boomerang turnaround), the locks on gifts they lost stay in place. Their new turn can steal a **different** gift, but never the one they just lost
+
+### Rule 4b: No Picking Your Own Gift
+- A player **CANNOT** pick the wrapped gift they brought, unless it is the **only** wrapped gift left
+- At game start the server stores `giftSubmitters` (giftId -> submitterId) in the game state; pick checks use it, and bots follow the same rule
+- Games started before `giftSubmitters` existed have no map, so the rule does not apply to them
 
 ### Rule 5: Gift Locking (Max Steals)
 - Each gift tracks `stealCount`
@@ -169,6 +176,7 @@ Pre-conditions:
 - currentPlayerId === playerId
 - turnAction[playerId] === null (hasn't acted this turn)
 - wrappedGifts.includes(giftId)
+- giftSubmitters[giftId] !== playerId OR wrappedGifts.length === 1 (Rule 4b)
 - (Standard phase) player does not have a gift OR wrapped gifts remain
 
 State Changes:
@@ -284,6 +292,7 @@ Post-conditions:
     lastOwnerId: string | null
   }>,
   turnAction: Map<string, string>, // Map of playerId -> action ('PICKED' | 'STOLEN' | null)
+  giftSubmitters: { [giftId: string]: string } | null, // Who brought each gift (Rule 4b); null on older games
   phase: 'LOBBY' | 'ACTIVE' | 'ENDED',
   isBoomerangPhase: boolean,
   config: {
