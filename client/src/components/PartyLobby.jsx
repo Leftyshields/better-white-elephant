@@ -1110,23 +1110,21 @@ export function PartyLobby({ partyId, onStartGame }) {
                           return (
                             <div
                               key={participant.id}
-                              className={`flex items-center justify-between p-3 rounded-lg ${
+                              className={`flex items-center justify-between gap-2 min-w-0 p-3 rounded-lg ${
                                 isBot ? 'bg-purple-900/30 border border-purple-500/30' : 'bg-slate-800/50'
                               }`}
                             >
-                              <div className="flex items-center gap-3">
-                                <div>
-                                  <span className="text-white font-medium flex items-center gap-2">
-                                    {displayName}
-                                    {isBot && (
-                                      <span className="text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded border border-purple-500/30">
-                                        🤖 Bot
+                              <div className="min-w-0 flex-1 flex items-center gap-2">
+                                <span className="min-w-0 flex-1 truncate text-white font-medium" title={displayName}>
+                                  {displayName}
+                                </span>
+                                {isBot && (
+                                  <span className="shrink-0 text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded border border-purple-500/30">
+                                    🤖 Bot
                                   </span>
-                                    )}
-                                  </span>
-                                </div>
+                                )}
                               </div>
-                              <div className="flex items-center gap-2">
+                              <div className="shrink-0 flex items-center gap-2">
                                 {!isAdminParticipant && (
                                   <Button
                                     variant="danger"
@@ -1606,19 +1604,19 @@ export function PartyLobby({ partyId, onStartGame }) {
             return (
                                     <div
                 key={participant.id}
-                                      className={`flex items-center justify-between p-3 rounded-lg ${
+                                      className={`flex items-center justify-between gap-2 min-w-0 p-3 rounded-lg ${
                                         isBot ? 'bg-purple-900/30 border border-purple-500/30' : 'bg-slate-800/50'
                                       }`}
                                     >
-                                      <span className="text-white font-medium flex items-center gap-2">
+                                      <span className="min-w-0 flex-1 truncate text-white font-medium" title={displayName}>
                                         {displayName}
-                                        {isBot && (
-                                          <span className="text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded border border-purple-500/30">
-                                            🤖 Bot
-                                          </span>
-                                        )}
                                       </span>
-                                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                      {isBot && (
+                                        <span className="shrink-0 text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded border border-purple-500/30">
+                                          🤖 Bot
+                                        </span>
+                                      )}
+                                      <span className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium ${
                         participant.ready === true
                           ? 'bg-green-500/20 text-green-400 border border-green-500/30'
                           : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'

@@ -64,4 +64,26 @@ describe('rosterDisplayNames', () => {
       'uid-bad-name': 'Player uid-bad-',
     });
   });
+
+  it('formats a batch full name as a first name', () => {
+    const names = rosterDisplayNames(
+      [{ id: 'uid-jamie' }],
+      { 'uid-jamie': 'Jamie Guest' },
+    );
+    expect(names).toEqual({ 'uid-jamie': 'Jamie' });
+  });
+
+  it('adds a last initial when a batch first name collides', () => {
+    const names = rosterDisplayNames(
+      [
+        { id: 'uid-jamie-g' },
+        { id: 'uid-jamie-h', displayName: 'Jamie', lastInitial: 'H' },
+      ],
+      { 'uid-jamie-g': 'Jamie Guest' },
+    );
+    expect(names).toEqual({
+      'uid-jamie-g': 'Jamie G.',
+      'uid-jamie-h': 'Jamie H.',
+    });
+  });
 });

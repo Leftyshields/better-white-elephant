@@ -110,6 +110,7 @@ describe('PartyLobby host participant list', () => {
     await waitFor(() => {
       expect(screen.getByText('You (Host)')).toBeInTheDocument();
     });
-    expect(screen.getAllByText('Guest Player').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Guest').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Guest Player')).not.toBeInTheDocument();
   });
 });

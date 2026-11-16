@@ -103,4 +103,67 @@ describe('PartyLobby seat names', () => {
     await waitFor(() => expect(screen.getAllByText('Sam L.').length).toBeGreaterThan(0));
     expect(screen.getAllByText('Sam R.').length).toBeGreaterThan(0);
   });
+
+
+  const LONG_NAME = 'Wolfeschlegelsteinhausenberger';
+
+  it('truncates a long first name so the ready badge stays visible', async () => {
+    apiRequestMock.mockResolvedValue({ users: {} });
+    usePartyMock.mockReturnValue({
+      party: {
+        id: PARTY_ID,
+        adminId: HOST_UID,
+        status: 'LOBBY',
+        title: 'Holiday Swap',
+        config: { maxSteals: 3 },
+        date: { toDate: () => new Date('2026-12-01') },
+      },
+      participants: [
+        { id: HOST_UID, status: 'GOING', ready: false },
+        { id: 'long-name-guest', status: 'GOING', ready: true, displayName: LONG_NAME },
+        { id: 'other-guest', status: 'GOING', ready: false, displayName: 'Alex' },
+      ],
+      pendingInvites: [],
+      gifts: [],
+      loading: false,
+      error: null,
+    });
+    render(<PartyLobby partyId={PARTY_ID} onStartGame={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /All participants ready/i }));
+    const nameEls = await screen.findAllByText(LONG_NAME);
+    expect(nameEls.length).toBeGreaterThan(0);
+    for (const nameEl of nameEls) {
+      expect(nameEl).toHaveClass('min-w-0', 'flex-1', 'truncate');
+      expect(nameEl).toHaveAttribute('title', LONG_NAME);
+    }
+    const badges = screen.getAllByText('✓ Ready');
+    expect(badges.length).toBeGreaterThan(0);
+    for (const badge of badges) {
+      expect(badge).toHaveClass('shrink-0');
+    }
+  });
+
+  it('truncates a long first name in the participants list', async () => {
+    apiRequestMock.mockResolvedValue({ users: {} });
+    renderLobby([
+      { id: HOST_UID, status: 'GOING', ready: false },
+      { id: 'long-name-guest', status: 'GOING', ready: false, displayName: LONG_NAME },
+    ]);
+    const nameEls = await screen.findAllByText(LONG_NAME);
+    expect(nameEls.length).toBeGreaterThan(0);
+    for (const nameEl of nameEls) {
+      expect(nameEl).toHaveClass('min-w-0', 'flex-1', 'truncate');
+      expect(nameEl).toHaveAttribute('title', LONG_NAME);
+    }
+  });
+
+  it('shows only the first name when the batch API returns a full name', async () => {
+    apiRequestMock.mockResolvedValue({ users: { 'jamie-guest': 'Jamie Guest' } });
+    renderLobby([
+      { id: HOST_UID, status: 'GOING', ready: false },
+      { id: 'jamie-guest', status: 'GOING', ready: false },
+    ]);
+    await waitFor(() => expect(screen.getAllByText('Jamie').length).toBeGreaterThan(0));
+    expect(screen.queryByText('Jamie Guest')).not.toBeInTheDocument();
+  });
 });

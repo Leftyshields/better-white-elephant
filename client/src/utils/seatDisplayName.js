@@ -40,33 +40,52 @@ export function seatNameFields(fullName, email) {
   return fields;
 }
 
+function fieldsFromBatchName(participantId, batchNames) {
+  const batchName = batchNames[participantId];
+  const candidate = batchName !== participantId ? batchName : null;
+  if (!candidate) {
+    return null;
+  }
+  const fields = seatNameFields(candidate);
+  return fields.displayName ? fields : null;
+}
+
 /**
- * Roster label per participant id: seat name first, then the /api/users/batch name, then
- * "Player <id>". Seats sharing a first name show "First L." when the seat has a last initial.
+ * Roster label per participant id: seat name first, then the /api/users/batch name run
+ * through the same first-name plus collision-initial formatter, then "Player <id>".
+ * Seats sharing a first name show "First L." when a last initial is available.
  * @returns {Record<string, string>}
  */
 export function rosterDisplayNames(participants, batchNames = {}) {
-  const seatName = (p) => (isValidPublicHostDisplayName(p.displayName) ? p.displayName : null);
-  const seatNameCounts = {};
-  for (const p of participants) {
-    const name = seatName(p);
-    if (name) {
-      const key = name.toLowerCase();
-      seatNameCounts[key] = (seatNameCounts[key] || 0) + 1;
+  const resolved = participants.map((p) => {
+    if (isValidPublicHostDisplayName(p.displayName)) {
+      return { id: p.id, displayName: p.displayName, lastInitial: p.lastInitial };
+    }
+    const fromBatch = fieldsFromBatchName(p.id, batchNames);
+    if (fromBatch) {
+      return { id: p.id, displayName: fromBatch.displayName, lastInitial: fromBatch.lastInitial };
+    }
+    return { id: p.id, fallback: pickDisplayName(p.id, null) };
+  });
+
+  const firstNameCounts = {};
+  for (const r of resolved) {
+    if (r.displayName) {
+      const key = r.displayName.toLowerCase();
+      firstNameCounts[key] = (firstNameCounts[key] || 0) + 1;
     }
   }
+
   const names = {};
-  for (const p of participants) {
-    const name = seatName(p);
-    if (name) {
-      const shared = seatNameCounts[name.toLowerCase()] > 1;
-      names[p.id] = shared && LAST_INITIAL_RE.test(p.lastInitial ?? '')
-        ? `${name} ${p.lastInitial}.`
-        : name;
-      continue;
+  for (const r of resolved) {
+    if (r.displayName) {
+      const shared = firstNameCounts[r.displayName.toLowerCase()] > 1;
+      names[r.id] = shared && LAST_INITIAL_RE.test(r.lastInitial ?? '')
+        ? `${r.displayName} ${r.lastInitial}.`
+        : r.displayName;
+    } else {
+      names[r.id] = r.fallback;
     }
-    const batchName = batchNames[p.id];
-    names[p.id] = pickDisplayName(p.id, batchName !== p.id ? batchName : null);
   }
   return names;
 }
