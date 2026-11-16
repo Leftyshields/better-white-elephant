@@ -13,7 +13,10 @@ import {
   PICK_GIFT_ALREADY_OPEN,
   PICK_GIFT_NOT_IN_WRAPPED_PILE,
   PICK_GIFT_NOT_ON_TURN,
+  PICK_GIFT_OWN_GIFT,
+  assertPickGiftAllowed,
 } from '../utils/pick-gift-guards.js';
+import { GameEngine } from '../engine.js';
 import { buildStandardState, createTestStore, mockIo } from './helpers/test-store.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -269,4 +272,40 @@ test('failed executePick: no action_started or game-updated', async () => {
   const roomEvents = io.emissions.filter((e) => e.event !== 'error');
   assert.equal(roomEvents.filter((e) => e.event === 'action_started').length, 0);
   assert.equal(roomEvents.filter((e) => e.event === 'game-updated').length, 0);
+});
+test('picking your own wrapped gift sends the own-gift copy and broadcasts nothing', async () => {
+  const state = buildStandardState({
+    partyId: PARTY_ID,
+    turnOrder: ['p1', 'p2'],
+    currentTurnIndex: 0,
+    wrappedGifts: ['g1', 'g2'],
+  });
+  state.giftSubmitters = { g1: 'p1', g2: 'p2' };
+
+  const io = mockIo();
+  const socketErrors = [];
+  const socket = {
+    userId: 'p1',
+    emit(event, payload) {
+      if (event === 'error') socketErrors.push(payload);
+    },
+  };
+
+  await handlePickGift({
+    partyId: PARTY_ID,
+    giftId: 'g1',
+    userId: 'p1',
+    socket,
+    io,
+    isValidPartyId,
+    isValidGiftId,
+    verifyPartyMembership: async () => true,
+    scheduleBotMove: null,
+    executePick: async () => {
+      assertPickGiftAllowed(new GameEngine(structuredClone(state), state.config), 'p1', 'g1');
+    },
+  });
+
+  assert.equal(socketErrors[0]?.message, PICK_GIFT_OWN_GIFT);
+  assert.equal(io.emissions.filter((e) => e.event === 'game-updated').length, 0);
 });

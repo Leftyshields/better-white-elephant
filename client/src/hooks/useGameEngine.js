@@ -12,6 +12,7 @@ import { auth } from '../utils/firebase.js';
 import { trackGameAction, trackGameComplete, trackError, trackEvent } from '../utils/analytics.js';
 import { SERVER_URL } from '../utils/config.js';
 import { canPlayerSkipTurn } from '../utils/skipTurnEligibility.js';
+import { hasPickedThisTurn, isOwnWrappedGiftLocked } from '../utils/turnRules.js';
 import { planSocketGameErrorHandling } from '../utils/socketGameErrorToast.js';
 
 export function useGameEngine(partyId) {
@@ -324,14 +325,21 @@ export function useGameEngine(partyId) {
     return state.activePlayerId === user.uid;
   }, [state.activePlayerId, user?.uid]);
 
+  const pickedThisTurn = isMyTurn && hasPickedThisTurn(state.gameState, user?.uid);
+
   const canPick = useMemo(() => {
-    if (!isMyTurn || state.status !== 'PLAYING') return false;
+    if (!isMyTurn || state.status !== 'PLAYING' || pickedThisTurn) return false;
     const hasWrapped = Object.values(state.gifts).some((gift) => gift.isWrapped);
     const holdsUnwrapped = Object.values(state.gifts).some(
       (gift) => !gift.isWrapped && gift.ownerId === user?.uid,
     );
     return hasWrapped && !holdsUnwrapped;
-  }, [isMyTurn, state.status, state.gifts, user?.uid]);
+  }, [isMyTurn, state.status, state.gifts, user?.uid, pickedThisTurn]);
+
+  const isOwnGiftLocked = useCallback(
+    (giftId) => isOwnWrappedGiftLocked(state.gameState, state.gifts, giftId, user?.uid),
+    [state.gameState, state.gifts, user?.uid],
+  );
 
   const canSkipTurn = useMemo(() => {
     if (!isMyTurn || state.status !== 'PLAYING' || !user?.uid) {
@@ -357,8 +365,8 @@ export function useGameEngine(partyId) {
   ]);
 
   const getStealBlockReason = useCallback((giftId) => {
-    if (!isMyTurn || state.status !== 'PLAYING') {
-      return null; // Not shown - not your turn
+    if (!isMyTurn || state.status !== 'PLAYING' || pickedThisTurn) {
+      return null; // Not shown - not your turn, or your pick already ended it
     }
     
     const gift = state.gifts[giftId];
@@ -381,7 +389,7 @@ export function useGameEngine(partyId) {
       (state.currentTurnIndex >= (turnOrder.length || 0))
     );
     
-    if (gift.lastOwnerId === user?.uid && !isBoomerangPhase) {
+    if (gift.lastOwnerId === user?.uid) {
       return "You can't steal this gift back yet - wait until the next turn";
     }
     
@@ -401,10 +409,11 @@ export function useGameEngine(partyId) {
     }
     
     return null; // No blocking reason
-  }, [isMyTurn, state.status, state.gifts, state.gameState, state.currentTurnIndex, state.turnQueue, user?.uid]);
+  }, [isMyTurn, state.status, state.gifts, state.gameState, state.currentTurnIndex, state.turnQueue, user?.uid, pickedThisTurn]);
 
   const canSteal = useCallback((giftId) => {
-    if (!isMyTurn || state.status !== 'PLAYING') {
+    // A turn is pick OR steal: no steal after a pick
+    if (!isMyTurn || state.status !== 'PLAYING' || pickedThisTurn) {
       return false;
     }
     
@@ -420,9 +429,11 @@ export function useGameEngine(partyId) {
     }
     
     // RULE 4: Immediate Steal-Back Prevention (U-Turn Rule)
-    // Per GAME_RULES.md Rule 4: "A player CANNOT steal a gift that was just stolen from them on the SAME turn"
-    // CRITICAL: In boomerang phase, the U-turn rule should allow stealing after a turn has passed
-    // Check if we're in boomerang phase - if so, lastOwnerId might be stale and should be allowed
+    // The server keeps lastOwnerId only while the lock applies and rejects the steal in every phase.
+    if (gift.lastOwnerId === user?.uid) {
+      return false;
+    }
+
     const turnOrder = state.gameState?.turnOrder || [];
     const turnQueue = state.turnQueue || [];
     const returnToStart = state.gameState?.config?.returnToStart || false;
@@ -430,15 +441,6 @@ export function useGameEngine(partyId) {
       state.gameState?.isBoomerangPhase || 
       (state.currentTurnIndex >= (turnOrder.length || 0))
     );
-    
-    if (gift.lastOwnerId === user?.uid) {
-      // In boomerang phase, allow stealing even if lastOwnerId matches (turn has advanced)
-      // The U-turn rule only prevents immediate steal-back on the SAME turn
-      // Since we're in boomerang phase, turns have advanced, so allow the steal
-      if (!isBoomerangPhase) {
-        return false; // Can't steal back a gift immediately after losing it on the same turn (standard phase only)
-      }
-    }
     
     // RULE 1: One Gift Per Person (Double-Dip Prevention)
     // Check if player already has a gift
@@ -460,7 +462,7 @@ export function useGameEngine(partyId) {
     }
     
     return true;
-  }, [isMyTurn, state.status, state.gifts, state.gameState, state.currentTurnIndex, state.turnQueue, user?.uid]);
+  }, [isMyTurn, state.status, state.gifts, state.gameState, state.currentTurnIndex, state.turnQueue, user?.uid, pickedThisTurn]);
 
   // Emit reaction method
   const emitReaction = useCallback((emoji) => {
@@ -486,6 +488,7 @@ export function useGameEngine(partyId) {
       canSkipTurn,
       canSteal,
       getStealBlockReason,
+      isOwnGiftLocked,
     },
     socket,
     emitReaction,

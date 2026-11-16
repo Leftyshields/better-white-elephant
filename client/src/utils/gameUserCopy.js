@@ -7,6 +7,7 @@ import {
   SOCKET_GAME_STATE_LOAD_FAILED_MESSAGE,
   SOCKET_GAME_STATE_LOADING_MESSAGE,
   SOCKET_GAME_STATE_STALE_MOVE_MESSAGE,
+  OWN_GIFT_PICK_MESSAGE,
 } from '../../../server/shared/socket-error-copy.mjs';
 
 export const GAME_USER_COPY = {
@@ -20,6 +21,7 @@ export const GAME_USER_COPY = {
   notYourTurn: "It's not your turn yet.",
   cannotOpenGift: "You can't open that gift right now.",
   cannotStealGift: "You can't steal that gift right now.",
+  ownGiftPick: OWN_GIFT_PICK_MESSAGE,
   endGameConfirm:
     'End the game now? The gifts people hold will be final, and leftover wrapped gifts will be assigned.',
   frozenGift: "This gift is frozen (3 steals). It can't be stolen again.",

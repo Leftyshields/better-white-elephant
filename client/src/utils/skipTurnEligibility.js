@@ -1,3 +1,5 @@
+import { hasPickedThisTurn } from './turnRules.js';
+
 /**
  * Whether the current user may manually skip / end their turn (Rule 10 + victim deadlock).
  */
@@ -10,6 +12,9 @@ export function canPlayerSkipTurn({
   activePlayerId,
 }) {
   if (!userId || activePlayerId !== userId || !gifts) {
+    return false;
+  }
+  if (hasPickedThisTurn(gameState, userId)) {
     return false;
   }
 

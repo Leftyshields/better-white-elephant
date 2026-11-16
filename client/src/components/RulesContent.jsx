@@ -43,6 +43,11 @@ export function RulesContent({ pageHeading }) {
             <p className="text-slate-300 leading-relaxed">
               Everyone brings a gift link. The game randomizes the order. Your goal: end the game holding the gift you want most.
             </p>
+            <ul className="mt-3 list-disc pl-5 space-y-1 text-slate-300">
+              <li>On your turn, pick a wrapped gift or steal one that&apos;s been opened.</li>
+              <li>Picking a gift ends your turn.</li>
+              <li>You can&apos;t pick the gift you brought, unless it&apos;s the last one left.</li>
+            </ul>
             <div className="mt-4 pt-4 border-t border-white/5">
               <p className="text-sm text-slate-400">
                 <strong className="text-slate-300">Players:</strong> At least 2 players.

@@ -15,6 +15,9 @@ export const SOCKET_ACTION_FAILED_GENERIC_MESSAGE = "That didn't work. Try again
 
 export const SOCKET_CONNECTION_LOST_MESSAGE = 'Connection lost. Refresh the page to reconnect.';
 
+/** Own wrapped gift can't be picked (unless it's the last one). Copywriter final. */
+export const OWN_GIFT_PICK_MESSAGE = 'Your gift. Pick another one.';
+
 /** @deprecated Use SOCKET_GAME_STATE_LOADING_MESSAGE */
 export const SOCKET_GAME_STATE_RETRY_MESSAGE = SOCKET_GAME_STATE_LOADING_MESSAGE;
 
@@ -24,6 +27,7 @@ export const CLIENT_SAFE_USER_MESSAGES = [
   "That gift isn't available to open. Pick a wrapped gift.",
   "You already have a gift, so you can't open another one. Steal one instead, or skip your turn.",
   "That gift is already open, so you can't open it again.",
+  OWN_GIFT_PICK_MESSAGE,
   "We couldn't find this game. Refresh the page and try again.",
   "This game is over, so there's no turn to skip.",
   'You can only skip on your own turn while the game is running.',

@@ -148,6 +148,8 @@ router.post('/start', async (req, res) => {
       config, // Store config in game state
       history: [], // Initialize empty history array
       reactionCount: 0, // Initialize reaction count to track emoji reactions (hype level)
+      // giftId -> submitterId so the engine can block picking your own wrapped gift
+      giftSubmitters: Object.fromEntries(gifts.map((g) => [g.id, g.submitterId])),
       stateVersion: Date.now(), // Add timestamp for state versioning to prevent stale updates
       updatedAt: new Date().toISOString(), // ISO timestamp for easy comparison
     };

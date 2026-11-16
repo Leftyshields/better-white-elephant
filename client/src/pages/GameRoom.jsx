@@ -633,6 +633,7 @@ export function GameRoom({ partyId }) {
               canPick={derived.canPick}
               canSteal={derived.canSteal}
               getStealBlockReason={derived.getStealBlockReason}
+              isOwnGiftLocked={derived.isOwnGiftLocked}
               actions={actions}
               currentPlayerId={currentPlayerId}
               userId={user?.uid}

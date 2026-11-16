@@ -5,6 +5,7 @@
  */
 import { memo } from 'react';
 import { GiftCard } from './GiftCard.jsx';
+import { GAME_USER_COPY } from '../utils/gameUserCopy.js';
 
 export const GiftGrid = memo(function GiftGrid({ 
   gifts, 
@@ -17,6 +18,7 @@ export const GiftGrid = memo(function GiftGrid({
   userNames = {},
   revealingGiftId = null,
   canPick: canPickWrapped = false,
+  isOwnGiftLocked = () => false,
 }) {
   const giftList = Object.values(gifts || {});
   
@@ -43,6 +45,7 @@ export const GiftGrid = memo(function GiftGrid({
           <h2 className="text-xl font-semibold mb-4 text-white text-center">Wrapped Gifts</h2>
           <div className="flex flex-wrap justify-center gap-3 w-full">
             {wrappedGifts.map((gift, index) => {
+              const ownGiftLocked = canPickWrapped && isOwnGiftLocked(gift.id);
               return (
                 <GiftCard
                   key={gift.id}
@@ -53,7 +56,8 @@ export const GiftGrid = memo(function GiftGrid({
                   currentPlayerId={currentPlayerId}
                   userId={userId}
                   onPick={actions.pickGift}
-                  canPick={canPickWrapped && gift.isWrapped}
+                  canPick={canPickWrapped && gift.isWrapped && !ownGiftLocked}
+                  pickBlockReason={ownGiftLocked ? GAME_USER_COPY.ownGiftPick : null}
                   canSteal={false}
                   revealingGiftId={revealingGiftId}
                 />
@@ -105,6 +109,8 @@ export const GiftGrid = memo(function GiftGrid({
   return (
     prevProps.gifts === nextProps.gifts &&
     prevProps.isMyTurn === nextProps.isMyTurn &&
+    prevProps.canPick === nextProps.canPick &&
+    prevProps.isOwnGiftLocked === nextProps.isOwnGiftLocked &&
     prevProps.currentPlayerId === nextProps.currentPlayerId &&
     prevProps.userId === nextProps.userId &&
     prevProps.userNames === nextProps.userNames &&
