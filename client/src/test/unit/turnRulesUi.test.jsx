@@ -165,8 +165,13 @@ describe('Rules page turn lines (Copywriter final)', () => {
         </PartyModalProvider>
       </MemoryRouter>,
     );
-    expect(screen.getByText("On your turn, pick a wrapped gift or steal one that's been opened.")).toBeInTheDocument();
-    expect(screen.getByText('Picking a gift ends your turn.')).toBeInTheDocument();
+    expect(screen.getByText("On your turn, pick a wrapped gift or steal one that's been opened. Either one ends your turn.")).toBeInTheDocument();
+    expect(screen.getByText('If someone steals your gift, you go next.')).toBeInTheDocument();
     expect(screen.getByText("You can't pick the gift you brought, unless it's the last one left.")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "When a gift is stolen from you, you can't steal it right back on your next turn. Pick a wrapped gift or steal a different one.",
+      ),
+    ).toBeInTheDocument();
   });
 });

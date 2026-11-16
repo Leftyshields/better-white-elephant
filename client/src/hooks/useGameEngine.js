@@ -14,6 +14,7 @@ import { SERVER_URL } from '../utils/config.js';
 import { canPlayerSkipTurn } from '../utils/skipTurnEligibility.js';
 import { hasPickedThisTurn, isOwnWrappedGiftLocked } from '../utils/turnRules.js';
 import { planSocketGameErrorHandling } from '../utils/socketGameErrorToast.js';
+import { STEAL_BACK_SAME_TURN_MESSAGE } from '../../../server/shared/socket-error-copy.mjs';
 
 export function useGameEngine(partyId) {
   const { user } = useAuth();
@@ -390,7 +391,7 @@ export function useGameEngine(partyId) {
     );
     
     if (gift.lastOwnerId === user?.uid) {
-      return "You can't steal this gift back yet - wait until the next turn";
+      return STEAL_BACK_SAME_TURN_MESSAGE;
     }
     
     // Check if player has gift

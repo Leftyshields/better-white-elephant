@@ -30,7 +30,7 @@ describe('gameUserCopy socket game errors', () => {
 
   it('exposes mapped raw-server copy strings', () => {
     expect(GAME_USER_COPY.stealBackSameTurn).toBe(
-      "You can't steal back a gift right after it was taken from you. Pick a different one.",
+      "You can't steal back a gift that was just taken from you. Pick or steal a different one.",
     );
     expect(GAME_USER_COPY.cannotOpenGift).toBe("You can't open that gift right now.");
     expect(GAME_USER_COPY.cannotStealGift).toBe("You can't steal that gift right now.");

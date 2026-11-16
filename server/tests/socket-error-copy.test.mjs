@@ -40,7 +40,7 @@ test('raw server strings map to player-facing copy', () => {
     clientSafeSocketGameErrorMessage(
       'Cannot steal back a gift immediately after losing it on the same turn',
     ),
-    "You can't steal back a gift right after it was taken from you. Pick a different one.",
+    "You can't steal back a gift that was just taken from you. Pick or steal a different one.",
   );
   assert.equal(
     clientSafeSocketGameErrorMessage('Cannot pick gift: invalid action'),

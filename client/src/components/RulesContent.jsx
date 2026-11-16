@@ -44,8 +44,8 @@ export function RulesContent({ pageHeading }) {
               Everyone brings a gift link. The game randomizes the order. Your goal: end the game holding the gift you want most.
             </p>
             <ul className="mt-3 list-disc pl-5 space-y-1 text-slate-300">
-              <li>On your turn, pick a wrapped gift or steal one that&apos;s been opened.</li>
-              <li>Picking a gift ends your turn.</li>
+              <li>On your turn, pick a wrapped gift or steal one that&apos;s been opened. Either one ends your turn.</li>
+              <li>If someone steals your gift, you go next.</li>
               <li>You can&apos;t pick the gift you brought, unless it&apos;s the last one left.</li>
             </ul>
             <div className="mt-4 pt-4 border-t border-white/5">
@@ -142,7 +142,7 @@ export function RulesContent({ pageHeading }) {
               <p className="text-slate-300 mb-2">
                 You <strong>cannot</strong> immediately steal back a gift that was just stolen from you on the same turn.
               </p>
-              <p className="text-slate-400 text-sm">Once the turn advances, you can steal it back on your next turn.</p>
+              <p className="text-slate-400 text-sm">When a gift is stolen from you, you can&apos;t steal it right back on your next turn. Pick a wrapped gift or steal a different one.</p>
             </div>
 
             <div className="border-l-4 border-cyan-500 pl-4">

@@ -18,6 +18,10 @@ export const SOCKET_CONNECTION_LOST_MESSAGE = 'Connection lost. Refresh the page
 /** Own wrapped gift can't be picked (unless it's the last one). Copywriter final. */
 export const OWN_GIFT_PICK_MESSAGE = 'Your gift. Pick another one.';
 
+/** Steal-back (U-Turn) lock. Copywriter final. */
+export const STEAL_BACK_SAME_TURN_MESSAGE =
+  "You can't steal back a gift that was just taken from you. Pick or steal a different one.";
+
 /** @deprecated Use SOCKET_GAME_STATE_LOADING_MESSAGE */
 export const SOCKET_GAME_STATE_RETRY_MESSAGE = SOCKET_GAME_STATE_LOADING_MESSAGE;
 
@@ -37,7 +41,7 @@ export const CLIENT_SAFE_USER_MESSAGES = [
   SOCKET_GAME_STATE_LOAD_FAILED_MESSAGE,
   SOCKET_ACTION_FAILED_GENERIC_MESSAGE,
   SOCKET_CONNECTION_LOST_MESSAGE,
-  "You can't steal back a gift right after it was taken from you. Pick a different one.",
+  STEAL_BACK_SAME_TURN_MESSAGE,
   "You can't open that gift right now.",
   "You can't steal that gift right now.",
   "It's not your turn yet.",
@@ -47,7 +51,7 @@ export const CLIENT_SAFE_USER_MESSAGES = [
 export const RAW_SERVER_MESSAGE_ENTRIES = [
   [
     'Cannot steal back a gift immediately after losing it on the same turn',
-    "You can't steal back a gift right after it was taken from you. Pick a different one.",
+    STEAL_BACK_SAME_TURN_MESSAGE,
   ],
   ['Cannot pick gift: invalid action', "You can't open that gift right now."],
   ['Cannot steal gift: invalid action', "You can't steal that gift right now."],
