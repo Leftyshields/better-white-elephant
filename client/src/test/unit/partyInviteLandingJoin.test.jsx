@@ -1,15 +1,22 @@
 /**
  * Invite landing joins with the token from the URL fragment (#t=...), never a query string.
+ * Join refusals map from party doc state (read before joining) to Copywriter strings.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { PartyInviteLanding } from '../../components/PartyInviteLanding.jsx';
+import {
+  JOIN_ERROR_LINK_INVALID,
+  JOIN_ERROR_PARTY_FULL,
+  JOIN_ERROR_STARTED,
+} from '../../utils/partyInviteCopy.js';
 
 const PARTY_ID = 'invite-join-party';
 const TOKEN = 'feedfacefeedfacefeedfacefeedface';
 
 const useAuthMock = vi.fn();
 const joinMock = vi.fn();
+const getDocMock = vi.fn();
 
 vi.mock('../../hooks/useAuth.js', () => ({
   useAuth: () => useAuthMock(),
@@ -30,11 +37,7 @@ vi.mock('../../utils/firebase.js', () => ({
 
 vi.mock('firebase/firestore', () => ({
   doc: vi.fn((_db, ...path) => ({ path: path.join('/') })),
-  getDoc: vi.fn(async (ref) =>
-    ref.path === `parties/${PARTY_ID}`
-      ? { exists: () => true, data: () => ({ title: 'Swap', adminId: 'host-uid-1' }) }
-      : { exists: () => false, data: () => undefined },
-  ),
+  getDoc: (...args) => getDocMock(...args),
 }));
 
 vi.mock('../../utils/partyInvite.js', async (importOriginal) => ({
@@ -42,11 +45,34 @@ vi.mock('../../utils/partyInvite.js', async (importOriginal) => ({
   joinPartyWithInviteToken: (...args) => joinMock(...args),
 }));
 
+function partyDoc(data) {
+  return {
+    exists: () => true,
+    data: () => data,
+  };
+}
+
+function mockPartyReads(partyData) {
+  getDocMock.mockImplementation(async (ref) => {
+    if (ref.path === `parties/${PARTY_ID}`) {
+      return partyDoc(partyData);
+    }
+    return { exists: () => false, data: () => undefined };
+  });
+}
+
 describe('PartyInviteLanding join', () => {
   beforeEach(() => {
     joinMock.mockReset();
+    getDocMock.mockReset();
     window.sessionStorage.clear();
     vi.spyOn(window, 'alert').mockImplementation(() => {});
+    mockPartyReads({
+      title: 'Swap',
+      adminId: 'host-uid-1',
+      status: 'LOBBY',
+      participantCount: 2,
+    });
   });
 
   afterEach(() => {
@@ -95,5 +121,56 @@ describe('PartyInviteLanding join', () => {
     await waitFor(() => expect(signInWithGoogle).toHaveBeenCalledTimes(1));
     expect(window.sessionStorage.getItem('redirectAfterAuth')).toBe(`/party/${PARTY_ID}#t=${TOKEN}`);
     expect(joinMock).not.toHaveBeenCalled();
+  });
+
+  it('alerts join.error.started when party status is not LOBBY', async () => {
+    window.history.replaceState(null, '', `/party/${PARTY_ID}#t=${TOKEN}`);
+    mockPartyReads({
+      title: 'Swap',
+      adminId: 'host-uid-1',
+      status: 'ACTIVE',
+      participantCount: 4,
+    });
+    useAuthMock.mockReturnValue({ user: { uid: 'guest-1' }, signInWithGoogle: vi.fn(), loading: false });
+    joinMock.mockRejectedValue(Object.assign(new Error('denied'), { code: 'permission-denied' }));
+
+    render(<PartyInviteLanding partyId={PARTY_ID} />);
+    fireEvent.click(await screen.findByRole('button', { name: /join this party/i }));
+
+    await waitFor(() => expect(window.alert).toHaveBeenCalledWith(JOIN_ERROR_STARTED));
+  });
+
+  it('alerts join.error.party_full when participantCount is 30', async () => {
+    window.history.replaceState(null, '', `/party/${PARTY_ID}#t=${TOKEN}`);
+    mockPartyReads({
+      title: 'Swap',
+      adminId: 'host-uid-1',
+      status: 'LOBBY',
+      participantCount: 30,
+    });
+    useAuthMock.mockReturnValue({ user: { uid: 'guest-1' }, signInWithGoogle: vi.fn(), loading: false });
+    joinMock.mockRejectedValue(Object.assign(new Error('denied'), { code: 'permission-denied' }));
+
+    render(<PartyInviteLanding partyId={PARTY_ID} />);
+    fireEvent.click(await screen.findByRole('button', { name: /join this party/i }));
+
+    await waitFor(() => expect(window.alert).toHaveBeenCalledWith(JOIN_ERROR_PARTY_FULL));
+  });
+
+  it('alerts join.error.link_invalid for a permission-denied join in an open lobby', async () => {
+    window.history.replaceState(null, '', `/party/${PARTY_ID}#t=${TOKEN}`);
+    mockPartyReads({
+      title: 'Swap',
+      adminId: 'host-uid-1',
+      status: 'LOBBY',
+      participantCount: 3,
+    });
+    useAuthMock.mockReturnValue({ user: { uid: 'guest-1' }, signInWithGoogle: vi.fn(), loading: false });
+    joinMock.mockRejectedValue(Object.assign(new Error('denied'), { code: 'permission-denied' }));
+
+    render(<PartyInviteLanding partyId={PARTY_ID} />);
+    fireEvent.click(await screen.findByRole('button', { name: /join this party/i }));
+
+    await waitFor(() => expect(window.alert).toHaveBeenCalledWith(JOIN_ERROR_LINK_INVALID));
   });
 });

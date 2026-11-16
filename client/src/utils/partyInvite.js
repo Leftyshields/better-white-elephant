@@ -92,11 +92,7 @@ export async function ensureInviteToken(db, partyId) {
   return rotateInviteToken(db, partyId);
 }
 
-/**
- * Host only. Replaces the token so old share links stop working for new joins.
- * TODO(copy, item 2): host rotate button needs Copywriter slots host.invite.rotate_cta and
- * host.invite.rotate_done before it gets a UI. No user-facing strings here on purpose.
- */
+/** Host only. Replaces the token so old share links stop working for new joins. */
 export async function rotateInviteToken(db, partyId) {
   const token = generateInviteToken();
   await setDoc(inviteTokenRef(db, partyId), { token, updatedAt: new Date() });

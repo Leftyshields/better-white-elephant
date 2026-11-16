@@ -8,6 +8,7 @@ import { Button } from './ui/Button.jsx';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../utils/firebase.js';
 import { joinPartyWithInviteToken, readInviteTokenFromHash } from '../utils/partyInvite.js';
+import { getJoinErrorMessage } from '../utils/partyInviteCopy.js';
 import { trackParticipantJoin, trackError } from '../utils/analytics.js';
 import { GiftIcon } from '@heroicons/react/24/outline';
 import { Snowflakes } from './Snowflakes.jsx';
@@ -106,11 +107,15 @@ export function PartyInviteLanding({ partyId }) {
 
     // User is authenticated - join the party
     setJoining(true);
+    let partyState = null;
     try {
+      // Read party state before joining so refused joins map to Copywriter errors
+      // (started / full / link_invalid) instead of a raw Firestore message.
+      const partySnap = await getDoc(doc(db, 'parties', partyId));
+      partyState = partySnap.exists() ? partySnap.data() : null;
+
       // Join batch: seat + join proof (token) + participantCount + 1. Rules check token, LOBBY, cap 30.
       // acceptInviteOnParticipantJoin marks a matching pending invite ACCEPTED server-side.
-      // TODO(copy, item 2): a missing/old token, a full party, or a started game all land in the
-      // generic error below. Needs Copywriter slots join.error.link_invalid and join.error.party_full.
       await joinPartyWithInviteToken(db, partyId, user.uid, inviteToken, {
         status: 'GOING',
         turnNumber: null,
@@ -132,8 +137,9 @@ export function PartyInviteLanding({ partyId }) {
         partyId,
         userId: user?.uid
       });
-      trackError('join_party_failed', error.message, 'PartyInviteLanding');
-      alert('Failed to join party: ' + error.message);
+      const joinMessage = getJoinErrorMessage(partyState);
+      trackError('join_party_failed', joinMessage, 'PartyInviteLanding');
+      alert(joinMessage);
       setJoining(false);
     }
   };

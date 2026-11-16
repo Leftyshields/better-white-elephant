@@ -29,7 +29,13 @@ import {
 import { db } from '../utils/firebase.js';
 import { filterVisiblePendingInvites, canResendPartyInvite } from '../utils/pendingInvites.js';
 import { getStartGameFailureMessage, START_GAME_GENERIC_ERROR } from '../utils/startGameResponse.js';
-import { buildPartyShareLink, ensureInviteToken, removeParticipantSeat } from '../utils/partyInvite.js';
+import { buildPartyShareLink, ensureInviteToken, removeParticipantSeat, rotateInviteToken } from '../utils/partyInvite.js';
+import {
+  HOST_INVITE_ROTATE_CTA,
+  HOST_INVITE_ROTATE_DONE,
+  HOST_INVITE_ROTATE_HELPER,
+  userSignedInWithGoogle,
+} from '../utils/partyInviteCopy.js';
 export function PartyLobby({ partyId, onStartGame }) {
   const { user } = useAuth();
   const { party, participants, pendingInvites, gifts, loading } = useParty(partyId);
@@ -46,6 +52,8 @@ export function PartyLobby({ partyId, onStartGame }) {
   const [inviteEmail, setInviteEmail] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
   const [inviteToken, setInviteToken] = useState(null);
+  const [inviteRotateDone, setInviteRotateDone] = useState(false);
+  const [rotatingInvite, setRotatingInvite] = useState(false);
   const [userNames, setUserNames] = useState({});
   const [userIsBot, setUserIsBot] = useState({});
   const [newPersonName, setNewPersonName] = useState('');
@@ -59,8 +67,10 @@ export function PartyLobby({ partyId, onStartGame }) {
   const [savingRules, setSavingRules] = useState(false);
   const [openStep, setOpenStep] = useState(null); // Track which step is open
   const addPersonNameInputId = useId();
+  const inviteRotateHelperId = useId();
 
   const isAdmin = !!user && !!party && party.adminId === user.uid;
+  const isGoogleHost = isAdmin && userSignedInWithGoogle(user);
   const currentParticipant = participants.find((p) => p.id === user?.uid);
   const userGift = gifts.find((g) => g.submitterId === user?.uid);
   const [adminShippingAddress, setAdminShippingAddress] = useState(null);
@@ -1802,6 +1812,7 @@ export function PartyLobby({ partyId, onStartGame }) {
         onClose={() => {
           setShowShareModal(false);
           setLinkCopied(false);
+          setInviteRotateDone(false);
         }}
         title="Share Party Link"
       >
@@ -1842,12 +1853,48 @@ export function PartyLobby({ partyId, onStartGame }) {
               {linkCopied ? 'Copied!' : 'Copy'}
             </Button>
           </div>
+          {isGoogleHost && (
+            <div className="space-y-2 pt-1">
+              <button
+                type="button"
+                aria-describedby={inviteRotateHelperId}
+                disabled={rotatingInvite || !inviteToken}
+                onClick={async () => {
+                  setRotatingInvite(true);
+                  try {
+                    const nextToken = await rotateInviteToken(db, partyId);
+                    setInviteToken(nextToken);
+                    setInviteRotateDone(true);
+                  } catch (error) {
+                    console.error('Error rotating invite link:', {
+                      code: error?.code,
+                      name: error?.name,
+                    });
+                  } finally {
+                    setRotatingInvite(false);
+                  }
+                }}
+                className="inline-flex items-center justify-center min-h-11 w-full px-4 py-2 rounded-md font-medium transition-colors bg-gray-200 text-gray-800 hover:bg-gray-300 disabled:bg-gray-100 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
+              >
+                {HOST_INVITE_ROTATE_CTA}
+              </button>
+              <p id={inviteRotateHelperId} className="text-sm text-slate-400">
+                {HOST_INVITE_ROTATE_HELPER}
+              </p>
+              {inviteRotateDone && (
+                <p role="status" aria-live="polite" className="text-sm text-green-400">
+                  {HOST_INVITE_ROTATE_DONE}
+                </p>
+              )}
+            </div>
+          )}
           <div className="pt-2">
             <Button
               variant="secondary"
               onClick={() => {
                 setShowShareModal(false);
                 setLinkCopied(false);
+                setInviteRotateDone(false);
               }}
               className="w-full"
             >
