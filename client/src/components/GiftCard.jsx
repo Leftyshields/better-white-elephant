@@ -98,7 +98,7 @@ export const GiftCard = memo(function GiftCard({
   return (
     <div
       id={`gift-${gift.id}`}
-      className={`bg-white/5 backdrop-blur-md border rounded-xl overflow-hidden hover:border-white/30 transition-all ${
+      className={`bg-white/5 backdrop-blur-md border rounded-xl overflow-hidden hover:border-white/30 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 focus-visible:overflow-visible focus-visible:z-10 ${
         compact && shouldShowWrapped
           ? 'p-2 aspect-square h-24 cursor-pointer'
           : 'p-4 w-full sm:w-[280px] md:w-[320px]'
@@ -130,20 +130,22 @@ export const GiftCard = memo(function GiftCard({
       {shouldShowWrapped ? (
         compact ? (
           <div className="relative h-full flex items-center justify-center">
-            <div className="text-4xl">🎁</div>
+            {pickLocked ? (
+              <div
+                id={pickReasonId}
+                className="px-1 text-amber-200 text-[11px] font-semibold leading-tight text-center"
+              >
+                {pickBlockReason}
+              </div>
+            ) : (
+              <div className="text-4xl">🎁</div>
+            )}
             {giftNumber && (
               <div className="absolute top-1 right-1 bg-slate-800/80 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-white/20">
                 #{giftNumber}
               </div>
             )}
-            {pickLocked ? (
-              <div
-                id={pickReasonId}
-                className="absolute bottom-1 inset-x-1 bg-slate-900/90 text-amber-200 text-[10px] font-semibold leading-tight px-1 py-0.5 rounded text-center z-10 border border-amber-300/50"
-              >
-                {pickBlockReason}
-              </div>
-            ) : computedIsMyGift && (
+            {!pickLocked && computedIsMyGift && (
               <div className="absolute bottom-1 left-1 bg-amber-500/90 text-white shadow-lg shadow-amber-500/50 text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 z-10 border border-amber-300/50 whitespace-nowrap">
                 <span className="text-[8px]">⚠️</span>
                 <span>Your Gift</span>

@@ -558,8 +558,8 @@ export function GameRoom({ partyId }) {
                     <p className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-white to-purple-300 drop-shadow-[0_0_10px_rgba(255,255,255,0.5)] animate-pulse">
                       Your Turn!
                     </p>
-                    {derived.canSkipTurn && (
-                      <div className="mt-4">
+                    <div className="mt-4 min-h-11 flex justify-center">
+                      {derived.canSkipTurn && (
                         <Button
                           onClick={actions.endTurn}
                           variant="secondary"
@@ -567,8 +567,8 @@ export function GameRoom({ partyId }) {
                         >
                           Skip Turn
                         </Button>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </>
                 ) : (
                   <p className="text-xl text-slate-300 animate-pulse whitespace-nowrap truncate">
