@@ -2,15 +2,20 @@
  * Button Component
  * Isolated component ready for Tailwind UI premium code
  */
-export function Button({
-  children,
-  onClick,
-  disabled = false,
-  variant = 'primary',
-  type = 'button',
-  className = '',
-  ...props
-}) {
+import { forwardRef } from 'react';
+
+export const Button = forwardRef(function Button(
+  {
+    children,
+    onClick,
+    disabled = false,
+    variant = 'primary',
+    type = 'button',
+    className = '',
+    ...props
+  },
+  ref,
+) {
   const baseClasses =
     'inline-flex items-center justify-center min-h-11 px-4 py-2 rounded-md font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950';
   const variants = {
@@ -21,6 +26,7 @@ export function Button({
 
   return (
     <button
+      ref={ref}
       type={type}
       onClick={onClick}
       disabled={disabled}
@@ -30,6 +36,6 @@ export function Button({
       {children}
     </button>
   );
-}
+});
 
 

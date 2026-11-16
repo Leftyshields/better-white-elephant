@@ -4,9 +4,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   getJoinErrorMessage,
+  HOST_INVITE_ROTATE_CONFIRM,
   HOST_INVITE_ROTATE_CTA,
   HOST_INVITE_ROTATE_DONE,
+  HOST_INVITE_ROTATE_FAILED,
   HOST_INVITE_ROTATE_HELPER,
+  HOST_INVITE_ROTATE_RETRY,
+  JOIN_ERROR_CANCELLED,
   JOIN_ERROR_GENERIC,
   JOIN_ERROR_LINK_INVALID,
   JOIN_ERROR_PARTY_FULL,
@@ -39,6 +43,11 @@ describe('PARTY_INVITE_COPY Copywriter slots', () => {
     expect(JOIN_ERROR_STARTED).toBe(PARTY_INVITE_COPY['join.error.started']);
   });
 
+  it('lands join.error.cancelled exactly', () => {
+    expect(PARTY_INVITE_COPY['join.error.cancelled']).toBe('This party was canceled.');
+    expect(JOIN_ERROR_CANCELLED).toBe(PARTY_INVITE_COPY['join.error.cancelled']);
+  });
+
   it('lands join.error.generic exactly', () => {
     expect(PARTY_INVITE_COPY['join.error.generic']).toBe(
       "We couldn't get you into this party. Try again in a moment.",
@@ -51,11 +60,19 @@ describe('PARTY_INVITE_COPY Copywriter slots', () => {
     expect(PARTY_INVITE_COPY['host.invite.rotate_helper']).toBe(
       'Your old link and any invites you already sent will stop working.',
     );
+    expect(PARTY_INVITE_COPY['host.invite.rotate_confirm']).toBe('Make new link');
+    expect(PARTY_INVITE_COPY['host.invite.rotate_failed']).toBe(
+      "We couldn't make a new link. Your old one still works.",
+    );
+    expect(PARTY_INVITE_COPY['host.invite.rotate_retry']).toBe('Try again');
     expect(PARTY_INVITE_COPY['host.invite.rotate_done']).toBe(
       'New link ready. Resend any invites you still need.',
     );
     expect(HOST_INVITE_ROTATE_CTA).toBe(PARTY_INVITE_COPY['host.invite.rotate_cta']);
     expect(HOST_INVITE_ROTATE_HELPER).toBe(PARTY_INVITE_COPY['host.invite.rotate_helper']);
+    expect(HOST_INVITE_ROTATE_CONFIRM).toBe(PARTY_INVITE_COPY['host.invite.rotate_confirm']);
+    expect(HOST_INVITE_ROTATE_FAILED).toBe(PARTY_INVITE_COPY['host.invite.rotate_failed']);
+    expect(HOST_INVITE_ROTATE_RETRY).toBe(PARTY_INVITE_COPY['host.invite.rotate_retry']);
     expect(HOST_INVITE_ROTATE_DONE).toBe(PARTY_INVITE_COPY['host.invite.rotate_done']);
   });
 
@@ -68,6 +85,22 @@ describe('PARTY_INVITE_COPY Copywriter slots', () => {
 });
 
 describe('getJoinErrorMessage', () => {
+  it('maps CANCELLED to join.error.cancelled before started', () => {
+    expect(
+      getJoinErrorMessage({
+        party: { status: 'CANCELLED', participantCount: 2 },
+        hasToken: false,
+      }),
+    ).toBe(JOIN_ERROR_CANCELLED);
+    expect(
+      getJoinErrorMessage({
+        party: { status: 'CANCELLED', participantCount: 2 },
+        error: { code: 'permission-denied' },
+        hasToken: true,
+      }),
+    ).toBe(JOIN_ERROR_CANCELLED);
+  });
+
   it('maps status != LOBBY to join.error.started', () => {
     expect(
       getJoinErrorMessage({
@@ -81,12 +114,6 @@ describe('getJoinErrorMessage', () => {
         party: { status: 'ENDED', participantCount: 2 },
         error: { code: 'unavailable' },
         hasToken: true,
-      }),
-    ).toBe(JOIN_ERROR_STARTED);
-    expect(
-      getJoinErrorMessage({
-        party: { status: 'CANCELLED', participantCount: 2 },
-        hasToken: false,
       }),
     ).toBe(JOIN_ERROR_STARTED);
   });

@@ -1,7 +1,7 @@
 /**
  * Party Lobby Component
  */
-import { useState, useEffect, useId } from 'react';
+import { useState, useEffect, useId, useRef } from 'react';
 import { useAuth } from '../hooks/useAuth.js';
 import { useParty } from '../hooks/useParty.js';
 import { Button } from './ui/Button.jsx';
@@ -31,11 +31,18 @@ import { filterVisiblePendingInvites, canResendPartyInvite } from '../utils/pend
 import { getStartGameFailureMessage, START_GAME_GENERIC_ERROR } from '../utils/startGameResponse.js';
 import { buildPartyShareLink, ensureInviteToken, removeParticipantSeat, rotateInviteToken } from '../utils/partyInvite.js';
 import {
+  HOST_INVITE_ROTATE_CONFIRM,
   HOST_INVITE_ROTATE_CTA,
   HOST_INVITE_ROTATE_DONE,
+  HOST_INVITE_ROTATE_FAILED,
   HOST_INVITE_ROTATE_HELPER,
+  HOST_INVITE_ROTATE_RETRY,
   userSignedInWithGoogle,
 } from '../utils/partyInviteCopy.js';
+
+const INVITE_ROTATE_FOCUS_RING =
+  'focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950';
+
 export function PartyLobby({ partyId, onStartGame }) {
   const { user } = useAuth();
   const { party, participants, pendingInvites, gifts, loading } = useParty(partyId);
@@ -53,6 +60,8 @@ export function PartyLobby({ partyId, onStartGame }) {
   const [linkCopied, setLinkCopied] = useState(false);
   const [inviteToken, setInviteToken] = useState(null);
   const [inviteRotateDone, setInviteRotateDone] = useState(false);
+  const [inviteRotateConfirming, setInviteRotateConfirming] = useState(false);
+  const [inviteRotateFailed, setInviteRotateFailed] = useState(false);
   const [rotatingInvite, setRotatingInvite] = useState(false);
   const [userNames, setUserNames] = useState({});
   const [userIsBot, setUserIsBot] = useState({});
@@ -68,7 +77,12 @@ export function PartyLobby({ partyId, onStartGame }) {
   const [openStep, setOpenStep] = useState(null); // Track which step is open
   const addPersonNameInputId = useId();
   const inviteRotateHelperId = useId();
-
+  const inviteRotateCtaRef = useRef(null);
+  const inviteRotateCancelRef = useRef(null);
+  const shareCopyButtonRef = useRef(null);
+  const rotatingInviteRef = useRef(false);
+  const focusInviteRotateCtaAfterCancelRef = useRef(false);
+  const focusShareCopyAfterRotateRef = useRef(false);
   const isAdmin = !!user && !!party && party.adminId === user.uid;
   const isGoogleHost = isAdmin && userSignedInWithGoogle(user);
   const currentParticipant = participants.find((p) => p.id === user?.uid);
@@ -93,6 +107,80 @@ export function PartyLobby({ partyId, onStartGame }) {
       cancelled = true;
     };
   }, [showShareModal, isAdmin, inviteToken, partyId]);
+
+  useEffect(() => {
+    if (inviteRotateConfirming) {
+      inviteRotateCancelRef.current?.focus();
+    }
+  }, [inviteRotateConfirming]);
+
+  useEffect(() => {
+    if (!inviteRotateConfirming && focusInviteRotateCtaAfterCancelRef.current) {
+      focusInviteRotateCtaAfterCancelRef.current = false;
+      inviteRotateCtaRef.current?.focus();
+    }
+  }, [inviteRotateConfirming]);
+
+  useEffect(() => {
+    if (inviteRotateDone && focusShareCopyAfterRotateRef.current) {
+      focusShareCopyAfterRotateRef.current = false;
+      shareCopyButtonRef.current?.focus();
+    }
+  }, [inviteRotateDone, inviteToken]);
+
+  useEffect(() => {
+    if (!inviteRotateConfirming || rotatingInvite) return undefined;
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        focusInviteRotateCtaAfterCancelRef.current = true;
+        setInviteRotateConfirming(false);
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [inviteRotateConfirming, rotatingInvite]);
+
+  const resetInviteRotateUi = () => {
+    setInviteRotateDone(false);
+    setInviteRotateConfirming(false);
+    setInviteRotateFailed(false);
+    setRotatingInvite(false);
+    rotatingInviteRef.current = false;
+    focusInviteRotateCtaAfterCancelRef.current = false;
+    focusShareCopyAfterRotateRef.current = false;
+  };
+
+  const cancelInviteRotateConfirm = () => {
+    if (rotatingInviteRef.current) return;
+    focusInviteRotateCtaAfterCancelRef.current = true;
+    setInviteRotateConfirming(false);
+  };
+
+  const performInviteRotate = async () => {
+    if (rotatingInviteRef.current || !inviteToken) return;
+    rotatingInviteRef.current = true;
+    setRotatingInvite(true);
+    setInviteRotateFailed(false);
+    try {
+      const nextToken = await rotateInviteToken(db, partyId);
+      setInviteToken(nextToken);
+      setInviteRotateConfirming(false);
+      focusShareCopyAfterRotateRef.current = true;
+      setInviteRotateDone(true);
+    } catch (error) {
+      console.error('Error rotating invite link:', {
+        code: error?.code,
+        name: error?.name,
+      });
+      setInviteRotateConfirming(false);
+      setInviteRotateDone(false);
+      setInviteRotateFailed(true);
+    } finally {
+      rotatingInviteRef.current = false;
+      setRotatingInvite(false);
+    }
+  };
 
   // Fetch user names and emails for participants
   useEffect(() => {
@@ -1812,7 +1900,7 @@ export function PartyLobby({ partyId, onStartGame }) {
         onClose={() => {
           setShowShareModal(false);
           setLinkCopied(false);
-          setInviteRotateDone(false);
+          resetInviteRotateUi();
         }}
         title="Share Party Link"
       >
@@ -1828,6 +1916,7 @@ export function PartyLobby({ partyId, onStartGame }) {
               className="flex-1 font-mono text-sm"
             />
             <Button
+              ref={shareCopyButtonRef}
               onClick={async () => {
                 if (!inviteToken) return;
                 const link = buildPartyShareLink(window.location.origin, partyId, inviteToken);
@@ -1855,32 +1944,69 @@ export function PartyLobby({ partyId, onStartGame }) {
           </div>
           {isGoogleHost && (
             <div className="space-y-2 pt-1">
-              <button
-                type="button"
-                aria-describedby={inviteRotateHelperId}
-                disabled={rotatingInvite || !inviteToken}
-                onClick={async () => {
-                  setRotatingInvite(true);
-                  try {
-                    const nextToken = await rotateInviteToken(db, partyId);
-                    setInviteToken(nextToken);
-                    setInviteRotateDone(true);
-                  } catch (error) {
-                    console.error('Error rotating invite link:', {
-                      code: error?.code,
-                      name: error?.name,
-                    });
-                  } finally {
-                    setRotatingInvite(false);
-                  }
-                }}
-                className="inline-flex items-center justify-center min-h-11 w-full px-4 py-2 rounded-md font-medium transition-colors bg-gray-200 text-gray-800 hover:bg-gray-300 disabled:bg-gray-100 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
-              >
-                {HOST_INVITE_ROTATE_CTA}
-              </button>
-              <p id={inviteRotateHelperId} className="text-sm text-slate-400">
-                {HOST_INVITE_ROTATE_HELPER}
-              </p>
+              {inviteRotateFailed ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <p role="alert" className="text-sm text-red-300 flex-1 min-w-[12rem]">
+                    {HOST_INVITE_ROTATE_FAILED}
+                  </p>
+                  <button
+                    type="button"
+                    disabled={rotatingInvite}
+                    aria-busy={rotatingInvite || undefined}
+                    onClick={performInviteRotate}
+                    className={`inline-flex items-center justify-center min-h-11 min-w-11 px-4 py-2 rounded-md font-medium transition-colors bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-400 disabled:opacity-50 ${INVITE_ROTATE_FOCUS_RING}`}
+                  >
+                    {HOST_INVITE_ROTATE_RETRY}
+                  </button>
+                </div>
+              ) : inviteRotateConfirming ? (
+                <>
+                  <p id={inviteRotateHelperId} className="text-sm text-amber-200">
+                    {HOST_INVITE_ROTATE_HELPER}
+                  </p>
+                  <div className="flex flex-col sm:flex-row flex-wrap gap-2">
+                    <button
+                      type="button"
+                      aria-describedby={inviteRotateHelperId}
+                      disabled={rotatingInvite}
+                      aria-busy={rotatingInvite || undefined}
+                      onClick={performInviteRotate}
+                      className={`inline-flex items-center justify-center min-h-11 min-w-11 flex-1 px-4 py-2 rounded-md font-medium transition-colors border border-red-500 bg-transparent text-red-400 hover:bg-red-950/40 disabled:opacity-50 ${INVITE_ROTATE_FOCUS_RING}`}
+                    >
+                      {HOST_INVITE_ROTATE_CONFIRM}
+                    </button>
+                    <button
+                      ref={inviteRotateCancelRef}
+                      type="button"
+                      disabled={rotatingInvite}
+                      onClick={cancelInviteRotateConfirm}
+                      className={`inline-flex items-center justify-center min-h-11 min-w-11 flex-1 px-4 py-2 rounded-md font-medium transition-colors bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-400 disabled:opacity-50 ${INVITE_ROTATE_FOCUS_RING}`}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <button
+                    ref={inviteRotateCtaRef}
+                    type="button"
+                    aria-describedby={inviteRotateHelperId}
+                    disabled={!inviteToken}
+                    onClick={() => {
+                      setInviteRotateDone(false);
+                      setInviteRotateFailed(false);
+                      setInviteRotateConfirming(true);
+                    }}
+                    className={`inline-flex items-center justify-center min-h-11 min-w-11 w-full px-4 py-2 rounded-md font-medium transition-colors bg-gray-200 text-gray-800 hover:bg-gray-300 disabled:bg-gray-100 disabled:opacity-50 ${INVITE_ROTATE_FOCUS_RING}`}
+                  >
+                    {HOST_INVITE_ROTATE_CTA}
+                  </button>
+                  <p id={inviteRotateHelperId} className="text-sm text-slate-400">
+                    {HOST_INVITE_ROTATE_HELPER}
+                  </p>
+                </>
+              )}
               {inviteRotateDone && (
                 <p role="status" aria-live="polite" className="text-sm text-green-400">
                   {HOST_INVITE_ROTATE_DONE}
@@ -1894,7 +2020,7 @@ export function PartyLobby({ partyId, onStartGame }) {
               onClick={() => {
                 setShowShareModal(false);
                 setLinkCopied(false);
-                setInviteRotateDone(false);
+                resetInviteRotateUi();
               }}
               className="w-full"
             >

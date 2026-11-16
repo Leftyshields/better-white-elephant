@@ -1,13 +1,16 @@
 /**
- * Google host Share Link modal: rotate invite token CTA, helper, and done live region.
+ * Google host Share Link modal: rotate invite confirm step, success, and failure.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { PartyLobby } from '../../components/PartyLobby.jsx';
 import {
+  HOST_INVITE_ROTATE_CONFIRM,
   HOST_INVITE_ROTATE_CTA,
   HOST_INVITE_ROTATE_DONE,
+  HOST_INVITE_ROTATE_FAILED,
   HOST_INVITE_ROTATE_HELPER,
+  HOST_INVITE_ROTATE_RETRY,
 } from '../../utils/partyInviteCopy.js';
 
 const HOST_UID = 'host-uid';
@@ -109,6 +112,16 @@ function stubParty() {
   });
 }
 
+async function openShareModalAsGoogleHost() {
+  useAuthMock.mockReturnValue({ user: hostUser() });
+  render(<PartyLobby partyId={PARTY_ID} onStartGame={vi.fn()} />);
+  fireEvent.click(screen.getByRole('button', { name: /Share Link/i }));
+  await waitFor(() => {
+    expect(screen.getByDisplayValue(new RegExp(`#t=${OLD_TOKEN}`))).toBeInTheDocument();
+  });
+  return screen.getByRole('button', { name: HOST_INVITE_ROTATE_CTA });
+}
+
 describe('PartyLobby invite link rotate', () => {
   beforeEach(() => {
     ensureInviteTokenMock.mockReset();
@@ -133,20 +146,62 @@ describe('PartyLobby invite link rotate', () => {
     expect(screen.queryByRole('button', { name: HOST_INVITE_ROTATE_CTA })).not.toBeInTheDocument();
   });
 
-  it('calls rotateInviteToken, shows done text, and updates the share link', async () => {
-    useAuthMock.mockReturnValue({ user: hostUser() });
-
-    render(<PartyLobby partyId={PARTY_ID} onStartGame={vi.fn()} />);
-    fireEvent.click(screen.getByRole('button', { name: /Share Link/i }));
-
-    const rotateButton = await screen.findByRole('button', { name: HOST_INVITE_ROTATE_CTA });
-    expect(rotateButton.tagName).toBe('BUTTON');
-    expect(rotateButton).toHaveAttribute('aria-describedby');
+  it('first tap shows confirm + Cancel and does not call rotateInviteToken', async () => {
+    const rotateCta = await openShareModalAsGoogleHost();
+    expect(rotateCta).toHaveAttribute('aria-describedby');
     expect(screen.getByText(HOST_INVITE_ROTATE_HELPER)).toBeInTheDocument();
-    expect(rotateButton.className).toMatch(/min-h-11/);
-    expect(rotateButton.className).toMatch(/focus-visible:ring-2/);
+    expect(rotateCta.className).toMatch(/min-h-11/);
+    expect(rotateCta.className).toMatch(/focus-visible:ring-2/);
 
-    fireEvent.click(rotateButton);
+    fireEvent.click(rotateCta);
+
+    expect(rotateInviteTokenMock).not.toHaveBeenCalled();
+    const confirm = screen.getByRole('button', { name: HOST_INVITE_ROTATE_CONFIRM });
+    const cancel = screen.getByRole('button', { name: 'Cancel' });
+    expect(confirm).toHaveAttribute('aria-describedby');
+    const helperId = confirm.getAttribute('aria-describedby');
+    expect(document.getElementById(helperId)).toHaveTextContent(HOST_INVITE_ROTATE_HELPER);
+    await waitFor(() => {
+      expect(document.activeElement).toBe(cancel);
+    });
+  });
+
+  it('Cancel restores the initial CTA and returns focus to it', async () => {
+    const rotateCta = await openShareModalAsGoogleHost();
+    fireEvent.click(rotateCta);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    const restoredCta = await screen.findByRole('button', { name: HOST_INVITE_ROTATE_CTA });
+    expect(screen.queryByRole('button', { name: HOST_INVITE_ROTATE_CONFIRM })).not.toBeInTheDocument();
+    expect(rotateInviteTokenMock).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(document.activeElement).toBe(restoredCta);
+    });
+  });
+
+  it('Escape restores the initial CTA and returns focus to it', async () => {
+    const rotateCta = await openShareModalAsGoogleHost();
+    fireEvent.click(rotateCta);
+    expect(screen.getByRole('button', { name: HOST_INVITE_ROTATE_CONFIRM })).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    const restoredCta = await screen.findByRole('button', { name: HOST_INVITE_ROTATE_CTA });
+    expect(screen.queryByRole('button', { name: HOST_INVITE_ROTATE_CONFIRM })).not.toBeInTheDocument();
+    expect(rotateInviteTokenMock).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(document.activeElement).toBe(restoredCta);
+    });
+  });
+
+  it('confirm calls rotate once, shows done text, updates the link, and focuses Copy', async () => {
+    const rotateCta = await openShareModalAsGoogleHost();
+    fireEvent.click(rotateCta);
+
+    const confirm = screen.getByRole('button', { name: HOST_INVITE_ROTATE_CONFIRM });
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
 
     await waitFor(() => expect(rotateInviteTokenMock).toHaveBeenCalledTimes(1));
     expect(rotateInviteTokenMock).toHaveBeenCalledWith({ name: 'test-db' }, PARTY_ID);
@@ -157,5 +212,34 @@ describe('PartyLobby invite link rotate', () => {
     const done = screen.getByRole('status');
     expect(done).toHaveAttribute('aria-live', 'polite');
     expect(done).toHaveTextContent(HOST_INVITE_ROTATE_DONE);
+
+    const copyButton = screen.getByRole('button', { name: 'Copy' });
+    await waitFor(() => {
+      expect(document.activeElement).toBe(copyButton);
+    });
+  });
+
+  it('failure shows rotate_failed with Try again, keeps the old link, and retry rotates again', async () => {
+    rotateInviteTokenMock
+      .mockRejectedValueOnce(new Error('rotate failed'))
+      .mockResolvedValueOnce(NEW_TOKEN);
+
+    const rotateCta = await openShareModalAsGoogleHost();
+    fireEvent.click(rotateCta);
+    fireEvent.click(screen.getByRole('button', { name: HOST_INVITE_ROTATE_CONFIRM }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(HOST_INVITE_ROTATE_FAILED);
+    expect(screen.getByRole('button', { name: HOST_INVITE_ROTATE_RETRY })).toBeInTheDocument();
+    expect(screen.getByDisplayValue(new RegExp(`#t=${OLD_TOKEN}`))).toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: HOST_INVITE_ROTATE_RETRY }));
+
+    await waitFor(() => expect(rotateInviteTokenMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      expect(screen.getByDisplayValue(new RegExp(`#t=${NEW_TOKEN}`))).toBeInTheDocument();
+    });
+    expect(screen.getByRole('status')).toHaveTextContent(HOST_INVITE_ROTATE_DONE);
   });
 });
