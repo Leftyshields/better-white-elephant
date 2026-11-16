@@ -69,7 +69,8 @@ const addresslessProfile = {
 let testEnv;
 
 function authedDb(uid) {
-  return testEnv.authenticatedContext(uid).firestore();
+  // Hosts must sign in with Google (item 1 gate); model existing users as Google sign-ins.
+  return testEnv.authenticatedContext(uid, { firebase: { sign_in_provider: 'google.com' } }).firestore();
 }
 
 function unauthedDb() {

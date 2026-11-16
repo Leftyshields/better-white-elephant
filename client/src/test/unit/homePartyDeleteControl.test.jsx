@@ -24,8 +24,6 @@ vi.mock('../../hooks/useAuth.js', () => ({
     user: mockUser,
     loading: false,
     signInWithGoogle: vi.fn(),
-    signInWithEmailAndPassword: vi.fn(),
-    signUpWithEmailAndPassword: vi.fn(),
   }),
 }));
 

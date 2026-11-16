@@ -12,10 +12,102 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
     
-    // Helper function to check if user is party admin
+    // Hosts must be signed in with Google. Never trust email, email_verified, or auth != null alone.
+    function isGoogleUser() {
+      return isAuthenticated()
+        && request.auth.token.firebase.sign_in_provider == 'google.com';
+    }
+
+    // Helper function to check if user is party admin (Google sign-in required for every admin path)
     function isPartyAdmin(partyId) {
-      return isAuthenticated() && 
+      return isGoogleUser() &&
              get(/databases/$(database)/documents/parties/$(partyId)).data.adminId == request.auth.uid;
+    }
+
+    function partyPath(partyId) {
+      return /databases/$(database)/documents/parties/$(partyId);
+    }
+
+    function participantPath(partyId, uid) {
+      return /databases/$(database)/documents/parties/$(partyId)/participants/$(uid);
+    }
+
+    function inviteTokenPath(partyId) {
+      return /databases/$(database)/documents/parties/$(partyId)/private/invite;
+    }
+
+    function joinProofPath(partyId, uid) {
+      return /databases/$(database)/documents/parties/$(partyId)/joinProofs/$(uid);
+    }
+
+    // Per-party seat cap. parties/{id}.participantCount moves by exactly 1 in the same batch as
+    // each participant create (+1) or delete (-1); legacy parties without the field count from 0.
+    function maxParticipants() {
+      return 30;
+    }
+
+    function participantCountOf(data) {
+      return data.get('participantCount', 0);
+    }
+
+    // 128-bit token as 32 lowercase hex chars (client crypto.getRandomValues or server randomBytes).
+    function validInviteToken(token) {
+      return token is string && token.matches('^[0-9a-f]{32}$');
+    }
+
+    function inviteTokenDocValid() {
+      return request.resource.data.keys().hasOnly(['token', 'updatedAt'])
+        && validInviteToken(request.resource.data.token);
+    }
+
+    // Party is being created in this same batch by the caller (host bootstrap).
+    function isCreatingPartyAsHost(partyId) {
+      return isGoogleUser()
+        && !exists(partyPath(partyId))
+        && getAfter(partyPath(partyId)).data.adminId == request.auth.uid;
+    }
+
+    // A non-host joins with the invite token: proof doc in the same batch must match the stored token.
+    function joinTokenMatches(partyId) {
+      return getAfter(joinProofPath(partyId, request.auth.uid)).data.token
+        == get(inviteTokenPath(partyId)).data.token;
+    }
+
+    // Join = participant create while LOBBY, under the cap, with the count bumped by 1 in the same batch.
+    function participantJoinAllowed(partyId) {
+      let before = get(partyPath(partyId)).data;
+      let afterCount = participantCountOf(getAfter(partyPath(partyId)).data);
+      return before.status == 'LOBBY'
+        && afterCount == participantCountOf(before) + 1
+        && afterCount <= maxParticipants()
+        && (isPartyAdmin(partyId) || joinTokenMatches(partyId));
+    }
+
+    // Party doc side of a join: only participantCount changes, +1, and the caller's seat appears.
+    function participantCountJoinBump(partyId) {
+      return isAuthenticated()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participantCount'])
+        && resource.data.status == 'LOBBY'
+        && request.resource.data.participantCount == participantCountOf(resource.data) + 1
+        && request.resource.data.participantCount <= maxParticipants()
+        && !exists(participantPath(partyId, request.auth.uid))
+        && existsAfter(participantPath(partyId, request.auth.uid));
+    }
+
+    // Host removing a participant must decrement the counter in the same batch (counted parties only).
+    function participantRemovalCounted(partyId) {
+      let before = get(partyPath(partyId)).data;
+      return !before.keys().hasAny(['participantCount'])
+        || getAfter(partyPath(partyId)).data.participantCount == before.participantCount - 1;
+    }
+
+    function adminParticipantCountChangeOk() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['participantCount'])
+        || (
+          resource.data.keys().hasAny(['participantCount'])
+          && request.resource.data.participantCount == resource.data.participantCount - 1
+          && request.resource.data.participantCount >= 1
+        );
     }
     
     // Helper function to check if user is a participant in a party
@@ -49,8 +141,9 @@ service cloud.firestore {
 
     function partyAdminUpdateAllowed() {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
-      return changed.hasOnly(['title', 'date', 'config', 'updatedAt', 'status', 'hostDisplayName'])
+      return changed.hasOnly(['title', 'date', 'config', 'updatedAt', 'status', 'hostDisplayName', 'participantCount'])
         && partyServerFieldsUntouched()
+        && adminParticipantCountChangeOk()
         && hostDisplayNameOkOnWrite()
         && request.resource.data.status != 'ACTIVE'
         && request.resource.data.status != 'ENDED'
@@ -148,17 +241,23 @@ service cloud.firestore {
       // Also allow authenticated users to read full party details
       allow read: if true;
       
-      // Only authenticated users can create parties (must start in LOBBY; no server-owned fields)
-      allow create: if isAuthenticated() && 
+      // Only Google-signed-in users can create parties (must start in LOBBY; no server-owned fields).
+      // One batch writes the party, the host's participant seat (count 1) and the invite token.
+      allow create: if isGoogleUser() &&
                        request.resource.data.adminId == request.auth.uid &&
                        request.resource.data.status == 'LOBBY' &&
+                       request.resource.data.participantCount == 1 &&
+                       existsAfter(participantPath(partyId, request.auth.uid)) &&
+                       existsAfter(inviteTokenPath(partyId)) &&
                        hostDisplayNameOkOnWrite() &&
                        !request.resource.data.keys().hasAny([
                          'gameState', 'gameStateUpdatedAt', 'endedAt', 'gameHistory'
                        ]);
       
-      // Party admin: allowlisted lobby fields only; cannot set ACTIVE/ENDED or touch gameState
-      allow update: if isPartyAdmin(partyId) && partyAdminUpdateAllowed();
+      // Party admin: allowlisted lobby fields only; cannot set ACTIVE/ENDED or touch gameState.
+      // Anyone joining may bump participantCount by exactly 1 alongside their own participant create.
+      allow update: if (isPartyAdmin(partyId) && partyAdminUpdateAllowed())
+                    || participantCountJoinBump(partyId);
       
       // Only party admin can delete party, and only if it's ended or cancelled
       allow delete: if isPartyAdmin(partyId) && 
@@ -174,16 +273,40 @@ service cloud.firestore {
                       isParticipant(partyId) || 
                       get(/databases/$(database)/documents/parties/$(partyId)).data.status == 'LOBBY');
         
-        // Users can create their own participant record (when joining)
-        allow create: if isAuthenticated() && 
-                        participantId == request.auth.uid;
+        // Users create their own participant record: as the host in the party-create batch, or as a
+        // join (LOBBY only, invite token proof, counter +1, cap 30)
+        allow create: if isAuthenticated() &&
+                        participantId == request.auth.uid &&
+                        (isCreatingPartyAsHost(partyId) || participantJoinAllowed(partyId));
         
         // Users can update their own participant status
         allow update: if isAuthenticated() && 
                         (participantId == request.auth.uid || isPartyAdmin(partyId));
         
-        // Only admin can delete participants
-        allow delete: if isPartyAdmin(partyId);
+        // Only admin can delete participants, decrementing participantCount in the same batch
+        allow delete: if isPartyAdmin(partyId) && participantRemovalCounted(partyId);
+      }
+
+      // Invite token (128-bit). Only the Google host may read, create or rotate it.
+      match /private/{docId} {
+        allow read: if docId == 'invite' && isPartyAdmin(partyId);
+        allow create: if docId == 'invite' &&
+                        (isPartyAdmin(partyId) || isCreatingPartyAsHost(partyId)) &&
+                        inviteTokenDocValid();
+        allow update: if docId == 'invite' && isPartyAdmin(partyId) && inviteTokenDocValid();
+        allow delete: if false;
+      }
+
+      // Join proof: written only in the join batch, never readable by clients (keeps the token
+      // off participant docs, which other signed-in users can read during LOBBY).
+      match /joinProofs/{uid} {
+        allow read: if false;
+        allow create, update: if isOwner(uid) &&
+                                request.resource.data.keys().hasOnly(['token']) &&
+                                request.resource.data.token == get(inviteTokenPath(partyId)).data.token &&
+                                !exists(participantPath(partyId, uid)) &&
+                                existsAfter(participantPath(partyId, uid));
+        allow delete: if false;
       }
       
       // Pending invites subcollection
@@ -201,10 +324,11 @@ service cloud.firestore {
                      (isParticipant(resource.data.partyId) || 
                       get(/databases/$(database)/documents/parties/$(resource.data.partyId)).data.status == 'LOBBY');
       
-      // Create while party is LOBBY; submitterId must match auth and stay server-defaulted fields
+      // Create while party is LOBBY; caller must hold a seat; submitterId must match auth
       allow create: if isAuthenticated() && 
                        giftCreateValid() &&
-                       partyIsLobby(request.resource.data.partyId);
+                       partyIsLobby(request.resource.data.partyId) &&
+                       isParticipant(request.resource.data.partyId);
       
       // Submitter may update gift metadata only while party is LOBBY (submitterId immutable)
       allow update: if isAuthenticated() && 

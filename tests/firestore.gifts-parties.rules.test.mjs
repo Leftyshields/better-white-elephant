@@ -59,7 +59,8 @@ const activeParty = {
 let testEnv;
 
 function authedDb(uid) {
-  return testEnv.authenticatedContext(uid).firestore();
+  // Hosts must sign in with Google (item 1 gate); model existing users as Google sign-ins.
+  return testEnv.authenticatedContext(uid, { firebase: { sign_in_provider: 'google.com' } }).firestore();
 }
 
 async function seedLobbyGiftAndParty() {
@@ -216,7 +217,12 @@ describe('parties — admin updates and server-owned fields', () => {
 describe('gifts — create integrity', () => {
   it('rejects create when submitterId does not match auth', async () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
-      await setDoc(doc(context.firestore(), 'parties', PARTY_ID), lobbyParty);
+      const db = context.firestore();
+      await setDoc(doc(db, 'parties', PARTY_ID), lobbyParty);
+      await setDoc(doc(db, 'parties', PARTY_ID, 'participants', SUBMITTER_ID), {
+        status: 'GOING',
+        ready: false,
+      });
     });
     const db = authedDb(SUBMITTER_ID);
     await assertFails(
@@ -229,9 +235,40 @@ describe('gifts — create integrity', () => {
 
   it('rejects create when party is not LOBBY', async () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
-      await setDoc(doc(context.firestore(), 'parties', PARTY_ID), activeParty);
+      const db = context.firestore();
+      await setDoc(doc(db, 'parties', PARTY_ID), activeParty);
+      await setDoc(doc(db, 'parties', PARTY_ID, 'participants', SUBMITTER_ID), {
+        status: 'GOING',
+        ready: false,
+      });
     });
     const db = authedDb(SUBMITTER_ID);
     await assertFails(setDoc(doc(db, 'gifts', 'gift-new'), baseGift));
+  });
+
+  it('seated participant can create a gift while party is LOBBY', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await setDoc(doc(db, 'parties', PARTY_ID), lobbyParty);
+      await setDoc(doc(db, 'parties', PARTY_ID, 'participants', SUBMITTER_ID), {
+        status: 'GOING',
+        ready: false,
+      });
+    });
+    const db = authedDb(SUBMITTER_ID);
+    await assertSucceeds(setDoc(doc(db, 'gifts', 'gift-new'), baseGift));
+  });
+
+  it('non-participant signed-in user cannot create a gift', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'parties', PARTY_ID), lobbyParty);
+    });
+    const db = authedDb(STRANGER_ID);
+    await assertFails(
+      setDoc(doc(db, 'gifts', 'gift-stranger'), {
+        ...baseGift,
+        submitterId: STRANGER_ID,
+      }),
+    );
   });
 });

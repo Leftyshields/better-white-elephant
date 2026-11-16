@@ -12,6 +12,7 @@ import { saveGameState, loadGameState, deleteGameState } from '../utils/game-sta
 import { saveShippingFulfillmentSnapshot } from '../utils/shipping-fulfillment-snapshot.js';
 import { fetchWinnerShippingAddressForSender } from '../utils/winner-shipping-address.js';
 import { validateGameStartGiftAssignment } from '../utils/game-start-validation.js';
+import { isPartyHostCaller } from '../lib/host-auth.js';
 
 const router = express.Router();
 
@@ -40,8 +41,8 @@ router.post('/start', async (req, res) => {
 
     const party = partyConverter.fromFirestore(partyDoc);
 
-    // Verify user is admin
-    if (party.adminId !== userId) {
+    // Verify user is admin (Google sign-in required)
+    if (!isPartyHostCaller(party, req.user)) {
       return res.status(403).json({ error: 'Only party admin can start the game' });
     }
 
@@ -254,8 +255,8 @@ router.post('/end', async (req, res) => {
       return res.status(403).json({ error: 'Game has already ended' });
     }
     
-    // Verify user is admin (admin only can end game)
-    if (party.adminId !== userId) {
+    // Verify user is admin (admin only can end game; Google sign-in required)
+    if (!isPartyHostCaller(party, req.user)) {
       return res.status(403).json({ error: 'Only party admin can end the game' });
     }
     

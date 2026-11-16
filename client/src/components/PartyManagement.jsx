@@ -11,6 +11,7 @@ import { useAuth } from '../hooks/useAuth.js';
 import { apiRequest } from '../utils/api.js';
 import { filterVisiblePendingInvites } from '../utils/pendingInvites.js';
 import { postSendPartyInvite } from '../utils/sendPartyInvite.js';
+import { removeParticipantSeat } from '../utils/partyInvite.js';
 
 export function PartyManagement({ party, participants, pendingInvites = [] }) {
   const { user } = useAuth();
@@ -129,7 +130,7 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
     }
 
     try {
-      await deleteDoc(doc(db, 'parties', party.id, 'participants', participantId));
+      await removeParticipantSeat(db, party, participantId);
       // Also delete their gift if they have one
       const giftsSnapshot = await getDocs(
         query(

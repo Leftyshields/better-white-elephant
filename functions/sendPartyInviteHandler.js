@@ -8,11 +8,14 @@ import {
   SEND_PARTY_INVITE_ERRORS,
   assertCallerIsPartyHost,
   buildInviteEmailHtml,
+  buildPartyInviteLink,
+  generateInviteToken,
   inviteEmailSubject,
   getRateLimitBuckets,
   hashRecipientForRateLimit,
   hostDisplayNameForInvite,
   inviteDocIdForEmail,
+  isValidInviteToken,
   isValidPartyId,
   nextRateLimitState,
   normalizeInviteEmail,
@@ -59,6 +62,26 @@ async function consumeRateLimit(db, ref, buckets, limits) {
       { merge: true },
     );
     return result;
+  });
+}
+
+/**
+ * Returns the party's invite token, creating one for legacy parties that predate tokens.
+ * Transaction so two concurrent sends never mint different tokens. Never log the token.
+ * @param {import('firebase-admin/firestore').Firestore} db
+ * @param {string} partyId
+ */
+async function ensurePartyInviteToken(db, partyId) {
+  const ref = db.collection('parties').doc(partyId).collection('private').doc('invite');
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const existing = snap.exists ? snap.data()?.token : null;
+    if (isValidInviteToken(existing)) {
+      return existing;
+    }
+    const token = generateInviteToken();
+    tx.set(ref, { token, updatedAt: FieldValue.serverTimestamp() });
+    return token;
   });
 }
 
@@ -135,10 +158,9 @@ export async function handleSendPartyInviteRequest(req, deps) {
     };
   }
 
-  let callerUid;
+  let decodedToken;
   try {
-    const decoded = await auth.verifyIdToken(token);
-    callerUid = decoded.uid;
+    decodedToken = await auth.verifyIdToken(token);
   } catch {
     return {
       status: 401,
@@ -178,13 +200,14 @@ export async function handleSendPartyInviteRequest(req, deps) {
   }
 
   const party = partyDoc.data();
-  if (!assertCallerIsPartyHost(party, callerUid)) {
+  if (!assertCallerIsPartyHost(party, decodedToken)) {
     return {
       status: 403,
       body: { error: 'Forbidden', message: SEND_PARTY_INVITE_ERRORS.notHost },
     };
   }
 
+  const callerUid = decodedToken.uid;
   const inviteId = inviteDocIdForEmail(normalizedEmail);
   const pendingInviteSnap = await db
     .collection('parties')
@@ -256,7 +279,8 @@ export async function handleSendPartyInviteRequest(req, deps) {
   );
 
   const clientUrl = resolveClientUrl(req.get?.('origin'), req.get?.('referer'));
-  const inviteLink = `${clientUrl}/party/${partyId}`;
+  const inviteToken = await ensurePartyInviteToken(db, partyId);
+  const inviteLink = buildPartyInviteLink(clientUrl, partyId, inviteToken);
   const partyTitle = party.title || 'Steal or Reveal party';
   const partyDateLabel = party.date?.toDate
     ? party.date.toDate().toLocaleDateString()

@@ -5,8 +5,10 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth.js';
 import { Button } from './ui/Button.jsx';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../utils/firebase.js';
+import { joinPartyWithInviteToken, readInviteTokenFromHash } from '../utils/partyInvite.js';
+import { getJoinErrorMessage } from '../utils/partyInviteCopy.js';
 import { trackParticipantJoin, trackError } from '../utils/analytics.js';
 import { GiftIcon } from '@heroicons/react/24/outline';
 import { Snowflakes } from './Snowflakes.jsx';
@@ -22,6 +24,8 @@ export function PartyInviteLanding({ partyId }) {
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
   const [hostName, setHostName] = useState(null);
+  // Invite token rides in the URL fragment (#t=...), so it never reaches a server log.
+  const [inviteToken] = useState(() => readInviteTokenFromHash(window.location.hash));
 
   // Fetch public party info
   useEffect(() => {
@@ -92,7 +96,7 @@ export function PartyInviteLanding({ partyId }) {
   const handleJoin = async () => {
     if (!user) {
       // Not authenticated - trigger sign in
-      window.sessionStorage.setItem('redirectAfterAuth', `/party/${partyId}`);
+      window.sessionStorage.setItem('redirectAfterAuth', `/party/${partyId}${window.location.hash}`);
       const result = await signInWithGoogle();
       if (result.success) {
         // After sign in, the component will re-render and we can join
@@ -103,12 +107,16 @@ export function PartyInviteLanding({ partyId }) {
 
     // User is authenticated - join the party
     setJoining(true);
+    let partyState = null;
     try {
-      // Add user as participant
-      // Note: We don't check for pending invites here because that requires admin permissions
-      // The server or admin can handle invite acceptance separately if needed
-      const participantRef = doc(db, 'parties', partyId, 'participants', user.uid);
-      await setDoc(participantRef, {
+      // Read party state before joining so refused joins map to Copywriter errors
+      // (started / full / link_invalid) instead of a raw Firestore message.
+      const partySnap = await getDoc(doc(db, 'parties', partyId));
+      partyState = partySnap.exists() ? partySnap.data() : null;
+
+      // Join batch: seat + join proof (token) + participantCount + 1. Rules check token, LOBBY, cap 30.
+      // acceptInviteOnParticipantJoin marks a matching pending invite ACCEPTED server-side.
+      await joinPartyWithInviteToken(db, partyId, user.uid, inviteToken, {
         status: 'GOING',
         turnNumber: null,
         ready: false,
@@ -129,8 +137,13 @@ export function PartyInviteLanding({ partyId }) {
         partyId,
         userId: user?.uid
       });
-      trackError('join_party_failed', error.message, 'PartyInviteLanding');
-      alert('Failed to join party: ' + error.message);
+      const joinMessage = getJoinErrorMessage({
+        party: partyState,
+        error,
+        hasToken: Boolean(inviteToken),
+      });
+      trackError('join_party_failed', joinMessage, 'PartyInviteLanding');
+      alert(joinMessage);
       setJoining(false);
     }
   };

@@ -16,19 +16,18 @@ export {
   clearOpenCreatePartyAfterAuthUnlessGoogleSignInSucceeded,
 } from '../hooks/useHostFreeGame.js';
 import { Button } from '../components/ui/Button.jsx';
-import { Input } from '../components/ui/Input.jsx';
 import { Modal } from '../components/ui/Modal.jsx';
 import { Menu } from '@headlessui/react';
 import { GiftIcon, EllipsisVerticalIcon } from '@heroicons/react/24/outline';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { collection, addDoc, doc, setDoc, query, where, onSnapshot, orderBy, collectionGroup, getDocs, deleteDoc, updateDoc, getDoc } from 'firebase/firestore';
+import { collection, doc, query, where, onSnapshot, deleteDoc, getDoc } from 'firebase/firestore';
 import { db } from '../utils/firebase.js';
 import {
   hostDisplayNameForPartyDoc,
   isValidPublicHostDisplayName,
-  resolveSyncedFirestoreDisplayName,
 } from '../../../server/lib/display-names.js';
-import { trackCreateParty, trackSignUp, trackLogin, trackButtonClick, trackGameAbandoned, trackError } from '../utils/analytics.js';
+import { trackCreateParty, trackButtonClick, trackGameAbandoned, trackError } from '../utils/analytics.js';
+import { createPartyWithInviteToken } from '../utils/partyInvite.js';
 import { usePartyModal } from '../contexts/PartyModalContext.jsx';
 import { Footer } from '../components/Footer.jsx';
 import { SEO } from '../components/SEO.jsx';
@@ -48,7 +47,7 @@ import {
 } from '../utils/partyUiCopy.js';
 
 export function Home() {
-  const { user, signInWithEmailAndPassword, signUpWithEmailAndPassword } = useAuth();
+  const { user } = useAuth();
   const {
     authLoading,
     dismissHostSignInNotice,
@@ -63,20 +62,6 @@ export function Home() {
   const [myParties, setMyParties] = useState([]);
   const [loadingParties, setLoadingParties] = useState(false);
   const [partiesError, setPartiesError] = useState(null);
-  const [showEmailAuth, setShowEmailAuth] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [displayName, setDisplayName] = useState('');
-  const [isSignUp, setIsSignUp] = useState(false);
-  const [authError, setAuthError] = useState('');
-  const [shippingAddress, setShippingAddress] = useState({
-    name: '',
-    street: '',
-    city: '',
-    state: '',
-    zip: '',
-    country: '',
-  });
   const { showModal: showCreatePartyModal, setShowModal: setShowCreatePartyModal } = usePartyModal();
   const [participantCounts, setParticipantCounts] = useState({});
   const [isMobile, setIsMobile] = useState(false);
@@ -312,11 +297,8 @@ export function Home() {
       if (hostDisplayName != null && isValidPublicHostDisplayName(hostDisplayName)) {
         partyPayload.hostDisplayName = hostDisplayName;
       }
-      const partyRef = await addDoc(collection(db, 'parties'), partyPayload);
-
-      // Create participant entry for admin (if not exists)
-      const participantRef = doc(db, 'parties', partyRef.id, 'participants', user.uid);
-      await setDoc(participantRef, {
+      // One batch: party (seat count 1), the host's participant seat, and the invite token
+      const partyId = await createPartyWithInviteToken(db, user.uid, partyPayload, {
         status: 'PENDING',
         turnNumber: null,
         ready: false,
@@ -335,76 +317,10 @@ export function Home() {
       setPartyDate('');
       setShowCreatePartyModal(false);
 
-      navigate(`/party/${partyRef.id}`);
+      navigate(`/party/${partyId}`);
     } catch (error) {
       console.error('Error creating party:', error);
       alert('Failed to create party: ' + error.message);
-    }
-  };
-
-  const handleEmailAuth = async (e) => {
-    e?.preventDefault();
-    setAuthError('');
-
-    if (!email || !password) {
-      setAuthError('Please enter both email and password');
-      return;
-    }
-
-    try {
-      let result;
-      if (isSignUp) {
-        result = await signUpWithEmailAndPassword(email, password, displayName || null);
-      } else {
-        result = await signInWithEmailAndPassword(email, password);
-      }
-
-      if (!result.success) {
-        setAuthError(result.error || 'Authentication failed');
-      } else {
-        // Track authentication
-        if (isSignUp) {
-          trackSignUp('email');
-        } else {
-          trackLogin('email');
-        }
-
-        // If signup, save shipping address to user profile
-        if (isSignUp && result.user) {
-          try {
-            await setDoc(doc(db, 'users', result.user.uid), {
-              displayName: resolveSyncedFirestoreDisplayName(
-                displayName || result.user.displayName,
-                '',
-              ),
-              email: result.user.email || '',
-              shippingAddress: shippingAddress,
-              createdAt: new Date(),
-              updatedAt: new Date(),
-            }, { merge: true });
-          } catch (error) {
-            console.error('Error saving user profile:', error);
-            // Don't block signup if profile save fails
-          }
-        }
-        
-        // Success - user state will update automatically
-        setEmail('');
-        setPassword('');
-        setDisplayName('');
-        setShippingAddress({
-          name: '',
-          street: '',
-          city: '',
-          state: '',
-          zip: '',
-          country: '',
-        });
-        setShowEmailAuth(false);
-        // Redirect will be handled by useEffect watching user state
-      }
-    } catch (error) {
-      setAuthError(error.message || 'An error occurred');
     }
   };
 
