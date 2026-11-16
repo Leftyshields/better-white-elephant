@@ -30,6 +30,7 @@ import { db } from '../utils/firebase.js';
 import { filterVisiblePendingInvites, canResendPartyInvite } from '../utils/pendingInvites.js';
 import { getStartGameFailureMessage, START_GAME_GENERIC_ERROR } from '../utils/startGameResponse.js';
 import { buildPartyShareLink, ensureInviteToken, removeParticipantSeat, rotateInviteToken } from '../utils/partyInvite.js';
+import { rosterDisplayNames } from '../utils/seatDisplayName.js';
 import {
   HOST_INVITE_LOAD_FAILED,
   HOST_INVITE_ROTATE_CONFIRM,
@@ -239,17 +240,15 @@ export function PartyLobby({ partyId, onStartGame }) {
         }
       } catch (error) {
         console.error('Error fetching user info:', error);
-        // Fallback: use participant IDs
-        const names = {};
-        participants.forEach(p => {
-          names[p.id] = `Player ${p.id.slice(0, 8)}`;
-        });
-        setUserNames(names);
+        // Seat names (rosterNames below) still show; others fall back to Player <id>.
+        setUserNames({});
       }
     };
 
     fetchUserInfo();
   }, [participants, partyId]);
+
+  const rosterNames = rosterDisplayNames(participants, userNames);
 
   // Fetch admin shipping address
   useEffect(() => {
@@ -1107,31 +1106,25 @@ export function PartyLobby({ partyId, onStartGame }) {
                           const isYou = participant.id === user?.uid;
                           const isAdminParticipant = participant.id === party?.adminId;
                           const isBot = userIsBot[participant.id] || participant.id.startsWith('bot_');
-                          const displayName = isYou 
-                            ? 'You (Host)' 
-                            : (userNames[participant.id] && userNames[participant.id] !== participant.id 
-                                ? userNames[participant.id] 
-                                : null);
+                          const displayName = isYou ? 'You (Host)' : rosterNames[participant.id];
                           return (
                             <div
                               key={participant.id}
-                              className={`flex items-center justify-between p-3 rounded-lg ${
+                              className={`flex items-center justify-between gap-2 min-w-0 p-3 rounded-lg ${
                                 isBot ? 'bg-purple-900/30 border border-purple-500/30' : 'bg-slate-800/50'
                               }`}
                             >
-                              <div className="flex items-center gap-3">
-                                <div>
-                                  <span className="text-white font-medium flex items-center gap-2">
-                                    {displayName || `Player ${participant.id.slice(0, 8)}`}
-                                    {isBot && (
-                                      <span className="text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded border border-purple-500/30">
-                                        🤖 Bot
+                              <div className="min-w-0 flex-1 flex items-center gap-2">
+                                <span className="min-w-0 flex-1 truncate text-white font-medium" title={displayName}>
+                                  {displayName}
+                                </span>
+                                {isBot && (
+                                  <span className="shrink-0 text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded border border-purple-500/30">
+                                    🤖 Bot
                                   </span>
-                                    )}
-                                  </span>
-                                </div>
+                                )}
                               </div>
-                              <div className="flex items-center gap-2">
+                              <div className="shrink-0 flex items-center gap-2">
                                 {!isAdminParticipant && (
                                   <Button
                                     variant="danger"
@@ -1606,26 +1599,24 @@ export function PartyLobby({ partyId, onStartGame }) {
                                 .filter((p) => p.status === 'GOING' && p.id !== party?.adminId)
                                 .map((participant) => {
                                   const isBot = userIsBot[participant.id] || participant.id.startsWith('bot_');
-                                  const displayName = userNames[participant.id] && userNames[participant.id] !== participant.id 
-                  ? userNames[participant.id] 
-                                    : `Player ${participant.id.slice(0, 8)}`;
+                                  const displayName = rosterNames[participant.id];
             
             return (
                                     <div
                 key={participant.id}
-                                      className={`flex items-center justify-between p-3 rounded-lg ${
+                                      className={`flex items-center justify-between gap-2 min-w-0 p-3 rounded-lg ${
                                         isBot ? 'bg-purple-900/30 border border-purple-500/30' : 'bg-slate-800/50'
                                       }`}
                                     >
-                                      <span className="text-white font-medium flex items-center gap-2">
+                                      <span className="min-w-0 flex-1 truncate text-white font-medium" title={displayName}>
                                         {displayName}
-                                        {isBot && (
-                                          <span className="text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded border border-purple-500/30">
-                                            🤖 Bot
-                                          </span>
-                                        )}
                                       </span>
-                                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                      {isBot && (
+                                        <span className="shrink-0 text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded border border-purple-500/30">
+                                          🤖 Bot
+                                        </span>
+                                      )}
+                                      <span className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium ${
                         participant.ready === true
                           ? 'bg-green-500/20 text-green-400 border border-green-500/30'
                           : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'

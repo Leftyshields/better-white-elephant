@@ -99,6 +99,39 @@ describe('PartyInviteLanding join', () => {
     );
   });
 
+  it('writes the Google first name and last initial onto the seat', async () => {
+    window.history.replaceState(null, '', `/party/${PARTY_ID}#t=${TOKEN}`);
+    useAuthMock.mockReturnValue({
+      user: { uid: 'guest-1', displayName: 'Alex Kim', email: 'alex.kim@example.com' },
+      signInWithGoogle: vi.fn(),
+      loading: false,
+    });
+    joinMock.mockRejectedValue(Object.assign(new Error('stop before reload'), { code: 'test' }));
+
+    render(<PartyInviteLanding partyId={PARTY_ID} />);
+    fireEvent.click(await screen.findByRole('button', { name: /join this party/i }));
+
+    await waitFor(() => expect(joinMock).toHaveBeenCalledTimes(1));
+    expect(joinMock.mock.calls[0][4]).toMatchObject({ displayName: 'Alex', lastInitial: 'K' });
+  });
+
+  it('leaves the seat name off when the Google name is email-shaped', async () => {
+    window.history.replaceState(null, '', `/party/${PARTY_ID}#t=${TOKEN}`);
+    useAuthMock.mockReturnValue({
+      user: { uid: 'guest-1', displayName: 'alex@example.com', email: 'alex@example.com' },
+      signInWithGoogle: vi.fn(),
+      loading: false,
+    });
+    joinMock.mockRejectedValue(Object.assign(new Error('stop before reload'), { code: 'test' }));
+
+    render(<PartyInviteLanding partyId={PARTY_ID} />);
+    fireEvent.click(await screen.findByRole('button', { name: /join this party/i }));
+
+    await waitFor(() => expect(joinMock).toHaveBeenCalledTimes(1));
+    expect(joinMock.mock.calls[0][4]).not.toHaveProperty('displayName');
+    expect(joinMock.mock.calls[0][4]).not.toHaveProperty('lastInitial');
+  });
+
   it('sends no token when the link has none (rules then refuse the join)', async () => {
     window.history.replaceState(null, '', `/party/${PARTY_ID}?t=${TOKEN}`);
     useAuthMock.mockReturnValue({ user: { uid: 'guest-1' }, signInWithGoogle: vi.fn(), loading: false });

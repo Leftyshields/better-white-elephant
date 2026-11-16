@@ -129,6 +129,27 @@ service cloud.firestore {
         && !name.matches('.*@.*');
     }
 
+    // Public seat name on participants/{uid} (client/src/utils/seatDisplayName.js). displayName is
+    // the one seat name field (Google first name now, item 2's typed guest name later); both optional.
+    function validSeatLastInitial(initial) {
+      return initial is string && initial.matches('^[A-Z]$');
+    }
+
+    function seatNameFieldsOkOnCreate() {
+      let data = request.resource.data;
+      return (!data.keys().hasAny(['displayName']) || validHostDisplayName(data.displayName))
+        && (!data.keys().hasAny(['lastInitial']) || validSeatLastInitial(data.lastInitial));
+    }
+
+    // Updates check only changed name fields, so legacy seats can still change status and ready.
+    // Only the seat's owner may change its name (the host cannot rename a guest).
+    function seatNameFieldsOkOnUpdate(participantId) {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return (!changed.hasAny(['displayName', 'lastInitial']) || participantId == request.auth.uid)
+        && (!changed.hasAny(['displayName']) || validHostDisplayName(request.resource.data.displayName))
+        && (!changed.hasAny(['lastInitial']) || validSeatLastInitial(request.resource.data.lastInitial));
+    }
+
     function hostDisplayNameOkOnWrite() {
       return !request.resource.data.keys().hasAny(['hostDisplayName'])
         || validHostDisplayName(request.resource.data.hostDisplayName);
@@ -280,11 +301,13 @@ service cloud.firestore {
         // join (LOBBY only, invite token proof, counter +1, cap 30)
         allow create: if isAuthenticated() &&
                         participantId == request.auth.uid &&
+                        seatNameFieldsOkOnCreate() &&
                         (isCreatingPartyAsHost(partyId) || participantJoinAllowed(partyId));
         
         // Users can update their own participant status
         allow update: if isAuthenticated() && 
-                        (participantId == request.auth.uid || isPartyAdmin(partyId));
+                        (participantId == request.auth.uid || isPartyAdmin(partyId)) &&
+                        seatNameFieldsOkOnUpdate(participantId);
         
         // Only admin can delete participants, decrementing participantCount in the same batch
         allow delete: if isPartyAdmin(partyId) && participantRemovalCounted(partyId);
