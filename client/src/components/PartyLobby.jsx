@@ -29,6 +29,7 @@ import {
 import { db } from '../utils/firebase.js';
 import { filterVisiblePendingInvites, canResendPartyInvite } from '../utils/pendingInvites.js';
 import { getStartGameFailureMessage, START_GAME_GENERIC_ERROR } from '../utils/startGameResponse.js';
+import { buildPartyShareLink, ensureInviteToken, removeParticipantSeat } from '../utils/partyInvite.js';
 export function PartyLobby({ partyId, onStartGame }) {
   const { user } = useAuth();
   const { party, participants, pendingInvites, gifts, loading } = useParty(partyId);
@@ -44,6 +45,7 @@ export function PartyLobby({ partyId, onStartGame }) {
   const [showShareModal, setShowShareModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
+  const [inviteToken, setInviteToken] = useState(null);
   const [userNames, setUserNames] = useState({});
   const [userIsBot, setUserIsBot] = useState({});
   const [newPersonName, setNewPersonName] = useState('');
@@ -65,6 +67,22 @@ export function PartyLobby({ partyId, onStartGame }) {
   const [loadingAdminAddress, setLoadingAdminAddress] = useState(false);
   const [userShippingAddress, setUserShippingAddress] = useState(null);
   const [loadingUserAddress, setLoadingUserAddress] = useState(false);
+
+  // Host share link needs the invite token (host-only doc); older parties get one minted here
+  useEffect(() => {
+    if (!showShareModal || !isAdmin || inviteToken) return undefined;
+    let cancelled = false;
+    ensureInviteToken(db, partyId)
+      .then((token) => {
+        if (!cancelled) setInviteToken(token);
+      })
+      .catch((error) => {
+        console.error('Error loading invite link:', { code: error?.code, name: error?.name });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showShareModal, isAdmin, inviteToken, partyId]);
 
   // Fetch user names and emails for participants
   useEffect(() => {
@@ -592,7 +610,7 @@ export function PartyLobby({ partyId, onStartGame }) {
     }
 
     try {
-      await deleteDoc(doc(db, 'parties', partyId, 'participants', participantId));
+      await removeParticipantSeat(db, party, participantId);
       // Also delete their gift if they have one
       const giftsSnapshot = await getDocs(
         query(
@@ -1794,13 +1812,14 @@ export function PartyLobby({ partyId, onStartGame }) {
           <div className="flex gap-2">
             <Input
               type="text"
-              value={`${window.location.origin}/party/${partyId}`}
+              value={inviteToken ? buildPartyShareLink(window.location.origin, partyId, inviteToken) : ''}
               readOnly
               className="flex-1 font-mono text-sm"
             />
             <Button
               onClick={async () => {
-                const link = `${window.location.origin}/party/${partyId}`;
+                if (!inviteToken) return;
+                const link = buildPartyShareLink(window.location.origin, partyId, inviteToken);
                 try {
                   await navigator.clipboard.writeText(link);
                   setLinkCopied(true);
@@ -1818,6 +1837,7 @@ export function PartyLobby({ partyId, onStartGame }) {
                 }
               }}
               variant={linkCopied ? 'secondary' : 'primary'}
+              disabled={!inviteToken}
             >
               {linkCopied ? 'Copied!' : 'Copy'}
             </Button>

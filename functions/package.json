@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "test": "node --test dataRetentionCleanup.test.mjs acceptPendingInvitesLogic.test.mjs lib/display-names.test.mjs ../server/lib/backfill-leaked-display-names.test.mjs sendPartyInvite.test.mjs notifyGiftSubmitter.test.mjs",
+    "test": "node --test anonymousUserCleanup.test.mjs dataRetentionCleanup.test.mjs acceptPendingInvitesLogic.test.mjs lib/display-names.test.mjs ../server/lib/backfill-leaked-display-names.test.mjs sendPartyInvite.test.mjs notifyGiftSubmitter.test.mjs",
     "build": "echo 'No build step required'",
     "serve": "firebase emulators:start --only functions",
     "shell": "firebase functions:shell",

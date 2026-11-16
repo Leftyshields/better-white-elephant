@@ -26,6 +26,7 @@ import {
   markPendingInvitesAcceptedForParticipantJoin,
 } from './acceptPendingInvitesLogic.js';
 import { handleSendPartyInviteRequest } from './sendPartyInviteHandler.js';
+import { runAnonymousUserCleanup } from './anonymousUserCleanup.js';
 import {
   SEND_PARTY_INVITE_ERRORS,
 } from './sendPartyInviteLogic.js';
@@ -355,6 +356,13 @@ async function queuePartySubtreeDeletes(partyId, partyRef, operations) {
   invitesSnapshot.docs.forEach((doc) => {
     operations.push({ type: 'delete', ref: doc.ref });
   });
+
+  // Invite token and join proofs (rules-only invite token, item 1)
+  operations.push({ type: 'delete', ref: partyRef.collection('private').doc('invite') });
+  const joinProofsSnapshot = await partyRef.collection('joinProofs').get();
+  joinProofsSnapshot.docs.forEach((doc) => {
+    operations.push({ type: 'delete', ref: doc.ref });
+  });
 }
 
 /**
@@ -547,4 +555,25 @@ export const dataRetentionCleanup = onSchedule(
   }
 );
 
-
+/**
+ * Delete unlinked anonymous guests older than 30 days, plus their seat, join proof and gift docs
+ * in ENDED parties past the 30-day post-game window. Counts-only logging.
+ * Deploy by name only: firebase deploy --only functions:anonymousUserCleanup
+ */
+export const anonymousUserCleanup = onSchedule(
+  {
+    schedule: 'every day 03:00',
+    timeZone: 'UTC',
+  },
+  async () => {
+    try {
+      return await runAnonymousUserCleanup({ db, auth: admin.auth() });
+    } catch (error) {
+      console.error('anonymousUserCleanup failed:', {
+        code: error?.code,
+        name: error?.name,
+      });
+      throw error;
+    }
+  }
+);

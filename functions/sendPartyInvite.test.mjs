@@ -9,6 +9,9 @@ import {
   SEND_PARTY_INVITE_ERRORS,
   assertCallerIsPartyHost,
   buildGiftSubmitterNotifyHtml,
+  buildPartyInviteLink,
+  generateInviteToken,
+  isValidInviteToken,
   buildInviteEmailHtml,
   escapeHtml,
   inviteEmailSubject,
@@ -217,9 +220,41 @@ test('normalizeInviteEmail rejects invalid addresses', () => {
   assert.equal(normalizeInviteEmail('not-an-email'), null);
 });
 
-test('assertCallerIsPartyHost requires matching adminId', () => {
-  assert.equal(assertCallerIsPartyHost({ adminId: 'host' }, 'host'), true);
-  assert.equal(assertCallerIsPartyHost({ adminId: 'host' }, 'other'), false);
+const googleToken = (uid) => ({ uid, firebase: { sign_in_provider: 'google.com' } });
+
+test('assertCallerIsPartyHost requires matching adminId and a Google sign-in', () => {
+  assert.equal(assertCallerIsPartyHost({ adminId: 'host' }, googleToken('host')), true);
+  assert.equal(assertCallerIsPartyHost({ adminId: 'host' }, googleToken('other')), false);
+  for (const provider of ['anonymous', 'password', 'emailLink', 'custom']) {
+    assert.equal(
+      assertCallerIsPartyHost(
+        { adminId: 'host' },
+        { uid: 'host', email: 'h@example.com', email_verified: true, firebase: { sign_in_provider: provider } },
+      ),
+      false,
+      provider,
+    );
+  }
+  assert.equal(assertCallerIsPartyHost({ adminId: 'host' }, { uid: 'host' }), false);
+  assert.equal(assertCallerIsPartyHost({ adminId: 'host' }, 'host'), false);
+  assert.equal(assertCallerIsPartyHost(null, googleToken('host')), false);
+});
+
+test('invite tokens are 128-bit hex and ride in the link fragment', () => {
+  const a = generateInviteToken();
+  const b = generateInviteToken();
+  assert.match(a, /^[0-9a-f]{32}$/);
+  assert.notEqual(a, b);
+  assert.equal(isValidInviteToken(a), true);
+  assert.equal(isValidInviteToken('nope'), false);
+  assert.equal(
+    buildPartyInviteLink('https://stealorreveal.com', 'p1', a),
+    `https://stealorreveal.com/party/p1#t=${a}`,
+  );
+  assert.equal(
+    buildPartyInviteLink('https://stealorreveal.com', 'p1', 'bad'),
+    'https://stealorreveal.com/party/p1',
+  );
 });
 
 test('pendingInviteBlocksSend only blocks ACCEPTED', () => {
@@ -350,15 +385,22 @@ function makeMockDeps(overrides = {}) {
   const auth = {
     verifyIdToken: async (token) => {
       if (token === 'valid-host') {
-        return { uid: overrides.hostUid ?? 'host-uid' };
+        return {
+          uid: overrides.hostUid ?? 'host-uid',
+          firebase: { sign_in_provider: overrides.provider ?? 'google.com' },
+        };
       }
       throw new Error('invalid');
     },
   };
 
+  const sentEmails = [];
   const getResend = () => ({
     emails: {
-      send: async () => ({ data: { id: 'msg-1' }, error: null }),
+      send: async (message) => {
+        sentEmails.push(message);
+        return { data: { id: 'msg-1' }, error: null };
+      },
     },
   });
 
@@ -368,6 +410,7 @@ function makeMockDeps(overrides = {}) {
     getResend,
     getFromEmail: () => 'noreply@example.com',
     store,
+    sentEmails,
   };
 }
 
@@ -532,4 +575,71 @@ test('handler happy path sends email', async () => {
 
 test('escapeHtml standalone', () => {
   assert.equal(escapeHtml(`a'b"c<d>`), 'a&#39;b&quot;c&lt;d&gt;');
+});
+
+test('handler rejects a party owner who is not signed in with Google', async () => {
+  for (const provider of ['anonymous', 'password', 'emailLink']) {
+    const deps = makeMockDeps({
+      hostUid: 'host-uid',
+      provider,
+      seed: { 'parties/p1': { adminId: 'host-uid', title: 'Party' } },
+    });
+    const result = await handleSendPartyInviteRequest(
+      {
+        body: { email: 'guest@example.com', partyId: 'p1' },
+        headers: { authorization: 'Bearer valid-host' },
+        get: () => undefined,
+      },
+      deps,
+    );
+    assert.equal(result.status, 403, provider);
+    assert.equal(result.body.message, SEND_PARTY_INVITE_ERRORS.notHost);
+    assert.equal(deps.sentEmails.length, 0);
+  }
+});
+
+test('invite email link carries the stored party token in the fragment', async () => {
+  const stored = 'aaaaaaaaaaaaaaaabbbbbbbbbbbbbbbb';
+  const deps = makeMockDeps({
+    hostUid: 'host-uid',
+    seed: {
+      'parties/p1': { adminId: 'host-uid', title: 'Holiday' },
+      'parties/p1/private/invite': { token: stored },
+      'users/host-uid': { displayName: 'Sam' },
+    },
+  });
+  const result = await handleSendPartyInviteRequest(
+    {
+      body: { email: 'guest@example.com', partyId: 'p1' },
+      headers: { authorization: 'Bearer valid-host' },
+      get: () => undefined,
+    },
+    deps,
+  );
+  assert.equal(result.status, 200);
+  assert.equal(deps.sentEmails.length, 1);
+  assert.ok(deps.sentEmails[0].html.includes(`https://stealorreveal.com/party/p1#t=${stored}`));
+  assert.equal(deps.store.get('parties/p1/private/invite').token, stored);
+});
+
+test('invite email mints and stores a token for a party made before tokens', async () => {
+  const deps = makeMockDeps({
+    hostUid: 'host-uid',
+    seed: {
+      'parties/p1': { adminId: 'host-uid', title: 'Holiday' },
+      'users/host-uid': { displayName: 'Sam' },
+    },
+  });
+  const result = await handleSendPartyInviteRequest(
+    {
+      body: { email: 'guest@example.com', partyId: 'p1' },
+      headers: { authorization: 'Bearer valid-host' },
+      get: () => undefined,
+    },
+    deps,
+  );
+  assert.equal(result.status, 200);
+  const minted = deps.store.get('parties/p1/private/invite')?.token;
+  assert.match(minted, /^[0-9a-f]{32}$/);
+  assert.ok(deps.sentEmails[0].html.includes(`/party/p1#t=${minted}`));
 });

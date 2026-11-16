@@ -2,7 +2,7 @@
  * Pure logic and constants for sendPartyInvite (unit-tested without Firebase).
  */
 
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import {
   isSyntheticPlayerDisplayName,
   pickHostNameForInviteFromProfile,
@@ -67,13 +67,41 @@ export function isValidPartyId(partyId) {
   );
 }
 
-export function assertCallerIsPartyHost(party, callerUid) {
+/** Hosts must be signed in with Google (matches firestore.rules isGoogleUser). */
+export const HOST_SIGN_IN_PROVIDER = 'google.com';
+
+/**
+ * True only when the VERIFIED ID token's uid owns the party and the sign-in provider is Google.
+ * Never trust email, email_verified, or "has a token" alone.
+ * @param {{ adminId?: string } | null | undefined} party
+ * @param {{ uid?: string, firebase?: { sign_in_provider?: string } } | null | undefined} decodedToken
+ */
+export function assertCallerIsPartyHost(party, decodedToken) {
+  const callerUid = decodedToken?.uid;
   return (
-    party &&
+    !!party &&
     typeof callerUid === 'string' &&
     callerUid.length > 0 &&
-    party.adminId === callerUid
+    party.adminId === callerUid &&
+    decodedToken?.firebase?.sign_in_provider === HOST_SIGN_IN_PROVIDER
   );
+}
+
+/** 128-bit party invite token as 32 lowercase hex chars (matches firestore.rules validInviteToken). */
+const INVITE_TOKEN_RE = /^[0-9a-f]{32}$/;
+
+export function isValidInviteToken(token) {
+  return typeof token === 'string' && INVITE_TOKEN_RE.test(token);
+}
+
+export function generateInviteToken() {
+  return randomBytes(16).toString('hex');
+}
+
+/** Invite link with the token in the URL fragment (never sent to servers or logged in access logs). */
+export function buildPartyInviteLink(clientUrl, partyId, inviteToken) {
+  const base = `${clientUrl}/party/${encodeURIComponent(partyId)}`;
+  return isValidInviteToken(inviteToken) ? `${base}#t=${inviteToken}` : base;
 }
 
 export function getRateLimitBuckets(nowMs = Date.now()) {

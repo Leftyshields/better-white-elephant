@@ -14,6 +14,9 @@ import {
 } from '@firebase/rules-unit-testing';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { isValidPublicHostDisplayName } from '../server/lib/display-names.js';
+import { createPartyWithInviteToken } from './helpers/party-invite-batches.mjs';
+
+const HOST_SEAT = { status: 'PENDING', turnNumber: null, ready: false };
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const RULES_PATH = resolve(__dirname, '../firestore.rules');
@@ -34,7 +37,8 @@ const baseParty = {
 let testEnv;
 
 function authedDb(uid) {
-  return testEnv.authenticatedContext(uid).firestore();
+  // Hosts must sign in with Google (item 1 gate); model existing users as Google sign-ins.
+  return testEnv.authenticatedContext(uid, { firebase: { sign_in_provider: 'google.com' } }).firestore();
 }
 
 function unauthedDb() {
@@ -64,40 +68,40 @@ describe('parties — hostDisplayName validation', () => {
     const hostDisplayName = 'Holiday Host';
     assert.ok(isValidPublicHostDisplayName(hostDisplayName));
     await assertSucceeds(
-      setDoc(doc(db, 'parties', PARTY_ID), {
+      createPartyWithInviteToken(db, HOST_ID, {
         ...baseParty,
         hostDisplayName,
-      }),
+      }, HOST_SEAT),
     );
   });
 
   it('rejects create when hostDisplayName looks like an email', async () => {
     const db = authedDb(HOST_ID);
     await assertFails(
-      setDoc(doc(db, 'parties', PARTY_ID), {
+      createPartyWithInviteToken(db, HOST_ID, {
         ...baseParty,
         hostDisplayName: 'leak@example.com',
-      }),
+      }, HOST_SEAT),
     );
   });
 
   it('rejects create when hostDisplayName exceeds max length', async () => {
     const db = authedDb(HOST_ID);
     await assertFails(
-      setDoc(doc(db, 'parties', PARTY_ID), {
+      createPartyWithInviteToken(db, HOST_ID, {
         ...baseParty,
         hostDisplayName: 'x'.repeat(65),
-      }),
+      }, HOST_SEAT),
     );
   });
 
   it('rejects create when hostDisplayName has leading or trailing whitespace', async () => {
     const db = authedDb(HOST_ID);
     await assertFails(
-      setDoc(doc(db, 'parties', PARTY_ID), {
+      createPartyWithInviteToken(db, HOST_ID, {
         ...baseParty,
         hostDisplayName: ' Trimmed Host ',
-      }),
+      }, HOST_SEAT),
     );
   });
 

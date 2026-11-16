@@ -6,9 +6,6 @@ import {
   onAuthStateChanged,
   signInWithEmailLink,
   signInWithPopup,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  updateProfile,
   GoogleAuthProvider,
   signOut as firebaseSignOut,
 } from 'firebase/auth';
@@ -28,7 +25,6 @@ import {
   hostDisplayNameForPartyDoc,
   isValidPublicHostDisplayName,
   resolveSyncedFirestoreDisplayName,
-  sanitizeUserChosenDisplayName,
 } from '../../../server/lib/display-names.js';
 
 export function useAuth() {
@@ -117,6 +113,9 @@ export function useAuth() {
     }
   };
 
+  // NOTE (item 3): when anonymous guests are enabled, a guest who later hosts must upgrade with
+  // linkWithPopup(auth.currentUser, provider) so their uid (seat, gift, win) is kept. Calling
+  // signInWithPopup here would switch them to a different uid.
   const signInWithGoogle = async (forceAccountSelection = false) => {
     try {
       const provider = new GoogleAuthProvider();
@@ -139,28 +138,6 @@ export function useAuth() {
     }
   };
 
-  const signInWithEmailAndPasswordHandler = async (email, password) => {
-    try {
-      const result = await signInWithEmailAndPassword(auth, email, password);
-      return { success: true, user: result.user };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  };
-
-  const signUpWithEmailAndPassword = async (email, password, displayName = null) => {
-    try {
-      const result = await createUserWithEmailAndPassword(auth, email, password);
-      const safeDisplayName = sanitizeUserChosenDisplayName(displayName);
-      if (safeDisplayName && result.user) {
-        await updateProfile(result.user, { displayName: safeDisplayName });
-      }
-      return { success: true, user: result.user };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  };
-
   const signOut = async () => {
     try {
       await firebaseSignOut(auth);
@@ -175,8 +152,6 @@ export function useAuth() {
     loading,
     signInWithEmailLink: signInWithEmailLinkHandler,
     signInWithGoogle,
-    signInWithEmailAndPassword: signInWithEmailAndPasswordHandler,
-    signUpWithEmailAndPassword,
     signOut,
   };
 }

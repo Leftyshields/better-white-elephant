@@ -16,6 +16,7 @@ import { checkAndMakeBotMove } from './utils/bot-utils.js';
 import { handlePickGift } from './handlers/pick-gift.js';
 import { incrementPartyReactionCount } from './utils/party-reaction-count.mjs';
 import { clientSafeSocketGameErrorMessage } from './utils/socket-error-copy.js';
+import { isPartyHostCaller } from './lib/host-auth.js';
 
 dotenv.config();
 
@@ -570,7 +571,7 @@ io.on('connection', (socket) => {
 
       const party = partyDoc.data();
       console.log(`📋 Party data:`, { adminId: party.adminId, status: party.status, userId: socket.userId });
-      if (party.adminId !== socket.userId) {
+      if (!isPartyHostCaller(party, socket.user)) {
         console.log(`❌ User ${socket.userId} is not admin (adminId: ${party.adminId})`);
         socket.emit('error', { message: 'Only party admin can add bots' });
         return;
@@ -664,6 +665,11 @@ io.on('connection', (socket) => {
         addedBots.push({ id: botId, name: botName, gift: giftData.title });
       }
 
+      // Keep the per-party seat counter in step (Firestore rules cap guest joins at 30 seats)
+      batch.update(db.collection('parties').doc(partyId), {
+        participantCount: admin.firestore.FieldValue.increment(addedBots.length),
+      });
+
       // Commit all writes
       console.log(`💾 Committing batch with ${addedBots.length} bots to Firestore...`);
       console.log(`📝 Bot IDs being created:`, addedBots.map(b => b.id));
@@ -730,7 +736,7 @@ io.on('connection', (socket) => {
       }
 
       const party = partyDoc.data();
-      if (party.adminId !== socket.userId) {
+      if (!isPartyHostCaller(party, socket.user)) {
         socket.emit('error', { message: 'Only party admin can toggle autoplay' });
         return;
       }
@@ -779,7 +785,7 @@ io.on('connection', (socket) => {
       }
 
       const party = partyDoc.data();
-      if (party.adminId !== socket.userId) {
+      if (!isPartyHostCaller(party, socket.user)) {
         socket.emit('error', { message: 'Only party admin can force bot moves' });
         return;
       }
@@ -813,7 +819,7 @@ io.on('connection', (socket) => {
       }
 
       const party = partyDoc.data();
-      if (party.adminId !== socket.userId) {
+      if (!isPartyHostCaller(party, socket.user)) {
         socket.emit('error', { message: 'Only party admin can force bot moves' });
         return;
       }
@@ -847,7 +853,7 @@ io.on('connection', (socket) => {
       }
 
       const party = partyDoc.data();
-      if (party.adminId !== socket.userId) {
+      if (!isPartyHostCaller(party, socket.user)) {
         socket.emit('error', { message: 'Only party admin can force bot moves' });
         return;
       }
@@ -881,7 +887,7 @@ io.on('connection', (socket) => {
       }
 
       const party = partyDoc.data();
-      if (party.adminId !== socket.userId) {
+      if (!isPartyHostCaller(party, socket.user)) {
         socket.emit('error', { message: 'Only party admin can force bot moves' });
         return;
       }
@@ -916,7 +922,7 @@ io.on('connection', (socket) => {
       }
 
       const party = partyDoc.data();
-      if (party.adminId !== socket.userId) {
+      if (!isPartyHostCaller(party, socket.user)) {
         socket.emit('error', { message: 'Only party admin can reset game' });
         return;
       }

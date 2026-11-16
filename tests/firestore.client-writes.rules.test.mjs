@@ -19,6 +19,7 @@ import {
   addDoc,
   deleteDoc,
 } from 'firebase/firestore';
+import { createPartyWithInviteToken, joinPartyWithInviteToken } from './helpers/party-invite-batches.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const RULES_PATH = resolve(__dirname, '../firestore.rules');
@@ -41,6 +42,16 @@ const lobbyParty = {
   updatedAt: new Date('2025-01-01T00:00:00Z'),
 };
 
+const HOST_SEAT = {
+  status: 'PENDING',
+  turnNumber: null,
+  ready: false,
+  joinedAt: new Date(),
+  updatedAt: new Date(),
+};
+
+const INVITE_TOKEN = '0123456789abcdef0123456789abcdef';
+
 const giftPayload = {
   partyId: PARTY_ID,
   submitterId: GUEST_ID,
@@ -58,7 +69,8 @@ const giftPayload = {
 let testEnv;
 
 function authedDb(uid) {
-  return testEnv.authenticatedContext(uid).firestore();
+  // Hosts must sign in with Google (item 1 gate); model existing users as Google sign-ins.
+  return testEnv.authenticatedContext(uid, { firebase: { sign_in_provider: 'google.com' } }).firestore();
 }
 
 async function seedLobbyParty() {
@@ -86,10 +98,10 @@ beforeEach(async () => {
 });
 
 describe('client path: Home.jsx — create party + admin participant', () => {
-  it('addDoc parties with LOBBY fields (create party)', async () => {
+  it('createPartyWithInviteToken: party + host seat + invite token in one batch', async () => {
     const db = authedDb(ADMIN_ID);
     await assertSucceeds(
-      addDoc(collection(db, 'parties'), {
+      createPartyWithInviteToken(db, ADMIN_ID, {
         adminId: ADMIN_ID,
         title: 'New Swap',
         date: new Date('2025-12-01T12:00:00Z'),
@@ -98,25 +110,18 @@ describe('client path: Home.jsx — create party + admin participant', () => {
         config: { maxSteals: 3, returnToStart: false },
         createdAt: new Date(),
         updatedAt: new Date(),
-      }),
+      }, HOST_SEAT),
     );
   });
 
-  it('setDoc parties/{id}/participants/{adminId} on create (Home.jsx)', async () => {
+  it('denies the old two-step create (party alone, no seat or invite token)', async () => {
     const db = authedDb(ADMIN_ID);
-    const partyRef = await addDoc(collection(db, 'parties'), {
-      adminId: ADMIN_ID,
-      status: 'LOBBY',
-      config: { maxSteals: 3, returnToStart: false },
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-    await assertSucceeds(
-      setDoc(doc(db, 'parties', partyRef.id, 'participants', ADMIN_ID), {
-        status: 'PENDING',
-        turnNumber: null,
-        ready: false,
-        joinedAt: new Date(),
+    await assertFails(
+      addDoc(collection(db, 'parties'), {
+        adminId: ADMIN_ID,
+        status: 'LOBBY',
+        config: { maxSteals: 3, returnToStart: false },
+        createdAt: new Date(),
         updatedAt: new Date(),
       }),
     );
@@ -165,46 +170,46 @@ describe('validHostDisplayName — trim-equivalent rules (create + admin update)
   it('accepts a normal hostDisplayName on create', async () => {
     const db = authedDb(ADMIN_ID);
     await assertSucceeds(
-      addDoc(collection(db, 'parties'), {
+      createPartyWithInviteToken(db, ADMIN_ID, {
         ...partyCreateBase,
         hostDisplayName: 'Jessica Host',
-      }),
+      }, HOST_SEAT),
     );
   });
 
   it('rejects whitespace-only hostDisplayName on create', async () => {
     const db = authedDb(ADMIN_ID);
     await assertFails(
-      addDoc(collection(db, 'parties'), {
+      createPartyWithInviteToken(db, ADMIN_ID, {
         ...partyCreateBase,
         hostDisplayName: '   ',
-      }),
+      }, HOST_SEAT),
     );
   });
 
   it('rejects tab-only hostDisplayName on create', async () => {
     const db = authedDb(ADMIN_ID);
     await assertFails(
-      addDoc(collection(db, 'parties'), {
+      createPartyWithInviteToken(db, ADMIN_ID, {
         ...partyCreateBase,
         hostDisplayName: '\t',
-      }),
+      }, HOST_SEAT),
     );
   });
 
   it('rejects leading or trailing space on create', async () => {
     const db = authedDb(ADMIN_ID);
     await assertFails(
-      addDoc(collection(db, 'parties'), {
+      createPartyWithInviteToken(db, ADMIN_ID, {
         ...partyCreateBase,
         hostDisplayName: ' Host Name',
-      }),
+      }, HOST_SEAT),
     );
     await assertFails(
-      addDoc(collection(db, 'parties'), {
+      createPartyWithInviteToken(db, ADMIN_ID, {
         ...partyCreateBase,
         hostDisplayName: 'Host Name ',
-      }),
+      }, HOST_SEAT),
     );
   });
 
@@ -212,10 +217,10 @@ describe('validHostDisplayName — trim-equivalent rules (create + admin update)
     const db = authedDb(ADMIN_ID);
     const longName = `A${'b'.repeat(64)}`;
     await assertFails(
-      addDoc(collection(db, 'parties'), {
+      createPartyWithInviteToken(db, ADMIN_ID, {
         ...partyCreateBase,
         hostDisplayName: longName,
-      }),
+      }, HOST_SEAT),
     );
   });
 
@@ -370,10 +375,15 @@ describe('client path: PartyInviteLanding.jsx / PartyLobby.jsx — participants'
     await seedLobbyParty();
   });
 
-  it('setDoc participant on join (PartyInviteLanding)', async () => {
+  it('joinPartyWithInviteToken on join (PartyInviteLanding)', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'parties', PARTY_ID, 'private', 'invite'), {
+        token: INVITE_TOKEN,
+      });
+    });
     const db = authedDb(GUEST_ID);
     await assertSucceeds(
-      setDoc(doc(db, 'parties', PARTY_ID, 'participants', GUEST_ID), {
+      joinPartyWithInviteToken(db, PARTY_ID, GUEST_ID, INVITE_TOKEN, {
         status: 'GOING',
         turnNumber: null,
         ready: false,

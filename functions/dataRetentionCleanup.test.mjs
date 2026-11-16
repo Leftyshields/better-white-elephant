@@ -301,3 +301,10 @@ test('regression: field-only url delete would leave title and partyId (full doc 
   assert.equal(shouldDeleteGiftForRetention(gift, THIRTY_DAYS_AGO, undefined), true);
   assert.ok(gift.title, 'stale job left non-url fields indefinitely');
 });
+
+test('party subtree delete also removes the invite token and join proofs (item 1)', () => {
+  const start = dataRetentionIndexSource.indexOf('async function queuePartySubtreeDeletes');
+  const body = dataRetentionIndexSource.slice(start, dataRetentionIndexSource.indexOf('\n}\n', start));
+  assert.match(body, /collection\('private'\)\.doc\('invite'\)/);
+  assert.match(body, /collection\('joinProofs'\)\.get\(\)/);
+});
