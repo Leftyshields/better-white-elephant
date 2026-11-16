@@ -31,6 +31,7 @@ import { filterVisiblePendingInvites, canResendPartyInvite } from '../utils/pend
 import { getStartGameFailureMessage, START_GAME_GENERIC_ERROR } from '../utils/startGameResponse.js';
 import { buildPartyShareLink, ensureInviteToken, removeParticipantSeat, rotateInviteToken } from '../utils/partyInvite.js';
 import {
+  HOST_INVITE_LOAD_FAILED,
   HOST_INVITE_ROTATE_CONFIRM,
   HOST_INVITE_ROTATE_CTA,
   HOST_INVITE_ROTATE_DONE,
@@ -42,6 +43,9 @@ import {
 
 const INVITE_ROTATE_FOCUS_RING =
   'focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950';
+
+const SHARE_LINK_FIELD_CLASSES =
+  'w-full min-h-11 px-3 py-2 bg-slate-950/50 border border-slate-700 rounded-md shadow-sm text-white font-mono text-sm break-all whitespace-pre-wrap resize-none focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 focus-visible:border-purple-500';
 
 export function PartyLobby({ partyId, onStartGame }) {
   const { user } = useAuth();
@@ -59,6 +63,8 @@ export function PartyLobby({ partyId, onStartGame }) {
   const [inviteEmail, setInviteEmail] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
   const [inviteToken, setInviteToken] = useState(null);
+  const [inviteLoadFailed, setInviteLoadFailed] = useState(false);
+  const [inviteLoadNonce, setInviteLoadNonce] = useState(0);
   const [inviteRotateDone, setInviteRotateDone] = useState(false);
   const [inviteRotateConfirming, setInviteRotateConfirming] = useState(false);
   const [inviteRotateFailed, setInviteRotateFailed] = useState(false);
@@ -76,6 +82,8 @@ export function PartyLobby({ partyId, onStartGame }) {
   const [savingRules, setSavingRules] = useState(false);
   const [openStep, setOpenStep] = useState(null); // Track which step is open
   const addPersonNameInputId = useId();
+  const shareModalTitleId = useId();
+  const shareIntroId = useId();
   const inviteRotateHelperId = useId();
   const inviteRotateCtaRef = useRef(null);
   const inviteRotateCancelRef = useRef(null);
@@ -96,17 +104,21 @@ export function PartyLobby({ partyId, onStartGame }) {
   useEffect(() => {
     if (!showShareModal || !isAdmin || inviteToken) return undefined;
     let cancelled = false;
+    setInviteLoadFailed(false);
     ensureInviteToken(db, partyId)
       .then((token) => {
-        if (!cancelled) setInviteToken(token);
+        if (!cancelled) {
+          setInviteToken(token);
+          setInviteLoadFailed(false);
+        }
       })
-      .catch((error) => {
-        console.error('Error loading invite link:', { code: error?.code, name: error?.name });
+      .catch(() => {
+        if (!cancelled) setInviteLoadFailed(true);
       });
     return () => {
       cancelled = true;
     };
-  }, [showShareModal, isAdmin, inviteToken, partyId]);
+  }, [showShareModal, isAdmin, inviteToken, partyId, inviteLoadNonce]);
 
   useEffect(() => {
     if (inviteRotateConfirming) {
@@ -142,6 +154,7 @@ export function PartyLobby({ partyId, onStartGame }) {
   }, [inviteRotateConfirming, rotatingInvite]);
 
   const resetInviteRotateUi = () => {
+    setInviteLoadFailed(false);
     setInviteRotateDone(false);
     setInviteRotateConfirming(false);
     setInviteRotateFailed(false);
@@ -149,6 +162,11 @@ export function PartyLobby({ partyId, onStartGame }) {
     rotatingInviteRef.current = false;
     focusInviteRotateCtaAfterCancelRef.current = false;
     focusShareCopyAfterRotateRef.current = false;
+  };
+
+  const retryInviteTokenLoad = () => {
+    setInviteLoadFailed(false);
+    setInviteLoadNonce((n) => n + 1);
   };
 
   const cancelInviteRotateConfirm = () => {
@@ -1903,17 +1921,20 @@ export function PartyLobby({ partyId, onStartGame }) {
           resetInviteRotateUi();
         }}
         title="Share Party Link"
+        titleId={shareModalTitleId}
       >
         <div className="space-y-4">
-          <p className="text-slate-300">
+          <p id={shareIntroId} className="text-slate-300">
             Share this link with friends to let them join your party. Anyone with the link can join!
           </p>
-          <div className="flex gap-2">
-            <Input
-              type="text"
-              value={inviteToken ? buildPartyShareLink(window.location.origin, partyId, inviteToken) : ''}
+          <div className="flex gap-2 items-start">
+            <textarea
               readOnly
-              className="flex-1 font-mono text-sm"
+              rows={3}
+              value={inviteToken ? buildPartyShareLink(window.location.origin, partyId, inviteToken) : ''}
+              aria-labelledby={shareModalTitleId}
+              aria-describedby={shareIntroId}
+              className={`flex-1 ${SHARE_LINK_FIELD_CLASSES}`}
             />
             <Button
               ref={shareCopyButtonRef}
@@ -1942,6 +1963,20 @@ export function PartyLobby({ partyId, onStartGame }) {
               {linkCopied ? 'Copied!' : 'Copy'}
             </Button>
           </div>
+          {inviteLoadFailed && !inviteToken && (
+            <div className="flex flex-wrap items-center gap-2">
+              <p role="alert" className="text-sm text-red-300 flex-1 min-w-[12rem]">
+                {HOST_INVITE_LOAD_FAILED}
+              </p>
+              <button
+                type="button"
+                onClick={retryInviteTokenLoad}
+                className={`inline-flex items-center justify-center min-h-11 min-w-11 px-4 py-2 rounded-md font-medium transition-colors bg-blue-600 text-white hover:bg-blue-700 ${INVITE_ROTATE_FOCUS_RING}`}
+              >
+                {HOST_INVITE_ROTATE_RETRY}
+              </button>
+            </div>
+          )}
           {isGoogleHost && (
             <div className="space-y-2 pt-1">
               {inviteRotateFailed ? (

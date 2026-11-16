@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   getJoinErrorMessage,
+  HOST_INVITE_LOAD_FAILED,
   HOST_INVITE_ROTATE_CONFIRM,
   HOST_INVITE_ROTATE_CTA,
   HOST_INVITE_ROTATE_DONE,
@@ -74,6 +75,13 @@ describe('PARTY_INVITE_COPY Copywriter slots', () => {
     expect(HOST_INVITE_ROTATE_FAILED).toBe(PARTY_INVITE_COPY['host.invite.rotate_failed']);
     expect(HOST_INVITE_ROTATE_RETRY).toBe(PARTY_INVITE_COPY['host.invite.rotate_retry']);
     expect(HOST_INVITE_ROTATE_DONE).toBe(PARTY_INVITE_COPY['host.invite.rotate_done']);
+  });
+
+  it('lands host.invite.load_failed exactly', () => {
+    expect(PARTY_INVITE_COPY['host.invite.load_failed']).toBe(
+      "We couldn't load your invite link.",
+    );
+    expect(HOST_INVITE_LOAD_FAILED).toBe(PARTY_INVITE_COPY['host.invite.load_failed']);
   });
 
   it('uses no em dashes in Copywriter slots', () => {

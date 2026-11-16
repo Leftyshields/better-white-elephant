@@ -19,6 +19,7 @@ export const PARTY_INVITE_COPY = {
     "We couldn't make a new link. Your old one still works.",
   'host.invite.rotate_retry': 'Try again',
   'host.invite.rotate_done': 'New link ready. Resend any invites you still need.',
+  'host.invite.load_failed': "We couldn't load your invite link.",
 };
 
 export const JOIN_ERROR_LINK_INVALID = PARTY_INVITE_COPY['join.error.link_invalid'];
@@ -32,6 +33,7 @@ export const HOST_INVITE_ROTATE_CONFIRM = PARTY_INVITE_COPY['host.invite.rotate_
 export const HOST_INVITE_ROTATE_FAILED = PARTY_INVITE_COPY['host.invite.rotate_failed'];
 export const HOST_INVITE_ROTATE_RETRY = PARTY_INVITE_COPY['host.invite.rotate_retry'];
 export const HOST_INVITE_ROTATE_DONE = PARTY_INVITE_COPY['host.invite.rotate_done'];
+export const HOST_INVITE_LOAD_FAILED = PARTY_INVITE_COPY['host.invite.load_failed'];
 
 /** Firebase Auth provider id for Google hosts (matches server HOST_SIGN_IN_PROVIDER). */
 export const GOOGLE_SIGN_IN_PROVIDER = 'google.com';

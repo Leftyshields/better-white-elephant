@@ -1,10 +1,12 @@
 /**
- * Google host Share Link modal: rotate invite confirm step, success, and failure.
+ * Google host Share Link modal: invite load, accessible full link, rotate confirm/success/failure.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { PartyLobby } from '../../components/PartyLobby.jsx';
+import { buildPartyShareLink } from '../../utils/partyInvite.js';
 import {
+  HOST_INVITE_LOAD_FAILED,
   HOST_INVITE_ROTATE_CONFIRM,
   HOST_INVITE_ROTATE_CTA,
   HOST_INVITE_ROTATE_DONE,
@@ -231,7 +233,9 @@ describe('PartyLobby invite link rotate', () => {
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(HOST_INVITE_ROTATE_FAILED);
     expect(screen.getByRole('button', { name: HOST_INVITE_ROTATE_RETRY })).toBeInTheDocument();
-    expect(screen.getByDisplayValue(new RegExp(`#t=${OLD_TOKEN}`))).toBeInTheDocument();
+    const oldLinkField = screen.getByDisplayValue(new RegExp(`#t=${OLD_TOKEN}`));
+    expect(oldLinkField).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeEnabled();
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: HOST_INVITE_ROTATE_RETRY }));
@@ -241,5 +245,75 @@ describe('PartyLobby invite link rotate', () => {
       expect(screen.getByDisplayValue(new RegExp(`#t=${NEW_TOKEN}`))).toBeInTheDocument();
     });
     expect(screen.getByRole('status')).toHaveTextContent(HOST_INVITE_ROTATE_DONE);
+  });
+
+  it('invite token load failure shows load_failed alert and Try again re-fetches', async () => {
+    ensureInviteTokenMock
+      .mockRejectedValueOnce(new Error('load failed'))
+      .mockResolvedValueOnce(OLD_TOKEN);
+
+    useAuthMock.mockReturnValue({ user: hostUser() });
+    render(<PartyLobby partyId={PARTY_ID} onStartGame={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /Share Link/i }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(HOST_INVITE_LOAD_FAILED);
+    const retry = screen.getByRole('button', { name: HOST_INVITE_ROTATE_RETRY });
+    expect(retry.className).toMatch(/min-h-11/);
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeDisabled();
+    expect(ensureInviteTokenMock).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(retry);
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue(new RegExp(`#t=${OLD_TOKEN}`))).toBeInTheDocument();
+    });
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(ensureInviteTokenMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('share link field is named by the modal title, described by the intro, and shows the full URL', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+
+    await openShareModalAsGoogleHost();
+
+    const expectedLink = buildPartyShareLink(window.location.origin, PARTY_ID, OLD_TOKEN);
+    const linkField = screen.getByRole('textbox', { name: 'Share Party Link' });
+    expect(linkField.tagName).toBe('TEXTAREA');
+    expect(linkField).toHaveValue(expectedLink);
+    expect(linkField.className).toMatch(/break-all/);
+    expect(linkField).not.toHaveClass('truncate');
+
+    const labelledBy = linkField.getAttribute('aria-labelledby');
+    expect(document.getElementById(labelledBy)).toHaveTextContent('Share Party Link');
+    const describedBy = linkField.getAttribute('aria-describedby');
+    expect(document.getElementById(describedBy)).toHaveTextContent(
+      'Share this link with friends to let them join your party. Anyone with the link can join!',
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(expectedLink);
+    });
+    expect(expectedLink).toContain(`#t=${OLD_TOKEN}`);
+  });
+
+  it('after rotate the full new URL is visible and different from the old link', async () => {
+    const rotateCta = await openShareModalAsGoogleHost();
+    const oldLink = buildPartyShareLink(window.location.origin, PARTY_ID, OLD_TOKEN);
+    const newLink = buildPartyShareLink(window.location.origin, PARTY_ID, NEW_TOKEN);
+    expect(oldLink).not.toBe(newLink);
+
+    fireEvent.click(rotateCta);
+    fireEvent.click(screen.getByRole('button', { name: HOST_INVITE_ROTATE_CONFIRM }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('textbox', { name: 'Share Party Link' })).toHaveValue(newLink);
+    });
+    expect(screen.queryByDisplayValue(oldLink)).not.toBeInTheDocument();
   });
 });

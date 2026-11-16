@@ -324,10 +324,11 @@ service cloud.firestore {
                      (isParticipant(resource.data.partyId) || 
                       get(/databases/$(database)/documents/parties/$(resource.data.partyId)).data.status == 'LOBBY');
       
-      // Create while party is LOBBY; submitterId must match auth and stay server-defaulted fields
+      // Create while party is LOBBY; caller must hold a seat; submitterId must match auth
       allow create: if isAuthenticated() && 
                        giftCreateValid() &&
-                       partyIsLobby(request.resource.data.partyId);
+                       partyIsLobby(request.resource.data.partyId) &&
+                       isParticipant(request.resource.data.partyId);
       
       // Submitter may update gift metadata only while party is LOBBY (submitterId immutable)
       allow update: if isAuthenticated() && 
