@@ -28,6 +28,7 @@ import {
 } from '../../../server/lib/display-names.js';
 import { trackCreateParty, trackButtonClick, trackGameAbandoned, trackError } from '../utils/analytics.js';
 import { createPartyWithInviteToken } from '../utils/partyInvite.js';
+import { seatNameFields } from '../utils/seatDisplayName.js';
 import { usePartyModal } from '../contexts/PartyModalContext.jsx';
 import { Footer } from '../components/Footer.jsx';
 import { SEO } from '../components/SEO.jsx';
@@ -307,6 +308,7 @@ export function Home() {
         ready: false,
         joinedAt: new Date(),
         updatedAt: new Date(),
+        ...seatNameFields(user.displayName, user.email),
       });
 
       // Track party creation

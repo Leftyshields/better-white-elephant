@@ -9,6 +9,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../utils/firebase.js';
 import { joinPartyWithInviteToken, readInviteTokenFromHash } from '../utils/partyInvite.js';
 import { getJoinErrorMessage } from '../utils/partyInviteCopy.js';
+import { seatNameFields } from '../utils/seatDisplayName.js';
 import { trackParticipantJoin, trackError } from '../utils/analytics.js';
 import { GiftIcon } from '@heroicons/react/24/outline';
 import { Snowflakes } from './Snowflakes.jsx';
@@ -122,6 +123,7 @@ export function PartyInviteLanding({ partyId }) {
         ready: false,
         joinedAt: new Date(),
         updatedAt: new Date(),
+        ...seatNameFields(user.displayName, user.email),
       });
 
       // Track join via share link (most common case for invite landing)
