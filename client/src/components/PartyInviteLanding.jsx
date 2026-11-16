@@ -137,7 +137,11 @@ export function PartyInviteLanding({ partyId }) {
         partyId,
         userId: user?.uid
       });
-      const joinMessage = getJoinErrorMessage(partyState);
+      const joinMessage = getJoinErrorMessage({
+        party: partyState,
+        error,
+        hasToken: Boolean(inviteToken),
+      });
       trackError('join_party_failed', joinMessage, 'PartyInviteLanding');
       alert(joinMessage);
       setJoining(false);

@@ -7,12 +7,15 @@ import {
   HOST_INVITE_ROTATE_CTA,
   HOST_INVITE_ROTATE_DONE,
   HOST_INVITE_ROTATE_HELPER,
+  JOIN_ERROR_GENERIC,
   JOIN_ERROR_LINK_INVALID,
   JOIN_ERROR_PARTY_FULL,
   JOIN_ERROR_STARTED,
   PARTY_INVITE_COPY,
   userSignedInWithGoogle,
 } from '../../utils/partyInviteCopy.js';
+
+const LOBBY = { status: 'LOBBY', participantCount: 5 };
 
 describe('PARTY_INVITE_COPY Copywriter slots', () => {
   it('lands join.error.link_invalid exactly', () => {
@@ -34,6 +37,13 @@ describe('PARTY_INVITE_COPY Copywriter slots', () => {
       "This game has already started, so you can't join it.",
     );
     expect(JOIN_ERROR_STARTED).toBe(PARTY_INVITE_COPY['join.error.started']);
+  });
+
+  it('lands join.error.generic exactly', () => {
+    expect(PARTY_INVITE_COPY['join.error.generic']).toBe(
+      "We couldn't get you into this party. Try again in a moment.",
+    );
+    expect(JOIN_ERROR_GENERIC).toBe(PARTY_INVITE_COPY['join.error.generic']);
   });
 
   it('lands host.invite.rotate_* exactly', () => {
@@ -59,21 +69,137 @@ describe('PARTY_INVITE_COPY Copywriter slots', () => {
 
 describe('getJoinErrorMessage', () => {
   it('maps status != LOBBY to join.error.started', () => {
-    expect(getJoinErrorMessage({ status: 'ACTIVE', participantCount: 2 })).toBe(JOIN_ERROR_STARTED);
-    expect(getJoinErrorMessage({ status: 'ENDED', participantCount: 2 })).toBe(JOIN_ERROR_STARTED);
-    expect(getJoinErrorMessage({ status: 'CANCELLED', participantCount: 2 })).toBe(JOIN_ERROR_STARTED);
+    expect(
+      getJoinErrorMessage({
+        party: { status: 'ACTIVE', participantCount: 2 },
+        error: { code: 'permission-denied' },
+        hasToken: true,
+      }),
+    ).toBe(JOIN_ERROR_STARTED);
+    expect(
+      getJoinErrorMessage({
+        party: { status: 'ENDED', participantCount: 2 },
+        error: { code: 'unavailable' },
+        hasToken: true,
+      }),
+    ).toBe(JOIN_ERROR_STARTED);
+    expect(
+      getJoinErrorMessage({
+        party: { status: 'CANCELLED', participantCount: 2 },
+        hasToken: false,
+      }),
+    ).toBe(JOIN_ERROR_STARTED);
   });
 
   it('maps participantCount >= 30 in LOBBY to join.error.party_full', () => {
-    expect(getJoinErrorMessage({ status: 'LOBBY', participantCount: 30 })).toBe(JOIN_ERROR_PARTY_FULL);
-    expect(getJoinErrorMessage({ status: 'LOBBY', participantCount: 31 })).toBe(JOIN_ERROR_PARTY_FULL);
+    expect(
+      getJoinErrorMessage({
+        party: { status: 'LOBBY', participantCount: 30 },
+        error: { code: 'permission-denied' },
+        hasToken: true,
+      }),
+    ).toBe(JOIN_ERROR_PARTY_FULL);
+    expect(
+      getJoinErrorMessage({
+        party: { status: 'LOBBY', participantCount: 31 },
+        hasToken: true,
+      }),
+    ).toBe(JOIN_ERROR_PARTY_FULL);
   });
 
-  it('maps LOBBY under the cap (permission-denied / bad token) to join.error.link_invalid', () => {
-    expect(getJoinErrorMessage({ status: 'LOBBY', participantCount: 5 })).toBe(JOIN_ERROR_LINK_INVALID);
-    expect(getJoinErrorMessage({ status: 'LOBBY', participantCount: 29 })).toBe(JOIN_ERROR_LINK_INVALID);
-    expect(getJoinErrorMessage({ status: 'LOBBY' })).toBe(JOIN_ERROR_LINK_INVALID);
-    expect(getJoinErrorMessage(null)).toBe(JOIN_ERROR_LINK_INVALID);
+  it('maps missing token to join.error.link_invalid', () => {
+    expect(
+      getJoinErrorMessage({
+        party: LOBBY,
+        error: { code: 'permission-denied' },
+        hasToken: false,
+      }),
+    ).toBe(JOIN_ERROR_LINK_INVALID);
+    expect(
+      getJoinErrorMessage({
+        party: null,
+        error: { code: 'unavailable' },
+        hasToken: false,
+      }),
+    ).toBe(JOIN_ERROR_LINK_INVALID);
+  });
+
+  it('maps permission-denied with token in an open lobby to join.error.link_invalid', () => {
+    expect(
+      getJoinErrorMessage({
+        party: LOBBY,
+        error: { code: 'permission-denied' },
+        hasToken: true,
+      }),
+    ).toBe(JOIN_ERROR_LINK_INVALID);
+    expect(
+      getJoinErrorMessage({
+        party: { status: 'LOBBY', participantCount: 29 },
+        error: { code: 'firestore/permission-denied' },
+        hasToken: true,
+      }),
+    ).toBe(JOIN_ERROR_LINK_INVALID);
+  });
+
+  it('maps unavailable to join.error.generic', () => {
+    expect(
+      getJoinErrorMessage({
+        party: LOBBY,
+        error: { code: 'unavailable' },
+        hasToken: true,
+      }),
+    ).toBe(JOIN_ERROR_GENERIC);
+  });
+
+  it('maps deadline-exceeded to join.error.generic', () => {
+    expect(
+      getJoinErrorMessage({
+        party: LOBBY,
+        error: { code: 'deadline-exceeded' },
+        hasToken: true,
+      }),
+    ).toBe(JOIN_ERROR_GENERIC);
+  });
+
+  it('maps error with no code to join.error.generic', () => {
+    expect(
+      getJoinErrorMessage({
+        party: LOBBY,
+        error: new Error('network blip'),
+        hasToken: true,
+      }),
+    ).toBe(JOIN_ERROR_GENERIC);
+    expect(
+      getJoinErrorMessage({
+        party: LOBBY,
+        error: {},
+        hasToken: true,
+      }),
+    ).toBe(JOIN_ERROR_GENERIC);
+  });
+
+  it('maps party read failure to join.error.generic when a token is present', () => {
+    expect(
+      getJoinErrorMessage({
+        party: null,
+        error: { code: 'unavailable' },
+        hasToken: true,
+      }),
+    ).toBe(JOIN_ERROR_GENERIC);
+    expect(
+      getJoinErrorMessage({
+        party: null,
+        error: { code: 'permission-denied' },
+        hasToken: true,
+      }),
+    ).toBe(JOIN_ERROR_GENERIC);
+    expect(
+      getJoinErrorMessage({
+        party: undefined,
+        error: { code: 'deadline-exceeded' },
+        hasToken: true,
+      }),
+    ).toBe(JOIN_ERROR_GENERIC);
   });
 });
 

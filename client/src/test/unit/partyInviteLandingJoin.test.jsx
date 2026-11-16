@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { PartyInviteLanding } from '../../components/PartyInviteLanding.jsx';
 import {
+  JOIN_ERROR_GENERIC,
   JOIN_ERROR_LINK_INVALID,
   JOIN_ERROR_PARTY_FULL,
   JOIN_ERROR_STARTED,
@@ -172,5 +173,55 @@ describe('PartyInviteLanding join', () => {
     fireEvent.click(await screen.findByRole('button', { name: /join this party/i }));
 
     await waitFor(() => expect(window.alert).toHaveBeenCalledWith(JOIN_ERROR_LINK_INVALID));
+  });
+
+  it('alerts join.error.link_invalid when the URL fragment has no token', async () => {
+    window.history.replaceState(null, '', `/party/${PARTY_ID}`);
+    useAuthMock.mockReturnValue({ user: { uid: 'guest-1' }, signInWithGoogle: vi.fn(), loading: false });
+    joinMock.mockRejectedValue(Object.assign(new Error('denied'), { code: 'permission-denied' }));
+
+    render(<PartyInviteLanding partyId={PARTY_ID} />);
+    fireEvent.click(await screen.findByRole('button', { name: /join this party/i }));
+
+    await waitFor(() => expect(window.alert).toHaveBeenCalledWith(JOIN_ERROR_LINK_INVALID));
+  });
+
+  it('alerts join.error.generic for unavailable (not link_invalid)', async () => {
+    window.history.replaceState(null, '', `/party/${PARTY_ID}#t=${TOKEN}`);
+    useAuthMock.mockReturnValue({ user: { uid: 'guest-1' }, signInWithGoogle: vi.fn(), loading: false });
+    joinMock.mockRejectedValue(Object.assign(new Error('blip'), { code: 'unavailable' }));
+
+    render(<PartyInviteLanding partyId={PARTY_ID} />);
+    fireEvent.click(await screen.findByRole('button', { name: /join this party/i }));
+
+    await waitFor(() => expect(window.alert).toHaveBeenCalledWith(JOIN_ERROR_GENERIC));
+  });
+
+  it('alerts join.error.generic when the pre-join party read fails', async () => {
+    window.history.replaceState(null, '', `/party/${PARTY_ID}#t=${TOKEN}`);
+    let partyDocReads = 0;
+    getDocMock.mockImplementation(async (ref) => {
+      if (ref.path === `parties/${PARTY_ID}`) {
+        partyDocReads += 1;
+        // First call: landing info. Second: pre-join read in handleJoin — fail that one.
+        if (partyDocReads === 1) {
+          return partyDoc({
+            title: 'Swap',
+            adminId: 'host-uid-1',
+            status: 'LOBBY',
+            participantCount: 2,
+          });
+        }
+        throw Object.assign(new Error('read failed'), { code: 'unavailable' });
+      }
+      return { exists: () => false, data: () => undefined };
+    });
+    useAuthMock.mockReturnValue({ user: { uid: 'guest-1' }, signInWithGoogle: vi.fn(), loading: false });
+
+    render(<PartyInviteLanding partyId={PARTY_ID} />);
+    fireEvent.click(await screen.findByRole('button', { name: /join this party/i }));
+
+    await waitFor(() => expect(window.alert).toHaveBeenCalledWith(JOIN_ERROR_GENERIC));
+    expect(joinMock).not.toHaveBeenCalled();
   });
 });
