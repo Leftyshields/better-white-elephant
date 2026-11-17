@@ -29,7 +29,7 @@ Runs on pushes to `main` branch or can be manually triggered.
 
 **Required Secrets:**
 - `VITE_FIREBASE_API_KEY`
-- `VITE_FIREBASE_AUTH_DOMAIN`
+- `VITE_FIREBASE_AUTH_DOMAIN` (production must be `stealorreveal.com`, not the default `*.firebaseapp.com` domain)
 - `VITE_FIREBASE_PROJECT_ID`
 - `VITE_FIREBASE_STORAGE_BUCKET`
 - `VITE_FIREBASE_MESSAGING_SENDER_ID`
