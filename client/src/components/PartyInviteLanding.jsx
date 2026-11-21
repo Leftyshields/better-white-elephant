@@ -81,18 +81,23 @@ export function PartyInviteLanding({ partyId }) {
   // party that can't be joined (started, cancelled, or no token in the link).
   useEffect(() => {
     if (!partyInfo || authLoading || seatStartedRef.current) return;
-    const late = lateVisitorState(partyInfo, 'not-seated');
-    if (late) {
-      setLateState(late);
-      return;
-    }
-    const preRefusal =
-      partyInfo.status !== 'LOBBY' || (!inviteToken && !user)
-        ? getJoinErrorMessage({ party: partyInfo, error: null, hasToken: Boolean(inviteToken) })
-        : null;
-    if (preRefusal) {
-      setTerminalMessage(preRefusal);
-      return;
+    // Only treat the visitor as not seated when there is no session. Party may
+    // send a signed-in user here on a failed or empty party list; those visitors
+    // must wait for the own-seat read below.
+    if (!user) {
+      const late = lateVisitorState(partyInfo, 'not-seated');
+      if (late) {
+        setLateState(late);
+        return;
+      }
+      const preRefusal =
+        partyInfo.status !== 'LOBBY' || !inviteToken
+          ? getJoinErrorMessage({ party: partyInfo, error: null, hasToken: Boolean(inviteToken) })
+          : null;
+      if (preRefusal) {
+        setTerminalMessage(preRefusal);
+        return;
+      }
     }
     seatStartedRef.current = true;
     (async () => {
@@ -101,6 +106,12 @@ export function PartyInviteLanding({ partyId }) {
         const sessionUser = await ensureGuestSession();
         const seat = await getDoc(doc(db, 'parties', partyId, 'participants', sessionUser.uid));
         if (seat.exists()) return;
+        const lateForSignedIn = lateVisitorState(partyInfo, 'not-seated');
+        if (lateForSignedIn) {
+          setLateState(lateForSignedIn);
+          setSeatCheckDone(true);
+          return;
+        }
         setSeatCheckDone(true);
         if (!inviteToken) {
           setTerminalMessage(getJoinErrorMessage({ party: partyInfo, error: null, hasToken: false }));

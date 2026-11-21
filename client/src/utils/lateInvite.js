@@ -15,8 +15,8 @@ export const LATE_INVITE_COPY = {
 };
 
 /**
- * Party line for the late card. The title is inserted as-is; the card truncates
- * a long title the same way the robbed line does (CSS truncate on the title).
+ * Party line for the late card. The title is inserted as-is; a long title
+ * wraps on the card (break-words / overflow-wrap). It is not cut off with CSS.
  * Omit the host clause when hostFirstName is null or empty.
  */
 export function latePartyLine(partyTitle, hostFirstName) {

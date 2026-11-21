@@ -40,12 +40,11 @@ export function Party() {
 
   const isParticipant = !!user && (participants?.some((p) => p.id === user.uid) || false);
   const partyIsActiveOrEnded = party?.status === 'ACTIVE' || party?.status === 'ENDED';
-  // Own-seat read only when a session exists on an ACTIVE or ENDED party. Never use
-  // the participants list to decide the late-invite card.
-  const seatStatus = useOwnSeatStatus(
-    user && partyIsActiveOrEnded ? partyId : null,
-    user && partyIsActiveOrEnded ? user.uid : null,
-  );
+  // Start the own-seat read as soon as a session and party id exist. The hook
+  // keys its result to that pair, so a stale 'not-seated' cannot leak into the
+  // first ACTIVE/ENDED render. Never use the participants list to decide the
+  // late-invite card. Only a confirmed missing seat shows that card.
+  const seatStatus = useOwnSeatStatus(user ? partyId : null, user?.uid ?? null);
 
   let content;
   if (authLoading) {
@@ -57,7 +56,7 @@ export function Party() {
   } else if (loading) {
     content = <Spinner label="Loading party..." />;
   } else if (partyIsActiveOrEnded || gameStarted) {
-    if (partyIsActiveOrEnded && seatStatus === 'checking') {
+    if (partyIsActiveOrEnded && seatStatus !== 'not-seated' && seatStatus !== 'seated' && seatStatus !== 'error') {
       content = <Spinner label="Loading party..." />;
     } else {
       const late = lateVisitorState(party, seatStatus);
