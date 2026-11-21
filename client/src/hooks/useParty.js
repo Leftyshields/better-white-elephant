@@ -78,6 +78,8 @@ export function useParty(partyId, authUid = null) {
         const participantsList = snapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
+          // Needed so the join card does not treat a local pending ready write as confirmed.
+          hasPendingWrites: doc.metadata?.hasPendingWrites === true,
         }));
         console.log(`📊 Participants updated: ${participantsList.length} total`, participantsList.map(p => ({ id: p.id, status: p.status, ready: p.ready })));
         setParticipants(participantsList);

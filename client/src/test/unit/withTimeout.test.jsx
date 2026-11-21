@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   REQUEST_TIMEOUT_MS,
   TimeoutError,
+  CancelledError,
   isTimeoutError,
+  isCancelledError,
   withTimeout,
 } from '../../utils/withTimeout.js';
 
@@ -39,5 +41,25 @@ describe('withTimeout', () => {
     expect(settled).toBe(false);
     await vi.advanceTimersByTimeAsync(5000);
     expect(settled).toBe(true);
+  });
+
+  it('clears the timer when the signal aborts and rejects with CancelledError, not TimeoutError', async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    let late = false;
+    const hung = new Promise((resolve) => {
+      setTimeout(() => {
+        late = true;
+        resolve('late');
+      }, 15000);
+    });
+    const raced = withTimeout(hung, REQUEST_TIMEOUT_MS, { signal: controller.signal });
+    const rejected = expect(raced).rejects.toSatisfy(
+      (error) => isCancelledError(error) && error instanceof CancelledError && !isTimeoutError(error),
+    );
+    controller.abort();
+    await rejected;
+    await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS + 5000);
+    expect(late).toBe(true);
   });
 });

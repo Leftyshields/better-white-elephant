@@ -10,7 +10,7 @@ import { useAuth } from '../hooks/useAuth.js';
 import { Button } from './ui/Button.jsx';
 import { auth, db } from '../utils/firebase.js';
 import { joinPartyWithInviteToken, readInviteTokenFromHash } from '../utils/partyInvite.js';
-import { REQUEST_TIMEOUT_MS, isTimeoutError, withTimeout } from '../utils/withTimeout.js';
+import { REQUEST_TIMEOUT_MS, isCancelledError, isTimeoutError, withTimeout } from '../utils/withTimeout.js';
 import { getJoinErrorMessage } from '../utils/partyInviteCopy.js';
 import { seatNameFields } from '../utils/seatDisplayName.js';
 import { trackParticipantJoin, trackError } from '../utils/analytics.js';
@@ -44,6 +44,11 @@ export function PartyInviteLanding({ partyId }) {
   const seatStartedRef = useRef(false);
   const joinWriteRef = useRef(null);
   const joinUserRef = useRef(null);
+  const [joinUser, setJoinUser] = useState(null);
+  const timeoutAbortRef = useRef(null);
+  if (timeoutAbortRef.current == null) {
+    timeoutAbortRef.current = new AbortController();
+  }
   const [seatWriteSlow, setSeatWriteSlow] = useState(false);
   // A visitor who already has a session may already hold a seat (a host opening their own party,
   // or a guest coming back). Show the skeleton until that check is done instead of a guest card.
@@ -82,9 +87,19 @@ export function PartyInviteLanding({ partyId }) {
     };
   }, [partyId]);
 
+  useEffect(() => {
+    const controller = timeoutAbortRef.current;
+    return () => {
+      controller.abort();
+    };
+  }, []);
+
   // Background seat: starts as soon as the party is known. Never mints an anonymous account for a
   // party that can't be joined (started, cancelled, or no token in the link). A hung write is
   // given the same 10s deadline as gift lookup and ready-save; the card then offers a retry.
+  const timeoutOpts = () => ({ signal: timeoutAbortRef.current.signal });
+  const timed = (promise) => withTimeout(promise, REQUEST_TIMEOUT_MS, timeoutOpts());
+
   const writeSeat = async (sessionUser) => {
     if (!joinWriteRef.current) {
       const write = joinPartyWithInviteToken(db, partyId, sessionUser.uid, inviteToken, {
@@ -106,31 +121,59 @@ export function PartyInviteLanding({ partyId }) {
     }
     setSeatWriteSlow(false);
     try {
-      await withTimeout(joinWriteRef.current, REQUEST_TIMEOUT_MS);
+      await timed(joinWriteRef.current);
       setSeatWriteSlow(false);
+      return true;
     } catch (error) {
+      if (isCancelledError(error)) return false;
       if (isTimeoutError(error)) {
         setSeatWriteSlow(true);
-        return;
+        return false;
       }
       throw error;
     }
   };
 
   const retrySeatWrite = async () => {
-    if (!inviteToken) return;
+    if (!inviteToken) return false;
+    // Refuse a started, ended, or cancelled party on the client before writing (Security, non-blocking).
+    if (partyInfo?.status && partyInfo.status !== 'LOBBY') {
+      const message = getJoinErrorMessage({
+        party: partyInfo,
+        error: null,
+        hasToken: Boolean(inviteToken),
+      });
+      setTerminalMessage(message);
+      return false;
+    }
     let partyState = partyInfo;
     try {
-      const sessionUser = joinUserRef.current || (await ensureGuestSession());
+      const sessionUser = joinUserRef.current || (await timed(ensureGuestSession()));
       joinUserRef.current = sessionUser;
-      const fresh = await getDoc(doc(db, 'parties', partyId));
+      setJoinUser(sessionUser);
+      const fresh = await timed(getDoc(doc(db, 'parties', partyId)));
       partyState = fresh.exists() ? fresh.data() : partyInfo;
-      await writeSeat(sessionUser);
+      if (partyState?.status && partyState.status !== 'LOBBY') {
+        const message = getJoinErrorMessage({
+          party: partyState,
+          error: null,
+          hasToken: Boolean(inviteToken),
+        });
+        setTerminalMessage(message);
+        return false;
+      }
+      return await writeSeat(sessionUser);
     } catch (error) {
+      if (isCancelledError(error)) return false;
+      if (isTimeoutError(error)) {
+        setSeatWriteSlow(true);
+        return false;
+      }
       console.error('Error joining party:', { code: error?.code, name: error?.name });
       const message = getJoinErrorMessage({ party: partyState, error, hasToken: Boolean(inviteToken) });
       trackError('join_party_failed', message, 'PartyInviteLanding');
       setTerminalMessage(message);
+      return false;
     }
   };
 
@@ -172,9 +215,10 @@ export function PartyInviteLanding({ partyId }) {
       let partyState = partyInfo;
       let confirmedNotSeated = false;
       try {
-        const sessionUser = await ensureGuestSession();
+        const sessionUser = await timed(ensureGuestSession());
         joinUserRef.current = sessionUser;
-        const seat = await getDoc(doc(db, 'parties', partyId, 'participants', sessionUser.uid));
+        setJoinUser(sessionUser);
+        const seat = await timed(getDoc(doc(db, 'parties', partyId, 'participants', sessionUser.uid)));
         if (seat.exists()) {
           // Leave the skeleton even if the parent's party list never arrives.
           setAlreadySeated(true);
@@ -193,10 +237,14 @@ export function PartyInviteLanding({ partyId }) {
           setTerminalMessage(getJoinErrorMessage({ party: partyInfo, error: null, hasToken: false }));
           return;
         }
-        const fresh = await getDoc(doc(db, 'parties', partyId));
+        const fresh = await timed(getDoc(doc(db, 'parties', partyId)));
         partyState = fresh.exists() ? fresh.data() : null;
         await writeSeat(sessionUser);
       } catch (error) {
+        if (isCancelledError(error)) {
+          setSeatCheckDone(true);
+          return;
+        }
         if (isTimeoutError(error)) {
           setSeatWriteSlow(true);
           setSeatCheckDone(true);
@@ -305,7 +353,7 @@ export function PartyInviteLanding({ partyId }) {
         partyId={partyId}
         partyTitle={partyInfo.title}
         hostFirstName={partyInfo.hostFirstName}
-        user={user}
+        user={user || joinUser}
         participant={null}
         gift={null}
         seated={alreadySeated}

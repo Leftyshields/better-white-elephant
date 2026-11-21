@@ -4,7 +4,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { GuestJoinCard } from '../../components/GuestJoinCard.jsx';
+import { GuestJoinCard, clearGuestJoinDrafts } from '../../components/GuestJoinCard.jsx';
 import { GUEST_JOIN_COPY as COPY, guestStepsHeader } from '../../utils/guestJoinCopy.js';
 import { scrapeGiftUrl } from '../../utils/api.js';
 import { REQUEST_TIMEOUT_MS } from '../../utils/withTimeout.js';
@@ -57,6 +57,7 @@ describe('steps header copy', () => {
     expect(COPY.giftTryUrl).toBe('Try the link again');
     expect(COPY.readyLockedSeat).toBe('Saving your spot...');
     expect(COPY.readySaveSlow).toBe("That's taking too long. Your name and gift are still here. Tap I'm ready to try again.");
+    expect(COPY.readyUndoSlow).toBe("That's taking too long. Tap Not ready yet to try again.");
     expect(COPY.giftPending).toBe('Processing...');
   });
 });
@@ -76,6 +77,10 @@ function fillNameAndManualGift({
 }
 
 describe('GuestJoinCard', () => {
+  afterEach(() => {
+    clearGuestJoinDrafts();
+  });
+
   beforeEach(() => {
     updateDocMock.mockReset().mockResolvedValue(undefined);
     addDocMock.mockReset().mockResolvedValue({ id: 'g1' });
@@ -125,7 +130,8 @@ describe('GuestJoinCard', () => {
     expect(readyButton()).toHaveAttribute('aria-busy', 'true');
     expect(readyButton()).toBeDisabled();
     finish();
-    await waitFor(() => expect(readyButton()).toHaveTextContent(COPY.readyCta));
+    await waitFor(() => expect(screen.getByText(COPY.readyDone)).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: COPY.readyCta })).toBeNull();
     expect(addDocMock).toHaveBeenCalledTimes(1);
     expect(addDocMock.mock.calls[0][1]).toMatchObject({ submitterId: 'anon-1', title: 'Wool socks', url: 'https://example.com/socks' });
     expect(updateDocMock).toHaveBeenCalledWith(
@@ -315,13 +321,9 @@ describe('GuestJoinCard timeouts', () => {
       await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
     });
     expect(screen.getByText(COPY.readySaveSlow)).toBeInTheDocument();
-    await act(async () => {
-      finish({ id: 'g1' });
-      await Promise.resolve();
-      await Promise.resolve();
-    });
     fireEvent.click(readyButton());
     await act(async () => {
+      finish({ id: 'g1' });
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -330,6 +332,85 @@ describe('GuestJoinCard timeouts', () => {
       { path: 'gifts/g1' },
       expect.objectContaining({ title: 'Wool socks', url: 'https://example.com/socks' }),
     );
+  });
+
+  it('a timed-out save that later resolves does not overwrite a newer gift title', async () => {
+    let finish;
+    addDocMock.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    updateDocMock.mockResolvedValue(undefined);
+    renderCard();
+    fillNameAndManualGift();
+    fireEvent.click(readyButton());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
+    });
+    fireEvent.change(screen.getByLabelText(COPY.giftTitleLabel), { target: { value: 'Cashmere socks' } });
+    await act(async () => {
+      finish({ id: 'g1' });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.queryByText(COPY.readyDone)).toBeNull();
+    expect(screen.getByLabelText(COPY.giftTitleLabel)).toHaveValue('Cashmere socks');
+    expect(screen.getByLabelText(COPY.nameLabel)).toHaveValue('Sam Lee');
+    fireEvent.click(readyButton());
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(addDocMock).toHaveBeenCalledTimes(1);
+    expect(updateDocMock).toHaveBeenCalledWith(
+      { path: 'gifts/g1' },
+      expect.objectContaining({ title: 'Cashmere socks' }),
+    );
+    expect(screen.getByText(COPY.readyDone)).toBeInTheDocument();
+  });
+
+  it('shows You are in only after the ready write resolves, not a local pending snapshot', async () => {
+    addDocMock.mockResolvedValue({ id: 'g1' });
+    updateDocMock.mockResolvedValue(undefined);
+    const props = {
+      partyId: 'party-ack',
+      partyTitle: 'Winter Swap',
+      hostFirstName: 'Dana',
+      user: { uid: 'anon-1', isAnonymous: true, displayName: null },
+      gift: null,
+      seated: true,
+      terminalMessage: null,
+    };
+    const { rerender } = render(
+      <GuestJoinCard {...props} participant={{ id: 'anon-1', status: 'GOING', ready: false }} />,
+    );
+    fillNameAndManualGift();
+    fireEvent.click(readyButton());
+    rerender(
+      <GuestJoinCard {...props} participant={{ id: 'anon-1', status: 'GOING', ready: true, hasPendingWrites: true }} />,
+    );
+    expect(screen.queryByText(COPY.readyDone)).toBeNull();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByText(COPY.readyDone)).toBeInTheDocument();
+  });
+
+  it('keeps aria-live status mounted and hides the store helper while the link is checked', async () => {
+    let finish;
+    scrapeGiftUrl.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    renderCard();
+    fireEvent.click(screen.getByRole('button', { name: COPY.giftManualToggle }));
+    expect(screen.getByText(COPY.giftManualHelper)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(COPY.giftUrlLabel), { target: { value: 'https://example.com/socks' } });
+    fireEvent.click(screen.getByRole('button', { name: COPY.giftTryUrl }));
+    expect(screen.getByText(COPY.giftChecking)).toBeInTheDocument();
+    expect(screen.queryByText(COPY.giftManualHelper)).toBeNull();
+    const live = document.querySelectorAll('[aria-live="polite"]');
+    expect(live.length).toBeGreaterThanOrEqual(3);
+    await act(async () => {
+      finish({ title: 'Wool socks', image: null, price: null, error: null });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
   });
 
   it('a fast lookup and a fast save are unchanged', async () => {

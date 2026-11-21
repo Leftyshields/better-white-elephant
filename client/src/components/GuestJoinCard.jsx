@@ -11,7 +11,7 @@ import { addDoc, collection, doc, setDoc, updateDoc } from 'firebase/firestore';
 import { CheckCircleIcon } from '@heroicons/react/24/solid';
 import { db } from '../utils/firebase.js';
 import { scrapeGiftUrl } from '../utils/api.js';
-import { REQUEST_TIMEOUT_MS, isTimeoutError, withTimeout } from '../utils/withTimeout.js';
+import { REQUEST_TIMEOUT_MS, isCancelledError, isTimeoutError, withTimeout } from '../utils/withTimeout.js';
 import { seatNameFields } from '../utils/seatDisplayName.js';
 import { sanitizeUserChosenDisplayName } from '../../../server/lib/display-names.js';
 import { GUEST_JOIN_COPY as COPY, guestStepsHeader } from '../utils/guestJoinCopy.js';
@@ -25,6 +25,11 @@ const FIELD =
 // Typed values survive the remount when the invite landing hands over to the lobby after the
 // background seat write (in memory only; nothing is stored on the device).
 const drafts = new Map();
+
+/** Test-only: typed values are in-memory and would leak across landing tests that share a partyId. */
+export function clearGuestJoinDrafts() {
+  drafts.clear();
+}
 
 function normalizeGiftUrl(raw) {
   const trimmed = (raw || '').trim();
@@ -91,11 +96,23 @@ export function GuestJoinCard({
   const savingRef = useRef(false);
   const scrapeSeq = useRef(0);
   const saveSeq = useRef(0);
+  const saveGeneration = useRef(0);
   const giftDocIdRef = useRef(gift?.id || null);
   const giftWriteInFlightRef = useRef(null);
   const [lookupSlow, setLookupSlow] = useState(false);
   const [saveSlow, setSaveSlow] = useState(false);
-  const ids = { name: useId(), nameError: useId(), gift: useId(), lock: useId(), header: useId(), manual: useId(), lookup: useId(), saveSlow: useId() };
+  const [undoSlow, setUndoSlow] = useState(false);
+  // "You're in!" only after the write is confirmed, not after Firestore's local pending snapshot.
+  const [readyAcked, setReadyAcked] = useState(
+    () => participant?.ready === true && participant?.hasPendingWrites !== true,
+  );
+  const undoSeq = useRef(0);
+  const editVersion = useRef(0);
+  const timeoutAbortRef = useRef(null);
+  if (timeoutAbortRef.current == null) {
+    timeoutAbortRef.current = new AbortController();
+  }
+  const ids = { name: useId(), nameError: useId(), gift: useId(), lock: useId(), header: useId(), manual: useId(), lookup: useId(), saveSlow: useId(), undoSlow: useId() };
 
   useEffect(() => {
     drafts.set(partyId, { name, giftUrl, preview, manual, manualTitle, manualPrice });
@@ -114,6 +131,27 @@ export function GuestJoinCard({
     const timer = setTimeout(() => setToast(null), 8000);
     return () => clearTimeout(timer);
   }, [toast]);
+
+  useEffect(() => {
+    const controller = timeoutAbortRef.current;
+    return () => {
+      controller.abort();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (participant?.ready === true && participant?.hasPendingWrites === false) {
+      setReadyAcked(true);
+    }
+    if (participant?.ready === false && participant?.hasPendingWrites === false && !savingRef.current) {
+      setReadyAcked(false);
+    }
+  }, [participant?.ready, participant?.hasPendingWrites]);
+
+  const timeoutOpts = () => ({ signal: timeoutAbortRef.current.signal });
+  const bumpEdit = () => {
+    editVersion.current += 1;
+  };
 
   const seatName = typedSeatName(name);
   const nameDone = !!seatName;
@@ -136,10 +174,10 @@ export function GuestJoinCard({
     ? COPY.readyLockedName
     : !giftDone
       ? COPY.readyLockedGift
-      : !seated && !seatWriteSlow
+      : !seated && (saving || !seatWriteSlow)
         ? COPY.readyLockedSeat
         : null;
-  const showSaveSlow = (saveSlow && !saving) || (seatWriteSlow && nameDone && giftDone && !seated);
+  const showSaveSlow = (saveSlow && !saving) || (seatWriteSlow && nameDone && giftDone && !seated && !saving);
 
   const runScrape = async (rawUrl) => {
     const url = normalizeGiftUrl(rawUrl);
@@ -149,7 +187,7 @@ export function GuestJoinCard({
     setLookupSlow(false);
     setPreview(null);
     try {
-      const { title, image, price, error } = await withTimeout(scrapeGiftUrl(url), REQUEST_TIMEOUT_MS);
+      const { title, image, price, error } = await withTimeout(scrapeGiftUrl(url), REQUEST_TIMEOUT_MS, timeoutOpts());
       if (seq !== scrapeSeq.current) return;
       if (!error && usableScrapedTitle(title) && !isBareStoreName(title, url)) {
         setPreview({ url, title: title.trim(), image: image || null, price: price || null });
@@ -162,6 +200,7 @@ export function GuestJoinCard({
       }
     } catch (error) {
       if (seq !== scrapeSeq.current) return;
+      if (isCancelledError(error)) return;
       setManual(true);
       if (isTimeoutError(error)) {
         scrapeSeq.current += 1;
@@ -205,45 +244,72 @@ export function GuestJoinCard({
   };
 
   const handleReady = async () => {
-    if (savingRef.current || !canReady) return;
-    if (!seated) {
-      await onRetrySeat();
-      return;
-    }
-    const seq = ++saveSeq.current;
+    if (savingRef.current) return;
+    if (!((seated || canRetrySeat) && nameDone && giftDone) || scraping) return;
+    // Busy state is set synchronously so a double tap cannot start a second write (item 3).
     savingRef.current = true;
     setSaving(true);
     setSaveSlow(false);
     setToast(null);
-    try {
-      const writes = (async () => {
-        if (pendingGift) {
-          const fields = { url: pendingGift.url, title: pendingGift.title, image: pendingGift.image, price: pendingGift.price };
-          await persistGift(fields);
-          trackSubmitGift(partyId);
-        }
-        await updateDoc(doc(db, 'parties', partyId, 'participants', user.uid), {
-          ...seatName,
-          ready: true,
-          updatedAt: new Date(),
-        });
-        // Profile name for later games; best effort (the seat name above is what the party shows).
-        // Skipped for anonymous guests: their account is temporary (anonymousUserCleanup), the seat name is enough.
-        if (!user.isAnonymous) {
-          setDoc(doc(db, 'users', user.uid), { displayName: sanitizeUserChosenDisplayName(name), updatedAt: new Date() }, { merge: true })
-            .catch(() => {});
-        }
-      })();
-      await withTimeout(writes, REQUEST_TIMEOUT_MS);
-      if (seq !== saveSeq.current) return;
+    const seq = ++saveSeq.current;
+    const generation = ++saveGeneration.current;
+    const startedVersion = editVersion.current;
+    const fields = pendingGift
+      ? { url: pendingGift.url, title: pendingGift.title, image: pendingGift.image, price: pendingGift.price }
+      : null;
+    const seatAtStart = seatName;
+    const nameAtStart = name;
+
+    const ackIfUnchanged = () => {
+      if (startedVersion !== editVersion.current) return false;
+      setReadyAcked(true);
       setGiftUrl('');
       setPreview(null);
       setManual(false);
       setManualTitle('');
       setManualPrice('');
       setSaveSlow(false);
+      return true;
+    };
+
+    try {
+      if (!seated) {
+        const retryResult = await withTimeout(Promise.resolve(onRetrySeat()), REQUEST_TIMEOUT_MS, timeoutOpts());
+        if (seq !== saveSeq.current) return;
+        if (retryResult === false) {
+          setSaveSlow(true);
+          return;
+        }
+      }
+      const writes = (async () => {
+        if (fields) {
+          await persistGift(fields);
+          trackSubmitGift(partyId);
+        }
+        await updateDoc(doc(db, 'parties', partyId, 'participants', user.uid), {
+          ...seatAtStart,
+          ready: true,
+          updatedAt: new Date(),
+        });
+        // Profile name for later games; best effort (the seat name above is what the party shows).
+        // Skipped for anonymous guests: their account is temporary (anonymousUserCleanup), the seat name is enough.
+        if (!user.isAnonymous) {
+          setDoc(doc(db, 'users', user.uid), { displayName: sanitizeUserChosenDisplayName(nameAtStart), updatedAt: new Date() }, { merge: true })
+            .catch(() => {});
+        }
+      })();
+      writes.then(() => {
+        // Late success after a timeout: never touch the form if the guest edited or started a retry.
+        if (generation !== saveGeneration.current) return;
+        if (startedVersion !== editVersion.current) return;
+        ackIfUnchanged();
+      }).catch(() => {});
+      await withTimeout(writes, REQUEST_TIMEOUT_MS, timeoutOpts());
+      if (seq !== saveSeq.current) return;
+      ackIfUnchanged();
     } catch (error) {
       if (seq !== saveSeq.current) return;
+      if (isCancelledError(error)) return;
       if (isTimeoutError(error)) {
         saveSeq.current += 1;
         setSaveSlow(true);
@@ -265,18 +331,38 @@ export function GuestJoinCard({
     if (savingRef.current) return;
     savingRef.current = true;
     setSaving(true);
+    setUndoSlow(false);
+    const seq = ++undoSeq.current;
     try {
-      await updateDoc(doc(db, 'parties', partyId, 'participants', user.uid), { ready: false, updatedAt: new Date() });
+      await withTimeout(
+        updateDoc(doc(db, 'parties', partyId, 'participants', user.uid), { ready: false, updatedAt: new Date() }),
+        REQUEST_TIMEOUT_MS,
+        timeoutOpts(),
+      );
+      if (seq !== undoSeq.current) return;
+      setReadyAcked(false);
+      setUndoSlow(false);
     } catch (error) {
+      if (seq !== undoSeq.current) return;
+      if (isCancelledError(error)) return;
+      if (isTimeoutError(error)) {
+        undoSeq.current += 1;
+        setUndoSlow(true);
+        savingRef.current = false;
+        setSaving(false);
+        return;
+      }
       console.error('Guest undo ready failed:', { code: error?.code, name: error?.name });
       setToast(COPY.joinFailedToast);
     } finally {
-      savingRef.current = false;
-      setSaving(false);
+      if (seq === undoSeq.current) {
+        savingRef.current = false;
+        setSaving(false);
+      }
     }
   };
 
-  const isReady = participant?.ready === true;
+  const isReady = readyAcked;
   const steps = [
     { id: 'arrived', label: COPY.stepArrived, done: true },
     { id: 'name', label: COPY.stepName, done: nameDone },
@@ -307,8 +393,8 @@ export function GuestJoinCard({
           </a>
         </div>
       ) : isReady ? (
-        <div className="space-y-4" role="status">
-          <p className="flex items-start gap-2 text-base text-green-300">
+        <div className="space-y-4">
+          <p className="flex items-start gap-2 text-base text-green-300" role="status" aria-live="polite">
             <CheckCircleIcon className="w-5 h-5 shrink-0 mt-0.5" aria-hidden="true" />
             <span>{COPY.readyDone}</span>
           </p>
@@ -317,10 +403,17 @@ export function GuestJoinCard({
             onClick={handleUndo}
             disabled={saving}
             aria-busy={saving || undefined}
+            aria-describedby={ids.undoSlow}
             className={`w-full min-h-11 px-4 py-2 rounded-md font-medium bg-slate-800 text-white hover:bg-slate-700 disabled:opacity-60 ${FOCUS_RING}`}
           >
-            {COPY.readyUndo}
+            {saving ? COPY.readySaving : COPY.readyUndo}
           </button>
+          <p id={ids.undoSlow} className="text-sm text-slate-400" role="status" aria-live="polite">
+            {undoSlow && !saving ? COPY.readyUndoSlow : ''}
+          </p>
+          <p id={ids.saveSlow} className="text-sm text-slate-400" role="status" aria-live="polite">
+            {saveSlow && !saving ? COPY.readySaveSlow : ''}
+          </p>
         </div>
       ) : (
         <>
@@ -363,6 +456,7 @@ export function GuestJoinCard({
               disabled={saving}
               onChange={(e) => {
                 setNameTouched(true);
+                bumpEdit();
                 setName(e.target.value);
               }}
               onBlur={() => setNameTouched(true)}
@@ -391,6 +485,7 @@ export function GuestJoinCard({
               value={giftUrl}
               disabled={saving}
               onChange={(e) => {
+                bumpEdit();
                 setGiftUrl(e.target.value);
                 setPreview(null);
               }}
@@ -398,6 +493,7 @@ export function GuestJoinCard({
                 const pasted = e.clipboardData?.getData('text');
                 if (pasted) {
                   e.preventDefault();
+                  bumpEdit();
                   setGiftUrl(pasted.trim());
                   if (!manual) runScrape(pasted);
                 }
@@ -413,12 +509,14 @@ export function GuestJoinCard({
               }}
               className={FIELD}
             />
-            {scraping && (
-              <p className="flex items-center gap-2 text-sm text-slate-300" role="status" aria-live="polite">
-                <span className="inline-block w-4 h-4 rounded-full border-2 border-purple-400 border-t-transparent animate-spin" aria-hidden="true" />
-                {COPY.giftChecking}
-              </p>
-            )}
+            <p className="flex items-center gap-2 text-sm text-slate-300" role="status" aria-live="polite">
+              {scraping ? (
+                <>
+                  <span className="inline-block w-4 h-4 rounded-full border-2 border-purple-400 border-t-transparent animate-spin" aria-hidden="true" />
+                  {COPY.giftChecking}
+                </>
+              ) : null}
+            </p>
             {!manual && preview && (
               <div data-testid="gift-preview" className="flex items-center gap-3 p-3 rounded-lg bg-slate-950/50 border border-white/10">
                 {preview.image ? (
@@ -433,9 +531,11 @@ export function GuestJoinCard({
                 <p className="text-sm text-white break-words">{gift.title}</p>
               </div>
             )}
+            <p id={ids.lookup} className="text-sm text-slate-300" role="status" aria-live="polite">
+              {scraping ? '' : lookupSlow ? COPY.giftLookupSlow : manual ? COPY.giftManualHelper : ''}
+            </p>
             {manual ? (
               <div id={ids.manual} className="space-y-3">
-                <p id={ids.lookup} className="text-sm text-slate-300" role="status" aria-live="polite">{lookupSlow ? COPY.giftLookupSlow : COPY.giftManualHelper}</p>
                 <div className="space-y-1">
                   <label htmlFor={`${ids.manual}-title`} className="block text-sm font-medium text-slate-200">
                     {COPY.giftTitleLabel}
@@ -447,7 +547,10 @@ export function GuestJoinCard({
                     placeholder={COPY.giftTitlePlaceholder}
                     value={manualTitle}
                     disabled={saving}
-                    onChange={(e) => setManualTitle(e.target.value)}
+                    onChange={(e) => {
+                      bumpEdit();
+                      setManualTitle(e.target.value);
+                    }}
                     aria-invalid={manualStoreName || undefined}
                     aria-describedby={manualStoreName ? `${ids.manual}-store` : undefined}
                     className={FIELD}
@@ -470,7 +573,10 @@ export function GuestJoinCard({
                     placeholder={COPY.giftPricePlaceholder}
                     value={manualPrice}
                     disabled={saving}
-                    onChange={(e) => setManualPrice(e.target.value)}
+                    onChange={(e) => {
+                      bumpEdit();
+                      setManualPrice(e.target.value);
+                    }}
                     className={FIELD}
                   />
                 </div>
@@ -511,16 +617,12 @@ export function GuestJoinCard({
               )}
               {saving ? COPY.readySaving : COPY.readyCta}
             </button>
-            {lockReason && (
-              <p id={ids.lock} className="text-sm text-slate-400" role="status" aria-live="polite">
-                {lockReason}
-              </p>
-            )}
-            {showSaveSlow && (
-              <p id={ids.saveSlow} className="text-sm text-slate-400" role="status" aria-live="polite">
-                {COPY.readySaveSlow}
-              </p>
-            )}
+            <p id={ids.lock} className="text-sm text-slate-400" role="status" aria-live="polite">
+              {lockReason || ''}
+            </p>
+            <p id={ids.saveSlow} className="text-sm text-slate-400" role="status" aria-live="polite">
+              {showSaveSlow ? COPY.readySaveSlow : ''}
+            </p>
           </div>
         </>
       )}

@@ -33,6 +33,9 @@ export const GUEST_JOIN_COPY = {
   readyLockedGift: "Add your gift before you're ready.",
   readyLockedSeat: "Saving your spot...",
   readySaveSlow: "That's taking too long. Your name and gift are still here. Tap I'm ready to try again.",
+  // PROPOSED DRAFT — not Copywriter-signed. Shown under "Not ready yet" when an undo
+  // write times out (item 2). No dashes. "spot" is not used here; never say "seat".
+  readyUndoSlow: "That's taking too long. Tap Not ready yet to try again.",
   giftStoreName: "That's the store, not the gift. What's the gift called?",
   giftManualHelper: "This store won't share its gift details with us. Add them below.",
   // Existing shipped lobby strings reused on the card
