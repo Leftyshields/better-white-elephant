@@ -394,6 +394,38 @@ describe('GuestJoinCard timeouts', () => {
     expect(screen.getByText(COPY.readyDone)).toBeInTheDocument();
   });
 
+  it('switches off You are in when a timed-out undo write later lands in the server snapshot', async () => {
+    vi.useFakeTimers();
+    updateDocMock.mockReset().mockReturnValue(new Promise(() => {}));
+    const props = {
+      partyId: 'party-undo-late',
+      partyTitle: 'Winter Swap',
+      hostFirstName: 'Dana',
+      user: { uid: 'anon-1', isAnonymous: true, displayName: null },
+      gift: { id: 'g1', title: 'Socks', url: 'https://example.com/s' },
+      seated: true,
+      terminalMessage: null,
+    };
+    const { rerender } = render(
+      <GuestJoinCard {...props} participant={{ id: 'anon-1', displayName: 'Sam', ready: true }} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: COPY.readyUndo }));
+    rerender(
+      <GuestJoinCard {...props} participant={{ id: 'anon-1', displayName: 'Sam', ready: false, hasPendingWrites: true }} />,
+    );
+    await act(async () => { vi.advanceTimersByTime(REQUEST_TIMEOUT_MS + 100); });
+    expect(screen.getByText(COPY.readyDone)).toBeInTheDocument();
+    expect(screen.getByText(COPY.readyUndoSlow)).toBeInTheDocument();
+    // Confirmed server snapshot: the late un-ready write landed.
+    rerender(
+      <GuestJoinCard {...props} participant={{ id: 'anon-1', displayName: 'Sam', ready: false, hasPendingWrites: false }} />,
+    );
+    expect(screen.queryByText(COPY.readyDone)).toBeNull();
+    expect(screen.queryByText(COPY.readyUndoSlow)).toBeNull();
+    expect(screen.getByRole('button', { name: COPY.readyCta })).toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
   it('keeps aria-live status mounted and hides the store helper while the link is checked', async () => {
     let finish;
     scrapeGiftUrl.mockReturnValue(new Promise((resolve) => { finish = resolve; }));

@@ -140,11 +140,18 @@ export function GuestJoinCard({
   }, []);
 
   useEffect(() => {
+    // Follow a confirmed server snapshot, not Firestore's local pending write.
+    // After an undo timeout the player stays ready until this says otherwise:
+    // a late un-ready write that lands flips the card off "You're in!" on its own.
     if (participant?.ready === true && participant?.hasPendingWrites === false) {
       setReadyAcked(true);
+      setUndoSlow(false);
     }
-    if (participant?.ready === false && participant?.hasPendingWrites === false && !savingRef.current) {
+    if (participant?.ready === false && participant?.hasPendingWrites === false) {
       setReadyAcked(false);
+      setUndoSlow(false);
+      savingRef.current = false;
+      setSaving(false);
     }
   }, [participant?.ready, participant?.hasPendingWrites]);
 

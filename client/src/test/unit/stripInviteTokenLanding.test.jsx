@@ -6,7 +6,7 @@
  * the visitor is confirmed seated. These assertions fail on main.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { readInviteTokenFromHash } from '../../utils/partyInvite.js';
 import { PartyInviteLanding } from '../../components/PartyInviteLanding.jsx';
@@ -16,6 +16,8 @@ import {
   JOIN_ERROR_LINK_INVALID,
 } from '../../utils/partyInviteCopy.js';
 import { GUEST_JOIN_COPY } from '../../utils/guestJoinCopy.js';
+import { clearGuestJoinDrafts } from '../../components/GuestJoinCard.jsx';
+import { REQUEST_TIMEOUT_MS } from '../../utils/withTimeout.js';
 
 const PARTY_ID = 'invite-join-party';
 const TOKEN = 'feedfacefeedfacefeedfacefeedface';
@@ -109,7 +111,9 @@ describe('PartyInviteLanding strips #t= only after a successful seat', () => {
   });
 
   afterEach(() => {
+    clearGuestJoinDrafts();
     window.history.replaceState(null, '', '/');
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -234,6 +238,66 @@ describe('PartyInviteLanding strips #t= only after a successful seat', () => {
     expect(joinMock).not.toHaveBeenCalled();
     expect(address()).toBe(`/party/${PARTY_ID}`);
   });
+
+  it('does not strip #t= after a hung seat write times out', async () => {
+    vi.useFakeTimers();
+    window.history.replaceState(null, '', `/party/${PARTY_ID}?src=link#t=${TOKEN}`);
+    joinMock.mockReturnValue(new Promise(() => {}));
+
+    render(<PartyInviteLanding partyId={PARTY_ID} />);
+    await act(async () => {
+      for (let i = 0; i < 20 && joinMock.mock.calls.length === 0; i += 1) {
+        await Promise.resolve();
+      }
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(joinMock).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
+    });
+    expect(readInviteTokenFromHash(window.location.hash)).toBe(TOKEN);
+    expect(address()).toBe(`/party/${PARTY_ID}?src=link#t=${TOKEN}`);
+  });
+
+  it('strips #t= after a successful seat retry, keeping path and query', async () => {
+    vi.useFakeTimers();
+    window.history.replaceState({ from: 'invite' }, '', `/party/${PARTY_ID}?src=link#t=${TOKEN}`);
+    const replaceSpy = vi.spyOn(window.history, 'replaceState');
+    let finishJoin;
+    joinMock.mockReturnValue(new Promise((resolve) => { finishJoin = resolve; }));
+
+    render(<PartyInviteLanding partyId={PARTY_ID} />);
+    await act(async () => {
+      for (let i = 0; i < 20 && joinMock.mock.calls.length === 0; i += 1) {
+        await Promise.resolve();
+      }
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(readInviteTokenFromHash(window.location.hash)).toBe(TOKEN);
+
+    fireEvent.change(screen.getByLabelText(GUEST_JOIN_COPY.nameLabel), { target: { value: 'Sam Lee' } });
+    fireEvent.click(screen.getByRole('button', { name: GUEST_JOIN_COPY.giftManualToggle }));
+    fireEvent.change(screen.getByLabelText(GUEST_JOIN_COPY.giftUrlLabel), { target: { value: 'https://example.com/socks' } });
+    fireEvent.change(screen.getByLabelText(GUEST_JOIN_COPY.giftTitleLabel), { target: { value: 'Wool socks' } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
+    });
+    expect(readInviteTokenFromHash(window.location.hash)).toBe(TOKEN);
+    fireEvent.click(screen.getByRole('button', { name: GUEST_JOIN_COPY.readyCta }));
+    await act(async () => {
+      finishJoin({ id: 'anon-1' });
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(readInviteTokenFromHash(window.location.hash)).toBeNull();
+    expect(window.location.pathname).toBe(`/party/${PARTY_ID}`);
+    expect(window.location.search).toBe('?src=link');
+    expect(window.location.hash).toBe('');
+    expect(replaceSpy).toHaveBeenCalledWith(expect.anything(), '', `/party/${PARTY_ID}?src=link`);
+  });
 });
 
 describe('Party strips #t= for an already-seated member', () => {
@@ -246,7 +310,9 @@ describe('Party strips #t= for an already-seated member', () => {
   });
 
   afterEach(() => {
+    clearGuestJoinDrafts();
     window.history.replaceState(null, '', '/');
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
