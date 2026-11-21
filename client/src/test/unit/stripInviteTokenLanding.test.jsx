@@ -299,4 +299,44 @@ describe('Party strips #t= for an already-seated member', () => {
     expect(readInviteTokenFromHash(window.location.hash)).toBe(TOKEN);
     expect(address()).toBe(`/party/${PARTY_ID}#t=${TOKEN}`);
   });
+
+  function activeGameWithLaggingList(seated) {
+    usePartyMock.mockReturnValue({
+      party: { id: PARTY_ID, title: 'Swap', status: 'ACTIVE', adminId: 'h' },
+      participants: [],
+      loading: false,
+      error: null,
+    });
+    getDocMock.mockImplementation(async (ref) => {
+      if (ref.path === `parties/${PARTY_ID}/participants/guest-1`) {
+        return seated ? { exists: () => true, data: () => ({}) } : missing;
+      }
+      return missing;
+    });
+  }
+
+  it('strips #t= in an ACTIVE game when the list is empty but the own-seat read finds the seat', async () => {
+    window.history.replaceState({ from: 'invite' }, '', `/party/${PARTY_ID}#t=${TOKEN}`);
+    const replaceSpy = vi.spyOn(window.history, 'replaceState');
+    const pushSpy = vi.spyOn(window.history, 'pushState');
+    activeGameWithLaggingList(true);
+
+    renderParty();
+
+    expect(await screen.findByTestId('game-room')).toBeInTheDocument();
+    await waitFor(() => expect(readInviteTokenFromHash(window.location.hash)).toBeNull());
+    expect(replaceSpy).toHaveBeenCalledWith(expect.anything(), '', `/party/${PARTY_ID}`);
+    expect(pushSpy).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('late-invite-card')).toBeNull();
+  });
+
+  it('keeps #t= in an ACTIVE game when the own-seat read finds no seat', async () => {
+    window.history.replaceState(null, '', `/party/${PARTY_ID}#t=${TOKEN}`);
+    activeGameWithLaggingList(false);
+
+    renderParty();
+
+    expect(await screen.findByTestId('late-invite-card')).toBeInTheDocument();
+    expect(address()).toBe(`/party/${PARTY_ID}#t=${TOKEN}`);
+  });
 });

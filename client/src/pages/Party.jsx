@@ -54,12 +54,15 @@ export function Party() {
   const seatStatus = isParticipant ? 'seated' : fetchedSeatStatus;
 
   // Once the visitor is confirmed seated, drop #t= from this history entry (G19).
+  // Confirmed means on the participants list or, in an ACTIVE/ENDED game whose
+  // list is empty or lagging, an own-seat read that found the seat.
   // Do not do this earlier: the landing still needs the token to join.
+  const confirmedSeated = seatStatus === 'seated';
   useEffect(() => {
-    if (!isParticipant) return undefined;
+    if (!confirmedSeated) return undefined;
     stripInviteTokenFromAddressBar();
     return undefined;
-  }, [isParticipant]);
+  }, [confirmedSeated]);
 
   let content;
   if (authLoading) {
