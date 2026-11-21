@@ -143,7 +143,7 @@ describe('LateInviteCard', () => {
       />,
     );
     screen.getByRole('button', { name: LATE_INVITE_COPY.lateSignInLink }).click();
-    expect(window.sessionStorage.getItem('redirectAfterAuth')).toBe('/party/p1#t=abcd');
+    expect(window.sessionStorage.getItem('redirectAfterAuth')).toBe('/party/p1');
     expect(signInWithGoogle).toHaveBeenCalledTimes(1);
   });
 
