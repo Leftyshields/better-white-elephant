@@ -344,11 +344,18 @@ service cloud.firestore {
     
     // Gifts collection
     match /gifts/{giftId} {
-      // Participants can read gifts in their party
-      // Also allow authenticated users to read if party is in LOBBY (so they can see gifts while joining)
-      allow read: if isAuthenticated() && 
-                     (isParticipant(resource.data.partyId) || 
-                      get(/databases/$(database)/documents/parties/$(resource.data.partyId)).data.status == 'LOBBY');
+      // G25 gift privacy. Before the game, a gift is private to its submitter: no other player, no
+      // host, no visitor can read it. Once the game is ACTIVE or ENDED, seated players can read the
+      // party's gifts (the game board needs them). The host may also read a LOBBY gift whose
+      // submitter no longer holds a seat, only so "remove participant" can delete it (an orphan gift
+      // blocks game start).
+      allow read: if isAuthenticated() &&
+                     (resource.data.submitterId == request.auth.uid ||
+                      (isParticipant(resource.data.partyId) &&
+                       get(partyPath(resource.data.partyId)).data.status in ['ACTIVE', 'ENDED']) ||
+                      (partyIsLobby(resource.data.partyId) &&
+                       isPartyAdmin(resource.data.partyId) &&
+                       !exists(participantPath(resource.data.partyId, resource.data.submitterId))));
       
       // Create while party is LOBBY; caller must hold a seat; submitterId must match auth
       allow create: if isAuthenticated() && 

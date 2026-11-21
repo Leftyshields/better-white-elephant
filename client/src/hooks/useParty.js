@@ -94,12 +94,46 @@ export function useParty(partyId, authUid = null) {
       }
     );
 
-    // Subscribe to gifts
+    // Subscribe to pending invites
+    const pendingInvitesUnsubscribe = onSnapshot(
+      collection(db, 'parties', partyId, 'pendingInvites'),
+      (snapshot) => {
+        const invitesList = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        setPendingInvites(invitesList);
+      }
+    );
+
+    return () => {
+      participantsUnsubscribe();
+      pendingInvitesUnsubscribe();
+    };
+  }, [partyId, authUid]);
+
+  // G25 gift privacy: before the game a player may read only their own gift, so the lobby listens
+  // to the caller's gift alone. Once the game is ACTIVE or ENDED, seated players read every gift
+  // in the party (the game board needs them).
+  const giftScope = giftListenScope(party, authUid);
+
+  useEffect(() => {
+    if (!partyId || giftScope === 'none') {
+      setGifts([]);
+      return undefined;
+    }
+
+    const giftsQuery =
+      giftScope === 'party'
+        ? query(collection(db, 'gifts'), where('partyId', '==', partyId))
+        : query(
+            collection(db, 'gifts'),
+            where('partyId', '==', partyId),
+            where('submitterId', '==', authUid)
+          );
+
     const giftsUnsubscribe = onSnapshot(
-      query(
-        collection(db, 'gifts'),
-        where('partyId', '==', partyId)
-      ),
+      giftsQuery,
       (snapshot) => {
         const giftsList = snapshot.docs.map((doc) => ({
           id: doc.id,
@@ -120,26 +154,24 @@ export function useParty(partyId, authUid = null) {
       }
     );
 
-    // Subscribe to pending invites
-    const pendingInvitesUnsubscribe = onSnapshot(
-      collection(db, 'parties', partyId, 'pendingInvites'),
-      (snapshot) => {
-        const invitesList = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-        setPendingInvites(invitesList);
-      }
-    );
-
     return () => {
-      participantsUnsubscribe();
       giftsUnsubscribe();
-      pendingInvitesUnsubscribe();
     };
-  }, [partyId, authUid]);
+  }, [partyId, authUid, giftScope]);
 
   return { party, participants, pendingInvites, gifts, loading, error };
+}
+
+/**
+ * Which gifts the caller may listen to (G25).
+ * @returns {'party' | 'own' | 'none'} 'party' = every gift in the party (game ACTIVE or ENDED),
+ *   'own' = only the caller's gift (lobby or any other pre-game state), 'none' = nothing yet
+ *   (party not loaded, or no signed-in uid before the game).
+ */
+export function giftListenScope(party, authUid) {
+  if (!party) return 'none';
+  if (party.status === 'ACTIVE' || party.status === 'ENDED') return 'party';
+  return authUid ? 'own' : 'none';
 }
 
 

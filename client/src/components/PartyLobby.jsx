@@ -4,6 +4,7 @@
 import { useState, useEffect, useId } from 'react';
 import { useAuth } from '../hooks/useAuth.js';
 import { useParty } from '../hooks/useParty.js';
+import { lobbyGiftPotCount } from '../utils/giftPotCount.js';
 import { Button } from './ui/Button.jsx';
 import { Input } from './ui/Input.jsx';
 import { Modal } from './ui/Modal.jsx';
@@ -44,7 +45,7 @@ import { hostFirstNameFromParty } from './PartyInviteLanding.jsx';
 
 export function PartyLobby({ partyId, onStartGame }) {
   const { user } = useAuth();
-  const { party, participants, pendingInvites, gifts, loading } = useParty(partyId);
+  const { party, participants, pendingInvites, gifts, loading } = useParty(partyId, user?.uid ?? null);
   const { socket } = useGameSocket(partyId); // Get socket for simulation controls
   const [giftUrl, setGiftUrl] = useState('');
   const [scraping, setScraping] = useState(false);
@@ -75,6 +76,12 @@ export function PartyLobby({ partyId, onStartGame }) {
   const isGoogleHost = isAdmin && userSignedInWithGoogle(user);
   const currentParticipant = participants.find((p) => p.id === user?.uid);
   const userGift = gifts.find((g) => g.submitterId === user?.uid);
+  const potCount = lobbyGiftPotCount({
+    participants,
+    adminId: party?.adminId ?? null,
+    userId: user?.uid ?? null,
+    hasOwnGift: !!userGift,
+  });
   const [adminShippingAddress, setAdminShippingAddress] = useState(null);
   const [loadingAdminAddress, setLoadingAdminAddress] = useState(false);
 
@@ -736,12 +743,12 @@ export function PartyLobby({ partyId, onStartGame }) {
       {/* Gift Pile Hero Section */}
       <div className="bg-slate-900/80 backdrop-blur-xl border border-white/10 shadow-2xl rounded-2xl p-8 text-center">
         <div className="flex justify-center items-center flex-wrap gap-2 mb-4">
-          {gifts.length > 0 ? (
-            gifts.map((gift, index) => (
+          {potCount > 0 ? (
+            Array.from({ length: potCount }, (_, index) => (
               <span
-                key={gift.id}
+                key={index}
                 className="text-6xl -ml-4 first:ml-0 drop-shadow-lg transition-all hover:-translate-y-2"
-                style={{ zIndex: gifts.length - index }}
+                style={{ zIndex: potCount - index }}
               >
                 🎁
               </span>
@@ -753,7 +760,7 @@ export function PartyLobby({ partyId, onStartGame }) {
           )}
         </div>
         <div className="text-2xl font-bold text-white">
-          {gifts.length} Gift{gifts.length !== 1 ? 's' : ''} in the Pot
+          {potCount} Gift{potCount !== 1 ? 's' : ''} in the Pot
         </div>
       </div>
 
