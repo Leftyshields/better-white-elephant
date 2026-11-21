@@ -30,6 +30,9 @@ const FIELD =
 const drafts = new Map();
 // Wait this long after the name field loses focus before saving the name to the seat (G18).
 export const NAME_SAVE_DEBOUNCE_MS = 400;
+// A rejected save may retry on a later seat snapshot, but only a few times, with backoff, and
+// then it waits for the next blur. Otherwise a deny plus rollback snapshot can loop forever.
+export const NAME_SAVE_MAX_RETRIES = 3;
 
 function memoryDraftKey(partyId, uid) {
   return uid ? `${partyId}::${uid}` : `${partyId}::pending`;
@@ -41,6 +44,18 @@ function readMemoryDraft(partyId, uid) {
     if (keyed) return keyed;
   }
   return drafts.get(`${partyId}::pending`) || null;
+}
+
+/** Give this uid the pending draft once, then drop pending so a later account cannot adopt it. */
+function claimPendingMemoryDraft(partyId, uid) {
+  if (!uid) return;
+  if (drafts.has(`${partyId}::${uid}`)) {
+    drafts.delete(`${partyId}::pending`);
+    return;
+  }
+  const pending = drafts.get(`${partyId}::pending`);
+  if (pending) drafts.set(`${partyId}::${uid}`, pending);
+  drafts.delete(`${partyId}::pending`);
 }
 
 function previewMatchesLink(preview, giftUrl) {
@@ -118,6 +133,7 @@ export function GuestJoinCard({
   seated,
   terminalMessage,
 }) {
+  claimPendingMemoryDraft(partyId, user?.uid);
   const memory = readMemoryDraft(partyId, user?.uid) || {};
   const stored = readGuestGiftDraft(partyId, user?.uid);
   const draft = { ...stored, ...memory };
@@ -145,6 +161,8 @@ export function GuestJoinCard({
   );
   const [nameSaveGen, setNameSaveGen] = useState(0);
   const nameWriteRef = useRef(null);
+  const nameSaveAttemptsRef = useRef(0);
+  const wasSeatedRef = useRef(seated);
 
   useEffect(() => {
     const key = memoryDraftKey(partyId, user?.uid);
@@ -156,13 +174,17 @@ export function GuestJoinCard({
   const seatLastInitial = participant?.lastInitial;
   const seatUpdatedAt = participant?.updatedAt?.valueOf?.() ?? participant?.updatedAt ?? null;
 
-  // If the seat lands (or this is the remounted lobby card) and the name was touched but not yet
-  // blurred, treat the current field as ready to save.
+  // Catch up a name typed on the landing card only when the seat actually lands (false -> true)
+  // on this instance. A remount already seeds blurredName from the in-memory draft. Do not run
+  // this when nameTouched flips true on an already-seated lobby card: that would write the first
+  // letter to the seat while the guest is still typing.
   useEffect(() => {
-    if (seated && nameTouched && blurredName === null && participant?.ready !== true) {
+    const justSeated = seated && !wasSeatedRef.current;
+    wasSeatedRef.current = seated;
+    if (justSeated && nameTouched && blurredName === null && participant?.ready !== true) {
       setBlurredName(name);
     }
-  }, [seated, nameTouched, blurredName, participant?.ready]); // name is read once when seated or touched becomes true
+  }, [seated, nameTouched, blurredName, participant?.ready, name]);
 
   useEffect(() => {
     if (blurredName === null || !seated || !user?.uid || participant?.ready === true) return undefined;
@@ -172,14 +194,17 @@ export function GuestJoinCard({
     const onSeat =
       fields.displayName === seatDisplayName && (!fields.lastInitial || fields.lastInitial === seatLastInitial);
     if (onSeat || nameWriteRef.current === key) return undefined;
+    if (nameSaveAttemptsRef.current >= NAME_SAVE_MAX_RETRIES) return undefined;
+    const delay = NAME_SAVE_DEBOUNCE_MS * (2 ** nameSaveAttemptsRef.current);
     const timer = setTimeout(() => {
       nameWriteRef.current = key;
+      nameSaveAttemptsRef.current += 1;
       updateDoc(doc(db, 'parties', partyId, 'participants', user.uid), { ...fields, updatedAt: new Date() })
         .catch((error) => {
           nameWriteRef.current = null;
           console.error('Guest name save failed:', { code: error?.code, name: error?.name });
         });
-    }, NAME_SAVE_DEBOUNCE_MS);
+    }, delay);
     return () => clearTimeout(timer);
   }, [blurredName, nameSaveGen, seated, user?.uid, partyId, participant?.ready, seatDisplayName, seatLastInitial, seatUpdatedAt]);
 
@@ -402,6 +427,7 @@ export function GuestJoinCard({
               onBlur={(e) => {
                 setNameTouched(true);
                 setBlurredName(e.target.value);
+                nameSaveAttemptsRef.current = 0;
                 setNameSaveGen((n) => n + 1);
               }}
               aria-invalid={showNameError || undefined}

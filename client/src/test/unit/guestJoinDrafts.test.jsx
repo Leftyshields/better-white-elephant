@@ -5,7 +5,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { GuestJoinCard, NAME_SAVE_DEBOUNCE_MS, savedSeatName } from '../../components/GuestJoinCard.jsx';
+import { GuestJoinCard, NAME_SAVE_DEBOUNCE_MS, NAME_SAVE_MAX_RETRIES, savedSeatName } from '../../components/GuestJoinCard.jsx';
 import { GUEST_JOIN_COPY as COPY } from '../../utils/guestJoinCopy.js';
 import { readGuestGiftDraft, writeGuestGiftDraft, guestGiftDraftKey } from '../../utils/guestGiftDraft.js';
 import { scrapeGiftUrl } from '../../utils/api.js';
@@ -161,6 +161,22 @@ describe('G18: name saves to the seat on blur', () => {
     expect(savedSeatName({ displayName: 'Alex' })).toBe('Alex');
   });
 
+  it('key-by-key typing on a seated lobby card does not write until blur, and the write is the full name', () => {
+    vi.useFakeTimers();
+    render(card(nextParty()));
+    fireEvent.focus(nameField());
+    for (const value of ['A', 'Al', 'Ale', 'Alex', 'Alex ', 'Alex K', 'Alex Ki', 'Alex Kim']) {
+      fireEvent.change(nameField(), { target: { value } });
+      act(() => vi.advanceTimersByTime(NAME_SAVE_DEBOUNCE_MS * 3));
+      expect(seatNameWrites()).toHaveLength(0);
+    }
+    expect(nameField()).toHaveValue('Alex Kim');
+    fireEvent.blur(nameField());
+    act(() => vi.advanceTimersByTime(NAME_SAVE_DEBOUNCE_MS * 3));
+    expect(seatNameWrites()).toHaveLength(1);
+    expect(seatNameWrites()[0][1]).toMatchObject({ displayName: 'Alex', lastInitial: 'K' });
+  });
+
   it('a failed name save logs only the error code, never the name', async () => {
     updateDocMock.mockRejectedValue(Object.assign(new Error('denied'), { code: 'permission-denied' }));
     render(card(nextParty()));
@@ -194,6 +210,32 @@ describe('G18: name saves to the seat on blur', () => {
     await waitFor(() => expect(seatNameWrites()).toHaveLength(1));
     rerender(card(partyId, { participant: { id: 'anon-1', status: 'GOING', ready: false, updatedAt: 2 } }));
     await waitFor(() => expect(seatNameWrites()).toHaveLength(2));
+  });
+
+  it('caps rejected name saves at NAME_SAVE_MAX_RETRIES with backoff, then waits for the next blur', async () => {
+    vi.useFakeTimers();
+    const err = Object.assign(new Error('denied'), { code: 'permission-denied' });
+    updateDocMock.mockImplementation(() => Promise.reject(err));
+    const partyId = nextParty();
+    const { rerender } = render(card(partyId, { participant: { id: 'anon-1', status: 'GOING', ready: false, updatedAt: 1 } }));
+    fireEvent.change(nameField(), { target: { value: 'Sam' } });
+    fireEvent.blur(nameField());
+    for (let i = 0; i < 8; i += 1) {
+      await act(async () => {
+        vi.advanceTimersByTime(NAME_SAVE_DEBOUNCE_MS * (2 ** NAME_SAVE_MAX_RETRIES));
+      });
+      // Flush the rejection so the write ref is cleared before the rollback snapshot.
+      await act(async () => {});
+      rerender(card(partyId, { participant: { id: 'anon-1', status: 'GOING', ready: false, updatedAt: 100 + i } }));
+    }
+    expect(seatNameWrites()).toHaveLength(NAME_SAVE_MAX_RETRIES);
+    expect(JSON.stringify(console.error.mock.calls)).not.toMatch(/Sam/);
+    fireEvent.blur(nameField());
+    await act(async () => {
+      vi.advanceTimersByTime(NAME_SAVE_DEBOUNCE_MS * (2 ** NAME_SAVE_MAX_RETRIES));
+    });
+    await act(async () => {});
+    expect(seatNameWrites().length).toBe(NAME_SAVE_MAX_RETRIES + 1);
   });
 });
 
@@ -312,6 +354,25 @@ describe('G24: gift draft survives F5 in sessionStorage', () => {
     writeGuestGiftDraft(partyId, 'anon-1', { giftUrl: 'https://a.example/x', preview: null, manual: true, manualTitle: 'Secret Santa Mug', manualPrice: '20' });
     render(card(partyId, { user: { uid: 'other-2', isAnonymous: false, displayName: 'Sam Lee' }, participant: { id: 'other-2', status: 'GOING', ready: false } }));
     expect(screen.queryByDisplayValue('Secret Santa Mug')).toBeNull();
+  });
+
+  it('a later uid does not adopt a pending in-memory name typed before any account existed', () => {
+    vi.useFakeTimers();
+    const partyId = nextParty();
+    const landing = render(card(partyId, { seated: false, participant: null, user: null }));
+    fireEvent.change(nameField(), { target: { value: 'Alex Kim' } });
+    fireEvent.blur(nameField());
+    landing.unmount();
+    const first = render(card(partyId, { user: { uid: 'anon-1', isAnonymous: true, displayName: null }, participant: { id: 'anon-1', status: 'GOING', ready: false }, seated: true }));
+    expect(nameField()).toHaveValue('Alex Kim');
+    act(() => vi.advanceTimersByTime(NAME_SAVE_DEBOUNCE_MS * 3));
+    expect(seatNameWrites()).toHaveLength(1);
+    first.unmount();
+    render(card(partyId, { user: { uid: 'other-2', isAnonymous: false, displayName: 'Sam Lee' }, participant: { id: 'other-2', status: 'GOING', ready: false }, seated: true }));
+    expect(nameField()).not.toHaveValue('Alex Kim');
+    act(() => vi.advanceTimersByTime(NAME_SAVE_DEBOUNCE_MS * 3));
+    const otherWrites = updateDocMock.mock.calls.filter(([ref, data]) => /participants\/other-2$/.test(ref.path) && !('ready' in data));
+    expect(otherWrites).toHaveLength(0);
   });
 
   it('ignores a tampered or malformed draft', () => {
