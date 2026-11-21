@@ -2,7 +2,7 @@
  * BUG-8: guests showed as "Player <uid>" in the host lobby because no public name was on the seat.
  */
 import { describe, expect, it } from 'vitest';
-import { rosterDisplayNames, seatNameFields } from '../../utils/seatDisplayName.js';
+import { nameCollisionSuffix, rosterDisplayNames, seatNameFields } from '../../utils/seatDisplayName.js';
 
 describe('seatNameFields', () => {
   it('keeps the first name and last initial from a Google name', () => {
@@ -84,6 +84,64 @@ describe('rosterDisplayNames', () => {
     expect(names).toEqual({
       'uid-jamie-g': 'Jamie G.',
       'uid-jamie-h': 'Jamie H.',
+    });
+  });
+});
+
+describe('rosterDisplayNames unique collision suffixes (G21)', () => {
+  const twoBriansAndAFirstNameOnly = [
+    { id: 'uid-brian-1', displayName: 'Brian', lastInitial: 'S' },
+    { id: 'uid-brian-2', displayName: 'Brian', lastInitial: 'S' },
+    { id: 'uid-brian-3', displayName: 'Brian' },
+  ];
+
+  it('keeps the first colliding label plain and suffixes later seats in seat order', () => {
+    expect(nameCollisionSuffix(2)).toBe(' (2)');
+    const names = rosterDisplayNames(twoBriansAndAFirstNameOnly);
+    expect(names).toEqual({
+      'uid-brian-1': 'Brian S.',
+      'uid-brian-2': 'Brian S. (2)',
+      'uid-brian-3': 'Brian',
+    });
+  });
+
+  it('returns the same numbers when the roster is computed again (stable across re-renders)', () => {
+    const first = rosterDisplayNames(twoBriansAndAFirstNameOnly);
+    const second = rosterDisplayNames(twoBriansAndAFirstNameOnly);
+    expect(second).toEqual(first);
+    expect(second).toEqual({
+      'uid-brian-1': 'Brian S.',
+      'uid-brian-2': 'Brian S. (2)',
+      'uid-brian-3': 'Brian',
+    });
+  });
+
+  it('keeps earlier numbers stable when another colliding seat is added', () => {
+    const before = rosterDisplayNames(twoBriansAndAFirstNameOnly);
+    const after = rosterDisplayNames([
+      ...twoBriansAndAFirstNameOnly,
+      { id: 'uid-brian-4', displayName: 'Brian', lastInitial: 'S' },
+    ]);
+    expect(before).toEqual({
+      'uid-brian-1': 'Brian S.',
+      'uid-brian-2': 'Brian S. (2)',
+      'uid-brian-3': 'Brian',
+    });
+    expect(after).toEqual({
+      'uid-brian-1': 'Brian S.',
+      'uid-brian-2': 'Brian S. (2)',
+      'uid-brian-3': 'Brian',
+      'uid-brian-4': 'Brian S. (3)',
+    });
+  });
+
+  it('suffixes first-name-only collisions as Brian and Brian (2)', () => {
+    expect(rosterDisplayNames([
+      { id: 'a', displayName: 'Brian' },
+      { id: 'b', displayName: 'Brian' },
+    ])).toEqual({
+      a: 'Brian',
+      b: 'Brian (2)',
     });
   });
 });

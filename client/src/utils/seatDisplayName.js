@@ -17,6 +17,12 @@ import {
 
 const LAST_INITIAL_RE = /^[A-Z]$/;
 
+/** Copywriter-signed unique-name suffix (G21): a space and (N), starting at 2. */
+export function nameCollisionSuffix(n) {
+  return ` (${n})`;
+}
+
+
 /**
  * Seat name fields from a full name (Auth displayName). Returns {} when nothing public remains,
  * so the roster keeps the Player fallback.
@@ -87,7 +93,27 @@ export function rosterDisplayNames(participants, batchNames = {}) {
       names[r.id] = r.fallback;
     }
   }
-  return names;
+  return applyNameCollisionOrdinals(names, participants);
+}
+
+/**
+ * After last-initial disambiguation, labels that still match get " (N)" in seat
+ * order. The first seat keeps the plain label; later seats start at 2.
+ */
+function applyNameCollisionOrdinals(names, participants) {
+  const seen = new Map();
+  const unique = { ...names };
+  for (const participant of participants) {
+    const id = participant?.id;
+    if (!id || unique[id] == null) continue;
+    const label = unique[id];
+    const count = (seen.get(label) || 0) + 1;
+    seen.set(label, count);
+    if (count > 1) {
+      unique[id] = `${label}${nameCollisionSuffix(count)}`;
+    }
+  }
+  return unique;
 }
 
 export function participantNeedsBatchName(participant) {
