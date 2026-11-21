@@ -22,6 +22,9 @@ export function useParty(partyId, authUid = null) {
   const [participants, setParticipants] = useState([]);
   const [pendingInvites, setPendingInvites] = useState([]);
   const [gifts, setGifts] = useState([]);
+  // Which party|uid has had its first gift snapshot (or error). Only the first load gates `loading`;
+  // a later scope change (lobby to game) swaps gifts in place without a loading flash.
+  const [giftsLoadedFor, setGiftsLoadedFor] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -116,6 +119,7 @@ export function useParty(partyId, authUid = null) {
   // to the caller's gift alone. Once the game is ACTIVE or ENDED, seated players read every gift
   // in the party (the game board needs them).
   const giftScope = giftListenScope(party, authUid);
+  const giftsKey = `${partyId}|${authUid}`;
 
   useEffect(() => {
     if (!partyId || giftScope === 'none') {
@@ -141,6 +145,7 @@ export function useParty(partyId, authUid = null) {
         }));
         console.log('Gifts updated:', giftsList.length, 'gifts');
         setGifts(giftsList);
+        setGiftsLoadedFor(giftsKey);
       },
       (error) => {
         console.error('❌ Error fetching gifts:', error);
@@ -151,15 +156,20 @@ export function useParty(partyId, authUid = null) {
         });
         // Set empty array on error so UI doesn't break
         setGifts([]);
+        setGiftsLoadedFor(giftsKey);
       }
     );
 
     return () => {
       giftsUnsubscribe();
     };
-  }, [partyId, authUid, giftScope]);
+  }, [partyId, authUid, giftScope, giftsKey]);
 
-  return { party, participants, pendingInvites, gifts, loading, error };
+  // Stay loading until the gift listener's first answer, so the lobby never flashes "no gift yet"
+  // (Submit your gift, Start enabled) before the caller's own gift arrives.
+  const giftsPending = !!partyId && giftScope !== 'none' && giftsLoadedFor !== giftsKey;
+
+  return { party, participants, pendingInvites, gifts, loading: loading || giftsPending, error };
 }
 
 /**

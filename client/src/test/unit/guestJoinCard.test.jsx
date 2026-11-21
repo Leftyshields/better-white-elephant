@@ -8,18 +8,26 @@ import { GuestJoinCard } from '../../components/GuestJoinCard.jsx';
 import { GUEST_JOIN_COPY as COPY, guestStepsHeader } from '../../utils/guestJoinCopy.js';
 
 const updateDocMock = vi.fn();
-const addDocMock = vi.fn();
 const setDocMock = vi.fn();
+const commitMock = vi.fn();
+let batchOps = [];
 
 vi.mock('../../utils/firebase.js', () => ({ db: {} }));
 vi.mock('../../utils/analytics.js', () => ({ trackSubmitGift: vi.fn() }));
 vi.mock('../../utils/api.js', () => ({ scrapeGiftUrl: vi.fn() }));
 vi.mock('firebase/firestore', () => ({
-  doc: vi.fn((_db, ...path) => ({ path: path.join('/') })),
+  // doc(collection) mints the new gift id 'gift-new'; doc(db, ...path) is a path ref.
+  doc: vi.fn((first, ...path) => (path.length ? { path: path.join('/') } : { path: 'gifts/gift-new', id: 'gift-new' })),
   collection: vi.fn((_db, name) => ({ path: name })),
-  addDoc: (...args) => addDocMock(...args),
   setDoc: (...args) => setDocMock(...args),
   updateDoc: (...args) => updateDocMock(...args),
+  deleteField: () => '__delete__',
+  writeBatch: () => ({
+    set: (ref, data) => batchOps.push({ op: 'set', path: ref.path, data }),
+    update: (ref, data) => batchOps.push({ op: 'update', path: ref.path, data }),
+    delete: (ref) => batchOps.push({ op: 'delete', path: ref.path }),
+    commit: () => commitMock(),
+  }),
 }));
 
 let seq = 0;
@@ -56,8 +64,9 @@ describe('steps header copy', () => {
 describe('GuestJoinCard', () => {
   beforeEach(() => {
     updateDocMock.mockReset().mockResolvedValue(undefined);
-    addDocMock.mockReset().mockResolvedValue({ id: 'g1' });
     setDocMock.mockReset().mockResolvedValue(undefined);
+    commitMock.mockReset().mockResolvedValue(undefined);
+    batchOps = [];
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
@@ -88,9 +97,9 @@ describe('GuestJoinCard', () => {
     expect(readyButton()).toBeDisabled();
   });
 
-  it('saves gift, name and ready together, showing Saving... while busy', async () => {
+  it('saves gift, name, ready and the seat hasGift link in one batch, showing Saving... while busy', async () => {
     let finish;
-    updateDocMock.mockReturnValue(new Promise((r) => { finish = r; }));
+    commitMock.mockReturnValue(new Promise((r) => { finish = r; }));
     renderCard();
     fireEvent.change(screen.getByLabelText(COPY.nameLabel), { target: { value: 'Sam Lee' } });
     fireEvent.click(screen.getByRole('button', { name: COPY.giftManualToggle }));
@@ -103,17 +112,25 @@ describe('GuestJoinCard', () => {
     expect(readyButton()).toBeDisabled();
     finish();
     await waitFor(() => expect(readyButton()).toHaveTextContent(COPY.readyCta));
-    expect(addDocMock).toHaveBeenCalledTimes(1);
-    expect(addDocMock.mock.calls[0][1]).toMatchObject({ submitterId: 'anon-1', title: 'Wool socks', url: 'https://example.com/socks' });
-    expect(updateDocMock).toHaveBeenCalledWith(
-      { path: expect.stringMatching(/participants\/anon-1$/) },
-      expect.objectContaining({ ready: true, displayName: 'Sam', lastInitial: 'L' }),
-    );
+    expect(commitMock).toHaveBeenCalledTimes(1);
+    expect(batchOps).toHaveLength(2);
+    expect(batchOps[0]).toMatchObject({
+      op: 'set',
+      path: 'gifts/gift-new',
+      data: { submitterId: 'anon-1', title: 'Wool socks', url: 'https://example.com/socks' },
+    });
+    expect(batchOps[1].op).toBe('update');
+    expect(batchOps[1].path).toMatch(/participants\/anon-1$/);
+    expect(batchOps[1].data).toMatchObject({ ready: true, displayName: 'Sam', lastInitial: 'L', hasGift: true, giftId: 'gift-new' });
+    // The seat carries the link only, never gift details.
+    expect(batchOps[1].data).not.toHaveProperty('title');
+    expect(batchOps[1].data).not.toHaveProperty('url');
+    expect(updateDocMock).not.toHaveBeenCalled();
     expect(setDocMock).not.toHaveBeenCalled();
   });
 
   it('a failed save shows the toast and keeps every typed value', async () => {
-    updateDocMock.mockRejectedValue(Object.assign(new Error('x'), { code: 'unavailable' }));
+    commitMock.mockRejectedValue(Object.assign(new Error('x'), { code: 'unavailable' }));
     renderCard();
     fireEvent.change(screen.getByLabelText(COPY.nameLabel), { target: { value: 'Sam' } });
     fireEvent.click(screen.getByRole('button', { name: COPY.giftManualToggle }));
@@ -163,6 +180,19 @@ describe('GuestJoinCard', () => {
     renderCard();
     fireEvent.click(screen.getByRole('button', { name: COPY.giftManualToggle }));
     expect(screen.getByText("This store won't share its gift details with us. Add them below.")).toBeInTheDocument();
+  });
+
+  it('undo Ready changes only ready, so the seat keeps its hasGift link (pot count unchanged)', async () => {
+    renderCard({
+      participant: { id: 'anon-1', ready: true, displayName: 'Sam', hasGift: true, giftId: 'g1' },
+      gift: { id: 'g1', title: 'Socks' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: COPY.readyUndo }));
+    await waitFor(() => expect(updateDocMock).toHaveBeenCalledTimes(1));
+    const fields = updateDocMock.mock.calls[0][1];
+    expect(Object.keys(fields).sort()).toEqual(['ready', 'updatedAt']);
+    expect(fields.ready).toBe(false);
+    expect(batchOps).toHaveLength(0);
   });
 
   it('shows the ready state with one way back', () => {

@@ -1,20 +1,12 @@
 /**
- * Lobby gift pot count (G25). In the lobby a player can read only their own gift doc, so the pot
- * is counted from seats: every GOING guest whose seat is Ready has a gift in (Ready is set when the
- * gift is saved). The caller's own gift is added when their seat is not already counted (the host,
- * or a guest who is not Ready yet). Other players cannot see the host's gift, so their count leaves
- * it out.
+ * Lobby gift pot count (G25 + G26). A player can read only their own gift doc before the game, so
+ * the pot is counted from seats: every GOING seat (host included) whose hasGift flag is true.
+ * Firestore rules let only the seat's owner set hasGift, and only while it points at their real
+ * gift (giftId), so the count is the same for every viewer and Ready/undo Ready doesn't move it.
  *
- * @param {{ participants?: Array<{id: string, status?: string, ready?: boolean}>, adminId?: string | null,
- *   userId?: string | null, hasOwnGift?: boolean }} input
+ * @param {Array<{status?: string, hasGift?: boolean}>} [participants]
  * @returns {number}
  */
-export function lobbyGiftPotCount({ participants = [], adminId = null, userId = null, hasOwnGift = false }) {
-  const countedSeatIds = new Set(
-    participants
-      .filter((p) => p.status === 'GOING' && p.id !== adminId && p.ready === true)
-      .map((p) => p.id)
-  );
-  const ownExtra = hasOwnGift && userId && !countedSeatIds.has(userId) ? 1 : 0;
-  return countedSeatIds.size + ownExtra;
+export function lobbyGiftPotCount(participants = []) {
+  return participants.filter((p) => p.status === 'GOING' && p.hasGift === true).length;
 }

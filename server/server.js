@@ -560,19 +560,22 @@ io.on('connection', (socket) => {
           isBot: true,
         });
 
-        // Create participant document
+        // Create fake gift for this bot
+        const giftData = fakeGifts[i % fakeGifts.length];
+        const giftRef = db.collection('gifts').doc();
+
+        // Create participant document (hasGift/giftId link the seat to its gift for the lobby pot count)
         const participantRef = db.collection('parties').doc(partyId).collection('participants').doc(botId);
         batch.set(participantRef, {
           status: 'GOING',
           turnNumber: null,
           ready: true, // Bots are auto-ready
+          hasGift: true,
+          giftId: giftRef.id,
           joinedAt: new Date(),
           updatedAt: new Date(),
         });
 
-        // Create fake gift for this bot
-        const giftData = fakeGifts[i % fakeGifts.length];
-        const giftRef = db.collection('gifts').doc();
         batch.set(giftRef, {
           partyId,
           submitterId: botId,

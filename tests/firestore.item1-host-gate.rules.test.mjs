@@ -158,9 +158,10 @@ describe('google.com host gate', () => {
     await assertSucceeds(
       setDoc(doc(db, 'parties', PARTY_ID, 'pendingInvites', 'x_example_com'), { status: 'PENDING' }),
     );
-    await assertSucceeds(deleteDoc(doc(db, 'gifts', 'g1')));
     await assertSucceeds(getDoc(doc(db, 'parties', PARTY_ID, 'private', 'invite')));
+    // Remove participant: seat first, then the orphaned gift (G26: the host can't delete a seated guest's gift).
     await assertSucceeds(removeParticipantSeat(db, { id: PARTY_ID, participantCount: 2 }, GUEST_ID));
+    await assertSucceeds(deleteDoc(doc(db, 'gifts', 'g1')));
     assertCount(await readCount(), 1);
   });
 

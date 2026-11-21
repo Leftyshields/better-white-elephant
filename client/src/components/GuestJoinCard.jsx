@@ -7,7 +7,8 @@
  * and ready: true together. No reloads, no alert(), no address step.
  */
 import { useEffect, useId, useRef, useState } from 'react';
-import { addDoc, collection, doc, setDoc, updateDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
+import { seatGiftLink } from '../utils/seatGift.js';
 import { CheckCircleIcon } from '@heroicons/react/24/solid';
 import { db } from '../utils/firebase.js';
 import { scrapeGiftUrl } from '../utils/api.js';
@@ -151,12 +152,17 @@ export function GuestJoinCard({
     setSaving(true);
     setToast(null);
     try {
+      // One batch: the gift, my name, ready, and the seat's hasGift link (rules check the link).
+      const batch = writeBatch(db);
+      let giftId = gift?.id ?? null;
       if (pendingGift) {
         const fields = { url: pendingGift.url, title: pendingGift.title, image: pendingGift.image, price: pendingGift.price };
         if (gift) {
-          await updateDoc(doc(db, 'gifts', gift.id), { ...fields, updatedAt: new Date() });
+          batch.update(doc(db, 'gifts', gift.id), { ...fields, updatedAt: new Date() });
         } else {
-          await addDoc(collection(db, 'gifts'), {
+          const giftRef = doc(collection(db, 'gifts'));
+          giftId = giftRef.id;
+          batch.set(giftRef, {
             partyId,
             submitterId: user.uid,
             ...fields,
@@ -166,13 +172,15 @@ export function GuestJoinCard({
             updatedAt: new Date(),
           });
         }
-        trackSubmitGift(partyId);
       }
-      await updateDoc(doc(db, 'parties', partyId, 'participants', user.uid), {
+      batch.update(doc(db, 'parties', partyId, 'participants', user.uid), {
         ...seatName,
+        ...(giftId ? seatGiftLink(giftId) : {}),
         ready: true,
         updatedAt: new Date(),
       });
+      await batch.commit();
+      if (pendingGift) trackSubmitGift(partyId);
       // Profile name for later games; best effort (the seat name above is what the party shows).
       // Skipped for anonymous guests: their account is temporary (anonymousUserCleanup), the seat name is enough.
       if (!user.isAnonymous) {

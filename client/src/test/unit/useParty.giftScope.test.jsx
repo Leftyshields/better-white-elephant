@@ -13,8 +13,8 @@ vi.mock('firebase/firestore', () => ({
   collection: vi.fn((_db, ...path) => ({ kind: 'collection', path: path.join('/') })),
   where: vi.fn((field, op, value) => ({ field, op, value })),
   query: vi.fn((ref, ...filters) => ({ kind: 'query', path: ref.path, filters })),
-  onSnapshot: vi.fn((target, next) => {
-    const entry = { target, next, active: true };
+  onSnapshot: vi.fn((target, next, fail) => {
+    const entry = { target, next, fail, active: true };
     listeners.push(entry);
     return () => {
       entry.active = false;
@@ -99,5 +99,45 @@ describe('useParty gift listener (G25)', () => {
     const gifts = activeGiftListeners();
     expect(gifts).toHaveLength(1);
     expect(gifts[0].target.filters).toEqual([{ field: 'partyId', op: '==', value: PARTY_ID }]);
+  });
+
+  it('stays loading after the party loads until the first gift snapshot (no empty-gift flash)', () => {
+    const { result } = renderHook(() => useParty(PARTY_ID, 'guest-1'));
+    expect(result.current.loading).toBe(true);
+    emitParty('LOBBY');
+    expect(result.current.party).not.toBeNull();
+    expect(result.current.loading).toBe(true);
+    act(() => {
+      activeGiftListeners()[0].next({ docs: [{ id: 'mine', data: () => ({ partyId: PARTY_ID, submitterId: 'guest-1' }) }] });
+    });
+    expect(result.current.loading).toBe(false);
+    expect(result.current.gifts.map((g) => g.id)).toEqual(['mine']);
+  });
+
+  it('a gift listener error ends loading with no gifts', () => {
+    const { result } = renderHook(() => useParty(PARTY_ID, 'guest-1'));
+    emitParty('LOBBY');
+    act(() => {
+      activeGiftListeners()[0].fail(Object.assign(new Error('denied'), { code: 'permission-denied' }));
+    });
+    expect(result.current.loading).toBe(false);
+    expect(result.current.gifts).toEqual([]);
+  });
+
+  it('with no gift listener (signed out in the lobby) loading ends with the party', () => {
+    const { result } = renderHook(() => useParty(PARTY_ID, null));
+    emitParty('LOBBY');
+    expect(result.current.loading).toBe(false);
+  });
+
+  it('does not flash loading again when the game starts (gifts swap in place)', () => {
+    const { result } = renderHook(() => useParty(PARTY_ID, 'guest-1'));
+    emitParty('LOBBY');
+    act(() => {
+      activeGiftListeners()[0].next({ docs: [] });
+    });
+    expect(result.current.loading).toBe(false);
+    emitParty('ACTIVE');
+    expect(result.current.loading).toBe(false);
   });
 });

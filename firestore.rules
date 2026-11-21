@@ -150,6 +150,46 @@ service cloud.firestore {
         && (!changed.hasAny(['lastInitial']) || validSeatLastInitial(request.resource.data.lastInitial));
     }
 
+    // G26 seat gift link: participants/{uid}.hasGift (bool) + giftId mirror the seat owner's own
+    // gift, for the lobby pot count. Only the seat's owner may change them. hasGift true must point
+    // at the owner's real gift in this party after the batch; false needs the old gift gone. The
+    // game server never trusts hasGift (start validation reads gifts with the Admin SDK).
+    function giftPath(giftId) {
+      return /databases/$(database)/documents/gifts/$(giftId);
+    }
+
+    function seatGiftFieldsAbsentOnCreate() {
+      return !request.resource.data.keys().hasAny(['hasGift', 'giftId']);
+    }
+
+    function seatGiftLinkValid(partyId, participantId) {
+      let after = request.resource.data;
+      let linked = after.get('hasGift', false) == true;
+      let oldGiftId = resource.data.get('giftId', null);
+      return (linked
+              && after.get('giftId', null) is string
+              && existsAfter(giftPath(after.giftId))
+              && getAfter(giftPath(after.giftId)).data.submitterId == participantId
+              && getAfter(giftPath(after.giftId)).data.partyId == partyId)
+          || (!linked
+              && !after.keys().hasAny(['giftId'])
+              && !(oldGiftId is string && existsAfter(giftPath(oldGiftId))));
+    }
+
+    function seatGiftFieldsOkOnUpdate(partyId, participantId) {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return !changed.hasAny(['hasGift', 'giftId'])
+        || (participantId == request.auth.uid
+            && (!request.resource.data.keys().hasAny(['hasGift']) || request.resource.data.hasGift is bool)
+            && seatGiftLinkValid(partyId, participantId));
+    }
+
+    // A gift may be deleted only if no seat still links to it after the batch.
+    function giftUnlinkedAfter(partyId, submitterId, giftId) {
+      return !existsAfter(participantPath(partyId, submitterId))
+        || getAfter(participantPath(partyId, submitterId)).data.get('giftId', null) != giftId;
+    }
+
     function hostDisplayNameOkOnWrite() {
       return !request.resource.data.keys().hasAny(['hostDisplayName'])
         || validHostDisplayName(request.resource.data.hostDisplayName);
@@ -302,12 +342,14 @@ service cloud.firestore {
         allow create: if isAuthenticated() &&
                         participantId == request.auth.uid &&
                         seatNameFieldsOkOnCreate() &&
+                        seatGiftFieldsAbsentOnCreate() &&
                         (isCreatingPartyAsHost(partyId) || participantJoinAllowed(partyId));
         
         // Users can update their own participant status
         allow update: if isAuthenticated() && 
                         (participantId == request.auth.uid || isPartyAdmin(partyId)) &&
-                        seatNameFieldsOkOnUpdate(participantId);
+                        seatNameFieldsOkOnUpdate(participantId) &&
+                        seatGiftFieldsOkOnUpdate(partyId, participantId);
         
         // Only admin can delete participants, decrementing participantCount in the same batch
         allow delete: if isPartyAdmin(partyId) && participantRemovalCounted(partyId);
@@ -370,11 +412,14 @@ service cloud.firestore {
                        giftProtectedFieldsUnchanged() &&
                        giftSubmitterUpdateAllowed();
       
-      // Submitter or admin may delete gifts during lobby (Change Gift / remove participant)
-      allow delete: if isAuthenticated() && 
+      // During lobby: the submitter (Change Gift / delete), clearing their seat's hasGift link in the
+      // same batch; or the host for a gift whose submitter's seat is gone (remove participant).
+      allow delete: if isAuthenticated() &&
                        partyIsLobby(resource.data.partyId) &&
-                       (resource.data.submitterId == request.auth.uid ||
-                        isPartyAdmin(resource.data.partyId));
+                       ((resource.data.submitterId == request.auth.uid &&
+                         giftUnlinkedAfter(resource.data.partyId, resource.data.submitterId, giftId)) ||
+                        (isPartyAdmin(resource.data.partyId) &&
+                         !existsAfter(participantPath(resource.data.partyId, resource.data.submitterId))));
     }
     
     // Collection group query for participants - allows users to find parties where they are participants

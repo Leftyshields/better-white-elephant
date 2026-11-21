@@ -358,7 +358,7 @@ describe('client path: PartyLobby.jsx — gifts in lobby', () => {
     await assertSucceeds(deleteDoc(doc(db, 'gifts', GIFT_ID)));
   });
 
-  it('admin deleteDoc gift when removing participant', async () => {
+  it('admin deleteDoc gift when removing participant (seat removed first, as the app does)', async () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
       await setDoc(doc(context.firestore(), 'gifts', GIFT_ID), {
         ...giftPayload,
@@ -366,6 +366,11 @@ describe('client path: PartyLobby.jsx — gifts in lobby', () => {
       });
     });
     const db = authedDb(ADMIN_ID);
+    // G26: while the guest still holds a seat the host can't delete their gift.
+    await assertFails(deleteDoc(doc(db, 'gifts', GIFT_ID)));
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await deleteDoc(doc(context.firestore(), 'parties', PARTY_ID, 'participants', giftPayload.submitterId));
+    });
     await assertSucceeds(deleteDoc(doc(db, 'gifts', GIFT_ID)));
   });
 });
