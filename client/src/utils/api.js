@@ -50,3 +50,25 @@ export async function fetchWinnerShippingAddress(partyId, giftId) {
 }
 
 
+
+/**
+ * Party code routes (item 10). Returns { ok, status, body } instead of throwing, so the caller
+ * can tell "full" (409 after a valid match) from the one generic failure.
+ */
+export async function postPartyCode(route, body) {
+  try {
+    const token = await auth.currentUser?.getIdToken();
+    const response = await fetch(`${SERVER_URL}/api/party-code/${route}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+    const json = await response.json().catch(() => ({}));
+    return { ok: response.ok, status: response.status, body: json };
+  } catch {
+    return { ok: false, status: 0, body: {} };
+  }
+}

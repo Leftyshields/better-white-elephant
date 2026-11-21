@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   getJoinErrorMessage,
-  HOST_INVITE_LOAD_FAILED,
+  HOST_SHARE_LOAD_FAILED,
   HOST_INVITE_ROTATE_CONFIRM,
   HOST_INVITE_ROTATE_CTA,
   HOST_INVITE_ROTATE_DONE,
@@ -56,18 +56,18 @@ describe('PARTY_INVITE_COPY Copywriter slots', () => {
     expect(JOIN_ERROR_GENERIC).toBe(PARTY_INVITE_COPY['join.error.generic']);
   });
 
-  it('lands host.invite.rotate_* exactly', () => {
-    expect(PARTY_INVITE_COPY['host.invite.rotate_cta']).toBe('Make a new invite link');
+  it('lands host.invite.rotate_* code-and-link versions exactly (party-code spec)', () => {
+    expect(PARTY_INVITE_COPY['host.invite.rotate_cta']).toBe('Make a new code and link');
     expect(PARTY_INVITE_COPY['host.invite.rotate_helper']).toBe(
-      'Your old link and any invites you already sent will stop working.',
+      'Your old code and link will stop working, including any invites you already sent.',
     );
-    expect(PARTY_INVITE_COPY['host.invite.rotate_confirm']).toBe('Make new link');
+    expect(PARTY_INVITE_COPY['host.invite.rotate_confirm']).toBe('Make new code and link');
     expect(PARTY_INVITE_COPY['host.invite.rotate_failed']).toBe(
-      "We couldn't make a new link. Your old one still works.",
+      "Couldn't make a new code and link. Your old ones still work.",
     );
     expect(PARTY_INVITE_COPY['host.invite.rotate_retry']).toBe('Try again');
     expect(PARTY_INVITE_COPY['host.invite.rotate_done']).toBe(
-      'New link ready. Resend any invites you still need.',
+      'Your new code and link are ready. Resend them to anyone who still needs to join.',
     );
     expect(HOST_INVITE_ROTATE_CTA).toBe(PARTY_INVITE_COPY['host.invite.rotate_cta']);
     expect(HOST_INVITE_ROTATE_HELPER).toBe(PARTY_INVITE_COPY['host.invite.rotate_helper']);
@@ -77,11 +77,26 @@ describe('PARTY_INVITE_COPY Copywriter slots', () => {
     expect(HOST_INVITE_ROTATE_DONE).toBe(PARTY_INVITE_COPY['host.invite.rotate_done']);
   });
 
-  it('lands host.invite.load_failed exactly', () => {
-    expect(PARTY_INVITE_COPY['host.invite.load_failed']).toBe(
-      "We couldn't load your invite link.",
+  it('lands host.share.load_failed exactly', () => {
+    expect(PARTY_INVITE_COPY['host.share.load_failed']).toBe(
+      "Couldn't load your party code and link. Refresh to try again.",
     );
-    expect(HOST_INVITE_LOAD_FAILED).toBe(PARTY_INVITE_COPY['host.invite.load_failed']);
+    expect(HOST_SHARE_LOAD_FAILED).toBe(PARTY_INVITE_COPY['host.share.load_failed']);
+  });
+
+  it('lands the Copywriter 8-character party-code strings exactly', () => {
+    expect(PARTY_INVITE_COPY['home.join.helper']).toBe('Enter the 8-character code from your host.');
+    expect(PARTY_INVITE_COPY['home.join.placeholder']).toBe('XXXX-XXXX');
+    expect(PARTY_INVITE_COPY['home.join.error.format']).toBe(
+      'Codes have 8 letters and numbers, like KX7P-4MRB. They never use 0, O, 1, I, L, or U.',
+    );
+    expect(PARTY_INVITE_COPY['home.join.error.generic']).toBe(
+      "That code didn't get you in. Check it with your host, or try again later.",
+    );
+    expect(PARTY_INVITE_COPY['home.join.error.full']).toBe('This party is full. Every spot is taken.');
+    for (const value of Object.values(PARTY_INVITE_COPY)) {
+      expect(value).not.toMatch(/TODO/);
+    }
   });
 
   it('uses no em dashes in Copywriter slots', () => {

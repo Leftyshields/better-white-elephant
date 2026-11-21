@@ -9,6 +9,7 @@ import dotenv from 'dotenv';
 import gameRoutes from './routes/game.js';
 import userRoutes from './routes/users.js';
 import testRoutes from './routes/test.js';
+import partyCodeRoutes from './routes/party-code.js';
 import redisClient from './utils/redis.js';
 import { auth, db } from './config/firebase-admin.js';
 import admin from 'firebase-admin';
@@ -172,6 +173,7 @@ app.get('/health', (req, res) => {
 app.use('/api/game', gameRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/test', testRoutes);
+app.use('/api/party-code', partyCodeRoutes);
 
 // Socket.io authentication and connection handling
 io.use(async (socket, next) => {

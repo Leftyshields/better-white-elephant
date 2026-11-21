@@ -5,7 +5,7 @@
 import { useEffect } from 'react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 
-export function Modal({ isOpen, onClose, title, titleId, children, className = '' }) {
+export function Modal({ isOpen, onClose, title, titleId, children, className = '', bodyClassName = 'px-6 py-4' }) {
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
@@ -44,7 +44,7 @@ export function Modal({ isOpen, onClose, title, titleId, children, className = '
             )}
           </div>
         )}
-        <div className="px-6 py-4 overflow-y-auto flex-1">{children}</div>
+        <div className={`${bodyClassName} overflow-y-auto overscroll-contain flex-1 min-h-0`}>{children}</div>
       </div>
     </div>
   );

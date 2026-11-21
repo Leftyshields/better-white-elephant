@@ -4,7 +4,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { PartyInviteLanding } from '../../components/PartyInviteLanding.jsx';
-import { INVITE_LANDING_HOST_NAME_NOT_SHARED } from '../../../../server/lib/display-names.js';
+import { GUEST_JOIN_COPY } from '../../utils/guestJoinCopy.js';
 
 const PARTY_ID = 'invite-landing-party';
 
@@ -18,20 +18,21 @@ vi.mock('../../hooks/useAuth.js', () => ({
 vi.mock('../../utils/analytics.js', () => ({
   trackParticipantJoin: vi.fn(),
   trackError: vi.fn(),
-}));
-
-vi.mock('../../components/Snowflakes.jsx', () => ({
-  Snowflakes: () => null,
+  trackSubmitGift: vi.fn(),
 }));
 
 vi.mock('../../utils/firebase.js', () => ({
   db: {},
+  auth: { currentUser: null },
 }));
 
 vi.mock('firebase/firestore', () => ({
   doc: vi.fn((_db, ...path) => ({ path: path.join('/') })),
   getDoc: (...args) => getDocMock(...args),
   setDoc: vi.fn(),
+  addDoc: vi.fn(),
+  collection: vi.fn(),
+  updateDoc: vi.fn(),
 }));
 
 describe('PartyInviteLanding host name', () => {
@@ -39,8 +40,8 @@ describe('PartyInviteLanding host name', () => {
     getDocMock.mockReset();
     useAuthMock.mockReturnValue({
       user: null,
-      signInWithGoogle: vi.fn(),
       loading: false,
+      ensureGuestSession: vi.fn(),
     });
   });
 
@@ -63,9 +64,10 @@ describe('PartyInviteLanding host name', () => {
     render(<PartyInviteLanding partyId={PARTY_ID} />);
 
     await waitFor(() => {
-      expect(screen.getByText('Jessica Host')).toBeInTheDocument();
+      expect(screen.getByText(/^Jessica here\./)).toBeInTheDocument();
     });
-    expect(getDocMock).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/Host/)).toBeNull();
+    expect(getDocMock.mock.calls.filter(([ref]) => ref.path === `parties/${PARTY_ID}`)).toHaveLength(1);
   });
 
   it('falls back to copy when hostDisplayName is a synthetic Player fallback', async () => {
@@ -82,7 +84,7 @@ describe('PartyInviteLanding host name', () => {
     render(<PartyInviteLanding partyId={PARTY_ID} />);
 
     await waitFor(() => {
-      expect(screen.getByText(INVITE_LANDING_HOST_NAME_NOT_SHARED)).toBeInTheDocument();
+      expect(screen.getByText(GUEST_JOIN_COPY.welcomeBody(null))).toBeInTheDocument();
     });
   });
 
@@ -99,8 +101,8 @@ describe('PartyInviteLanding host name', () => {
     render(<PartyInviteLanding partyId={PARTY_ID} />);
 
     await waitFor(() => {
-      expect(screen.getByText(INVITE_LANDING_HOST_NAME_NOT_SHARED)).toBeInTheDocument();
+      expect(screen.getByText(GUEST_JOIN_COPY.welcomeBody(null))).toBeInTheDocument();
     });
-    expect(getDocMock).toHaveBeenCalledTimes(1);
+    expect(getDocMock.mock.calls.filter(([ref]) => ref.path === `parties/${PARTY_ID}`)).toHaveLength(1);
   });
 });

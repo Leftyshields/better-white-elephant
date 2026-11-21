@@ -114,7 +114,7 @@ export function Header() {
             </Link>
             
             {/* Host Party Button - only show on home page when logged in, hidden on mobile */}
-            {user && location.pathname === '/' && (
+            {user && !user.isAnonymous && location.pathname === '/' && (
               <button
                 onClick={() => setShowModal(true)}
                 className="hidden md:block px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold rounded-lg hover:from-indigo-600 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl"
@@ -200,12 +200,15 @@ export function Header() {
                       >
                         Profile
                       </Link>
-                      <button
-                        onClick={handleSignOut}
-                        className="w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-white/10 transition-colors"
-                      >
-                        Sign out
-                      </button>
+                      {/* Guests (anonymous) never see Sign out: it would drop their spot (onboarding spec). */}
+                      {!user.isAnonymous && (
+                        <button
+                          onClick={handleSignOut}
+                          className="w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-white/10 transition-colors"
+                        >
+                          Sign out
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}
