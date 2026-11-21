@@ -12,7 +12,7 @@ import {
   assertFails,
   assertSucceeds,
 } from '@firebase/rules-unit-testing';
-import { doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, doc, getDocs, limit, query, setDoc, updateDoc, deleteDoc, where } from 'firebase/firestore';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const RULES_PATH = resolve(__dirname, '../firestore.rules');
@@ -270,5 +270,24 @@ describe('gifts — create integrity', () => {
         submitterId: STRANGER_ID,
       }),
     );
+  });
+});
+describe('gifts: own-gift lookup before Ready (G24 duplicate guard)', () => {
+  const ownGiftQuery = (db, uid) =>
+    getDocs(query(collection(db, 'gifts'), where('partyId', '==', PARTY_ID), where('submitterId', '==', uid), limit(1)));
+
+  it('a seated anonymous guest can look up their own gift in a LOBBY party', async () => {
+    await seedLobbyGiftAndParty();
+    const db = testEnv
+      .authenticatedContext(SUBMITTER_ID, { firebase: { sign_in_provider: 'anonymous' } })
+      .firestore();
+    const snap = await assertSucceeds(ownGiftQuery(db, SUBMITTER_ID));
+    assert.equal(snap.size, 1);
+    assert.equal(snap.docs[0].id, GIFT_ID);
+  });
+
+  it('the lookup is refused once the game has started for a non-participant', async () => {
+    await seedActivePartyGift();
+    await assertFails(ownGiftQuery(authedDb(STRANGER_ID), SUBMITTER_ID));
   });
 });

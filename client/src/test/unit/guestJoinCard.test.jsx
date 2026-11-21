@@ -10,6 +10,7 @@ import { GUEST_JOIN_COPY as COPY, guestStepsHeader } from '../../utils/guestJoin
 const updateDocMock = vi.fn();
 const addDocMock = vi.fn();
 const setDocMock = vi.fn();
+const getDocsMock = vi.fn();
 
 vi.mock('../../utils/firebase.js', () => ({ db: {} }));
 vi.mock('../../utils/analytics.js', () => ({ trackSubmitGift: vi.fn() }));
@@ -20,6 +21,10 @@ vi.mock('firebase/firestore', () => ({
   addDoc: (...args) => addDocMock(...args),
   setDoc: (...args) => setDocMock(...args),
   updateDoc: (...args) => updateDocMock(...args),
+  getDocs: (...args) => getDocsMock(...args),
+  query: vi.fn((...args) => ({ args })),
+  where: vi.fn((...args) => args),
+  limit: vi.fn((n) => n),
 }));
 
 let seq = 0;
@@ -58,6 +63,8 @@ describe('GuestJoinCard', () => {
     updateDocMock.mockReset().mockResolvedValue(undefined);
     addDocMock.mockReset().mockResolvedValue({ id: 'g1' });
     setDocMock.mockReset().mockResolvedValue(undefined);
+  getDocsMock.mockReset().mockResolvedValue({ empty: true, docs: [] });
+    getDocsMock.mockReset().mockResolvedValue({ empty: true, docs: [] });
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 

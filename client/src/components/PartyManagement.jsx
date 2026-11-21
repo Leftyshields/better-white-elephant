@@ -12,6 +12,7 @@ import { apiRequest } from '../utils/api.js';
 import { filterVisiblePendingInvites } from '../utils/pendingInvites.js';
 import { postSendPartyInvite } from '../utils/sendPartyInvite.js';
 import { removeParticipantSeat } from '../utils/partyInvite.js';
+import { rosterDisplayNames } from '../utils/seatDisplayName.js';
 
 export function PartyManagement({ party, participants, pendingInvites = [] }) {
   const { user } = useAuth();
@@ -72,6 +73,9 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
 
     fetchUserInfo();
   }, [participants, party?.id]);
+
+  // Seat name first (guests' typed names show before Ready), then the profile name, with G21's (N).
+  const rosterLabels = rosterDisplayNames(participants, userNames);
 
   const handleUpdateTitle = async () => {
     try {
@@ -643,6 +647,7 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
               {/* Actual participants (signed up users) */}
               {participants.map((participant) => {
                 const isAdmin = participant.id === party?.adminId;
+                const label = rosterLabels[participant.id];
                 return (
                 <div
                   key={participant.id}
@@ -651,9 +656,7 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
                   <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                     <p className="font-medium text-white break-words">
-                      {userNames[participant.id] && userNames[participant.id] !== participant.id
-                        ? userNames[participant.id]
-                        : `Player ${participant.id.slice(0, 8)}`}
+                      {label}
                     </p>
                         {isAdmin && (
                           <span className="text-xs bg-indigo-600/30 text-indigo-300 px-2 py-1 rounded border border-indigo-500/30">
