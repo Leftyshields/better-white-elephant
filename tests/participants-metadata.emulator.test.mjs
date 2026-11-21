@@ -45,7 +45,8 @@ function listen(db, options) {
   const events = [];
   const col = collection(db, 'parties', PARTY_ID, 'participants');
   const onNext = (snap) => {
-    const changed = snap.docChanges({ includeMetadataChanges: true }).length;
+    // docChanges({ includeMetadataChanges }) is only allowed on a listener that asked for them.
+    const changed = snap.docChanges(options ? { includeMetadataChanges: true } : undefined).length;
     snap.docs.forEach((d) => {
       if (d.id === GUEST_ID) events.push({ ready: d.data().ready, pending: d.metadata.hasPendingWrites, changed });
     });
