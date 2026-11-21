@@ -14,16 +14,18 @@ export const PICK_GIFT_ALREADY_OPEN =
 export const PICK_GIFT_OWN_GIFT = OWN_GIFT_PICK_MESSAGE;
 
 /**
- * Product rule: you can't pick the gift you brought unless it is the only wrapped gift left.
+ * Product rule: you can't pick the gift you brought while someone else's wrapped gift remains.
+ * When every remaining wrapped gift is yours (usually just the last one), you may pick it,
+ * so the game can't deadlock.
  * Games started before giftSubmitters existed have no map, so the rule doesn't apply to them.
  * @param {{ giftSubmitters?: Record<string, string> | null, wrappedGifts: string[] }} state
  * @param {string} playerId
  * @param {string} giftId
  */
 export function isOwnGiftBlocked(state, playerId, giftId) {
-  return Boolean(state.giftSubmitters) &&
-    state.giftSubmitters[giftId] === playerId &&
-    state.wrappedGifts.length > 1;
+  const submitters = state.giftSubmitters;
+  if (!submitters || submitters[giftId] !== playerId) return false;
+  return state.wrappedGifts.some((id) => submitters[id] !== playerId);
 }
 
 /**

@@ -7,6 +7,7 @@ import { db } from '../config/firebase-admin.js';
 import admin from 'firebase-admin';
 import { isBot } from './bot-ids.js';
 import { pickableWrappedGifts } from './pick-gift-guards.js';
+import { finalizeEndedGame } from './finalize-ended-game.js';
 
 // Track active bot move timers to prevent duplicate moves
 const activeBotTimers = new Map();
@@ -509,6 +510,13 @@ export async function endBotTurn(partyId, io, expectedBotPlayerId) {
  * pickGift advances the queue; endBotTurn must not run on the next player.
  */
 function scheduleAutoplayContinuation(partyId, newState, io, kind) {
+  // A bot pick can end the game when the next player has no legal move left (BUG-18).
+  if (newState.phase === 'ENDED') {
+    finalizeEndedGame(partyId, newState, io).catch((error) => {
+      console.error(`❌ Error finalizing game after bot ${kind}:`, error);
+    });
+    return;
+  }
   const delayMs = kind === 'steal' ? 1000 : 500;
   setTimeout(() => {
     checkAndMakeBotMove(partyId, newState, io).catch((error) => {
@@ -1044,10 +1052,6 @@ export async function forceBotSkip(partyId, io) {
  */
 export async function forceBotPick(partyId, io) {
   try {
-    // #region agent log
-    fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'bot-utils.js:forceBotPick:entry',message:'forceBotPick called',data:{partyId,currentPlayerId:null},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
-    
     // CRITICAL: Validate partyId
     if (!partyId || typeof partyId !== 'string') {
       throw new Error(`Invalid partyId: ${partyId}`);
@@ -1074,10 +1078,6 @@ export async function forceBotPick(partyId, io) {
 
     // Check if current player is a bot
     const currentPlayerId = gameState.currentPlayerId;
-    // #region agent log
-    fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'bot-utils.js:forceBotPick:afterLoad',message:'Game state loaded',data:{currentPlayerId,phase:gameState.phase,turnAction:gameState.turnAction,wrappedGiftsCount:gameState.wrappedGifts?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
-    
     if (!isBot(currentPlayerId)) {
       throw new Error(`Current player ${currentPlayerId} is not a bot`);
     }
@@ -1088,15 +1088,9 @@ export async function forceBotPick(partyId, io) {
     const turnActionMap = new Map(gameState.turnAction);
     const isVictim = gameState.currentVictim === currentPlayerId;
     const hasActed = turnActionMap.get(currentPlayerId);
-    // #region agent log
-    fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'bot-utils.js:forceBotPick:beforeCheck',message:'Checking turnAction state',data:{currentPlayerId,isVictim,hasActed,turnActionMap:Array.from(turnActionMap.entries())},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
     
     // Only block if they're not a victim AND they've already acted
     if (!isVictim && hasActed) {
-      // #region agent log
-      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'bot-utils.js:forceBotPick:blocked',message:'Bot already acted - throwing error',data:{currentPlayerId,hasActed},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'C'})}).catch(()=>{});
-      // #endregion
       throw new Error('Bot has already acted this turn');
     }
     
@@ -1109,23 +1103,14 @@ export async function forceBotPick(partyId, io) {
       turnActionMap.set(currentPlayerId, null);
       gameState.turnAction = Array.from(turnActionMap.entries());
       clearedTurnAction = true;
-      // #region agent log
-      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'bot-utils.js:forceBotPick:cleared',message:'Cleared turnAction',data:{currentPlayerId,clearedTurnAction:gameState.turnAction},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
     }
 
     // Check if there are wrapped gifts
     if (!gameState.wrappedGifts || gameState.wrappedGifts.length === 0) {
-      // #region agent log
-      fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'bot-utils.js:forceBotPick:noGifts',message:'No wrapped gifts - checking if need to save cleared state',data:{currentPlayerId,turnActionCleared:clearedTurnAction,turnAction:gameState.turnAction},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
       
       // CRITICAL FIX: If we cleared turnAction, save it before throwing
       // This ensures the cleared state persists even if the pick fails
       if (clearedTurnAction) {
-        // #region agent log
-        fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'bot-utils.js:forceBotPick:savingClearedState',message:'Saving cleared turnAction before throwing error',data:{currentPlayerId,turnAction:gameState.turnAction},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'D'})}).catch(()=>{});
-        // #endregion
         gameState.config = gameState.config || { maxSteals: 3, returnToStart: false };
         await saveGameState(partyId, gameState);
         // Broadcast the cleared state so clients are updated
@@ -1137,6 +1122,10 @@ export async function forceBotPick(partyId, io) {
 
     // Pick a random wrapped gift the bot is allowed to open (not its own unless it's the last one)
     const pickable = pickableWrappedGifts(gameState, currentPlayerId);
+    if (pickable.length === 0) {
+      // Nothing this bot may open: fail cleanly instead of picking undefined.
+      throw new Error('No wrapped gifts available');
+    }
     const giftId = pickable[Math.floor(Math.random() * pickable.length)];
 
     console.log(`🤖 [FORCED PICK] Bot ${currentPlayerId} picking gift ${giftId}`);
@@ -1151,9 +1140,6 @@ export async function forceBotPick(partyId, io) {
     return { success: true, action: 'pick', giftId };
 
   } catch (error) {
-    // #region agent log
-    fetch('http://localhost:7243/ingest/aa8b9df8-f732-4ee4-afb1-02470529209e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'bot-utils.js:forceBotPick:catch',message:'Error in forceBotPick',data:{error:error.message,partyId},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'E'})}).catch(()=>{});
-    // #endregion
     console.error(`❌ Error forcing bot pick for party ${partyId}:`, error);
     throw error;
   }

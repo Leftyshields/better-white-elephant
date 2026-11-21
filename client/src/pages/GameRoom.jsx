@@ -18,39 +18,54 @@ import { GiftToSendCard } from '../components/GiftToSendCard.jsx';
 import { GiftIcon } from '@heroicons/react/24/outline';
 import confetti from 'canvas-confetti';
 import { apiRequest } from '../utils/api.js';
+import { isPlayerActionValidationToast } from '../utils/socketGameErrorToast.js';
 
-// Error Toast Component with auto-dismiss
-function ErrorToast({ message, onDismiss }) {
+/**
+ * One shared toast region above the reaction bar (BUG-19 / batch 1 item 1 D). It never sits in the
+ * top of the screen, so it can't cover the header or the HUD. At most one toast shows at a time.
+ * Rule reminders (steal-back, can't open, can't steal) are polite notices; anything else is an error
+ * with a Report link. Hover or keyboard focus pauses the auto-dismiss timer.
+ */
+function GameToast({ message, onDismiss }) {
+  const isNotice = isPlayerActionValidationToast(message);
+  const [paused, setPaused] = useState(false);
+
   useEffect(() => {
-    // Auto-dismiss after 8 seconds
-    const timer = setTimeout(() => {
-      onDismiss();
-    }, 8000);
-    
+    if (paused) return undefined;
+    const timer = setTimeout(onDismiss, isNotice ? 6000 : 8000);
     return () => clearTimeout(timer);
-  }, [onDismiss]);
-  
+  }, [onDismiss, isNotice, paused, message]);
+
   return (
-    <div className="fixed top-4 right-4 bg-red-500/10 text-red-300 border border-red-500/20 rounded-lg px-4 py-2 text-sm z-50 animate-fade-in max-w-md shadow-lg">
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex-1">
-          <div className="font-semibold mb-1">⚠️ Action Failed</div>
-          <span>{message}</span>
-        </div>
-        <button
-          onClick={onDismiss}
-          className="text-red-400 hover:text-red-300 ml-2 text-lg leading-none"
-          aria-label="Dismiss error"
-        >
-          ×
-        </button>
+    <div
+      role={isNotice ? 'status' : 'alert'}
+      aria-live={isNotice ? 'polite' : 'assertive'}
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      onFocus={() => setPaused(true)}
+      onBlur={() => setPaused(false)}
+      className={`pointer-events-auto flex items-center gap-2 bg-slate-900/95 border border-white/10 border-l-4 ${
+        isNotice ? 'border-l-amber-400' : 'border-l-red-500'
+      } rounded-lg pl-4 pr-1 py-1 text-sm text-slate-100 shadow-lg motion-safe:animate-[fadeInUp_0.3s_ease-out]`}
+      data-testid="game-toast"
+    >
+      <span className="flex-1 py-2">{message}</span>
+      {!isNotice && (
         <a
           href={`/contact?type=bug&message=${encodeURIComponent(`Error: ${message}\n\nPage: ${window.location.href}\n\nTimestamp: ${new Date().toISOString()}`)}`}
-          className="text-blue-400 hover:text-blue-300 underline text-xs whitespace-nowrap ml-2"
+          className="inline-flex items-center min-h-11 px-2 text-blue-300 hover:text-blue-200 underline text-sm whitespace-nowrap rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
         >
           Report
         </a>
-      </div>
+      )}
+      <button
+        type="button"
+        onClick={onDismiss}
+        aria-label="Dismiss"
+        className="inline-flex items-center justify-center min-h-11 min-w-11 px-2 text-slate-300 hover:text-white text-sm rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
+      >
+        Dismiss
+      </button>
     </div>
   );
 }
@@ -64,6 +79,7 @@ export function GameRoom({ partyId }) {
   const [revealingGiftId, setRevealingGiftId] = useState(null);
   const [prizeImageError, setPrizeImageError] = useState(false);
   const prevIsMyTurnRef = useRef(false);
+  const hudRef = useRef(null);
   const [gameLoadTimedOut, setGameLoadTimedOut] = useState(false);
 
   const isWaitingForLiveGame = useMemo(() => {
@@ -109,6 +125,15 @@ export function GameRoom({ partyId }) {
     // Only play sound when transitioning from not my turn to my turn
     if (isMyTurn && !wasMyTurn && state.status === 'PLAYING') {
       playTurnNotification();
+      // Phones: if the HUD scrolled fully off screen, bring it back so the turn isn't missed.
+      const hud = hudRef.current;
+      if (hud) {
+        const rect = hud.getBoundingClientRect();
+        if (rect.bottom <= 0 || rect.top >= window.innerHeight) {
+          const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+          hud.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+        }
+      }
     }
     
     prevIsMyTurnRef.current = isMyTurn;
@@ -498,34 +523,43 @@ export function GameRoom({ partyId }) {
       {/* Reaction Overlay - Full screen layer for flying emojis */}
       {socket && <ReactionOverlay socket={socket} />}
       
-      {/* Connection Health Toast */}
-      {!state.ui.isSocketConnected && (
-        <div className="fixed bottom-4 right-4 bg-amber-500/10 text-amber-300 border border-amber-500/20 rounded-lg px-4 py-2 text-sm z-50">
-          Reconnecting...
-        </div>
-      )}
-
-      {/* Error Toast */}
-      {state.ui.lastError && (
-        <ErrorToast
-          message={state.ui.lastError}
-          onDismiss={() => {
-            if (dispatch) {
-              dispatch({ type: 'ERROR_CLEARED' });
-            }
-          }}
-        />
-      )}
+      {/* Shared toast region: centered above the reaction bar, one toast at a time */}
+      <div
+        className="fixed left-1/2 -translate-x-1/2 z-[101] w-[min(calc(100vw-32px),28rem)] bottom-[calc(96px+env(safe-area-inset-bottom))] pointer-events-none"
+        data-testid="game-toast-region"
+      >
+        {state.ui.lastError ? (
+          <GameToast
+            message={state.ui.lastError}
+            onDismiss={() => {
+              if (dispatch) {
+                dispatch({ type: 'ERROR_CLEARED' });
+              }
+            }}
+          />
+        ) : (
+          !state.ui.isSocketConnected && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="bg-slate-900/95 border border-white/10 border-l-4 border-l-amber-400 rounded-lg px-4 py-3 text-sm text-slate-100 shadow-lg"
+            >
+              Reconnecting...
+            </div>
+          )
+        )}
+      </div>
 
       {/* Developer Simulation Controls (includes Audit Trail) - Only visible when ?sim=true */}
       <SimulationControls socket={socket} partyId={partyId} gameState={state.gameState} />
       
       {/* Main Dashboard Grid Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 h-[calc(100vh-96px)] overflow-hidden">
+      {/* Below lg the page scrolls as one document (HUD, gifts, Live Feed); lg and up keeps the 3+1 grid */}
+      <div className="flex flex-col lg:grid lg:grid-cols-4 lg:h-[calc(100dvh-96px)] lg:overflow-hidden">
         {/* Left Column: Game Board (3 columns on large screens) */}
-        <div className="lg:col-span-3 flex flex-col h-full overflow-hidden relative">
-          {/* Turn Bar - Sticky at top with transparent/glass effect */}
-          <div className="sticky top-0 z-10 bg-transparent backdrop-blur-sm pt-4 pb-4 border-b border-white/5">
+        <div className="lg:col-span-3 flex flex-col lg:h-full lg:overflow-hidden relative">
+          {/* Turn Bar - in normal flow on phones, sticky at the top of the board column on desktop */}
+          <div ref={hudRef} className="lg:sticky lg:top-0 z-10 bg-transparent backdrop-blur-sm pt-4 pb-4 border-b border-white/5">
             {/* Unified HUD Container */}
             <div className="w-full max-w-5xl mx-auto px-4 p-4 rounded-2xl bg-slate-900/20 backdrop-blur-xl border border-white/10 grid grid-cols-1 md:grid-cols-[auto_minmax(0,1fr)_350px] gap-6 items-center">
               {/* Left Section: Game Status */}
@@ -558,8 +592,8 @@ export function GameRoom({ partyId }) {
                     <p className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-white to-purple-300 drop-shadow-[0_0_10px_rgba(255,255,255,0.5)] animate-pulse">
                       Your Turn!
                     </p>
-                    <div className="mt-4 min-h-11 flex justify-center">
-                      {derived.canSkipTurn && (
+                    {derived.canSkipTurn && (
+                      <div className="mt-4 flex justify-center">
                         <Button
                           onClick={actions.endTurn}
                           variant="secondary"
@@ -567,8 +601,8 @@ export function GameRoom({ partyId }) {
                         >
                           Skip Turn
                         </Button>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </>
                 ) : (
                   <p className="text-xl text-slate-300 animate-pulse whitespace-nowrap truncate">
@@ -625,8 +659,8 @@ export function GameRoom({ partyId }) {
             )}
           </div>
 
-          {/* Scrollable Gift Container */}
-          <div className="flex-1 overflow-y-auto p-6">
+          {/* Gift Container: scrolls on its own only on desktop */}
+          <div className="lg:flex-1 lg:overflow-y-auto p-6 lg:pb-[calc(96px+env(safe-area-inset-bottom))]">
             <GiftGrid
               gifts={state.gifts}
               isMyTurn={derived.isMyTurn}
@@ -643,12 +677,14 @@ export function GameRoom({ partyId }) {
           </div>
         </div>
 
-        {/* Right Column: Live Feed (1 column on large screens) */}
+        {/* Right Column: Live Feed (1 column on large screens; after the gifts on phones).
+            Bottom padding lets the last row clear the fixed reaction bar. */}
         {state.status === 'PLAYING' && (
-          <div className="lg:col-span-1 border-l border-white/10 h-full flex flex-col bg-slate-900/20 overflow-y-auto">
+          <div className="lg:col-span-1 lg:border-l border-white/10 lg:h-full flex flex-col bg-slate-900/20 lg:overflow-y-auto px-4 lg:px-0 pb-[calc(96px+env(safe-area-inset-bottom))]">
             <GamePlayByPlay
               state={state}
               userNames={userNames}
+              partyId={partyId}
             />
           </div>
         )}

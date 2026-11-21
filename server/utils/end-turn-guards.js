@@ -39,5 +39,10 @@ export function getEndTurnRejectionReason(gameState, userId) {
     return END_TURN_SOCKET_ERROR;
   }
 
+  // A pick or steal already ended this turn; a skip can't follow it (hidden button is not enough).
+  if (engine.turnAction.get(userId)) {
+    return END_TURN_SOCKET_ERROR;
+  }
+
   return null;
 }

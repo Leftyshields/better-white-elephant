@@ -43,6 +43,12 @@ describe('turn rule helpers', () => {
     expect(isOwnWrappedGiftLocked({}, wrappedGifts(['mine', 'theirs']), 'mine', 'me')).toBe(false);
   });
 
+  it('own wrapped gift unlocks when every remaining wrapped gift is mine (no deadlock)', () => {
+    const gameState = { giftSubmitters: { mine1: 'me', mine2: 'me', theirs: 'them' } };
+    expect(isOwnWrappedGiftLocked(gameState, wrappedGifts(['mine1', 'mine2']), 'mine1', 'me')).toBe(false);
+    expect(isOwnWrappedGiftLocked(gameState, wrappedGifts(['mine1', 'mine2', 'theirs']), 'mine1', 'me')).toBe(true);
+  });
+
   it('Skip is hidden right after a pick even though the player now holds a gift', () => {
     const args = {
       gifts: { g1: { isWrapped: false, ownerId: 'me', isFrozen: false, lastOwnerId: null } },

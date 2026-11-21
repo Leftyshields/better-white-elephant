@@ -4,6 +4,30 @@
  */
 import { useState, useEffect, useRef } from 'react';
 
+function playerNameFor(playerId, userNames) {
+  if (!playerId) return 'Unknown';
+  if (userNames && userNames[playerId]) return userNames[playerId];
+  return `Player ${playerId.slice(0, 8)}`;
+}
+
+function giftNameFor(giftId, gifts) {
+  const gift = Array.isArray(gifts) ? gifts.find((g) => g.id === giftId) : null;
+  return gift?.title || 'Mystery Gift';
+}
+
+/**
+ * Plain one-line text for the newest PICK or STEAL, using the same words as the ticker rows.
+ * Used by the collapsed Live Feed row on phones. Returns null when there is nothing to show.
+ */
+export function latestActivityLine(activities, gifts, userNames) {
+  const latest = [...(activities || [])].reverse().find((a) => a.type === 'PICK' || a.type === 'STEAL');
+  if (!latest) return null;
+  const player = playerNameFor(latest.playerId, userNames);
+  const gift = giftNameFor(latest.giftId, gifts);
+  if (latest.type === 'PICK') return `${player} picked ${gift}`;
+  return `${player} stole ${gift} from ${playerNameFor(latest.previousOwnerId, userNames)}`;
+}
+
 export function GameTicker({ activities, gifts, userNames }) {
   const [animatedItems, setAnimatedItems] = useState(new Set());
   const prevActivitiesRef = useRef([]);
@@ -25,24 +49,8 @@ export function GameTicker({ activities, gifts, userNames }) {
     console.log('GameTicker: Rendering', { activitiesCount: activities.length, recentCount: recentActivities.length });
   }
 
-  // Create a map of giftId -> gift data for quick lookup
-  const giftMap = new Map();
-  if (gifts && Array.isArray(gifts)) {
-    gifts.forEach(gift => {
-      giftMap.set(gift.id, gift);
-    });
-  }
-
-  const getPlayerName = (playerId) => {
-    if (!playerId) return 'Unknown';
-    if (userNames && userNames[playerId]) return userNames[playerId];
-    return `Player ${playerId.slice(0, 8)}`;
-  };
-
-  const getGiftName = (giftId) => {
-    const gift = giftMap.get(giftId);
-    return gift?.title || 'Mystery Gift';
-  };
+  const getPlayerName = (playerId) => playerNameFor(playerId, userNames);
+  const getGiftName = (giftId) => giftNameFor(giftId, gifts);
   
   // Track new items for animation
   useEffect(() => {
@@ -97,7 +105,7 @@ export function GameTicker({ activities, gifts, userNames }) {
                       <span className="font-semibold text-white">{playerName}</span>
                       <span className="text-slate-300">picked</span>
                       <span className="font-semibold text-white truncate">{giftName}</span>
-                      <span className="text-slate-500 text-[10px]">🎁</span>
+                      <span className="text-slate-500 text-[11px]">🎁</span>
                     </div>
                   </div>
                 </div>
@@ -134,12 +142,12 @@ export function GameTicker({ activities, gifts, userNames }) {
                       <span className="text-slate-300">from</span>
                       <span className="font-semibold text-white">{previousOwnerName}</span>
                       {event.stealCount > 1 && (
-                        <span className="inline-block bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-semibold px-1 py-0.5 rounded">
+                        <span className="inline-block bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] font-semibold px-1 py-0.5 rounded">
                           #{event.stealCount}
                         </span>
                       )}
                       {isFrozen && (
-                        <span className="text-red-400 text-[10px]">🔒</span>
+                        <span className="text-red-400 text-[11px]">🔒</span>
                       )}
                     </div>
                   </div>

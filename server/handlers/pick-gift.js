@@ -20,6 +20,7 @@ export async function handlePickGift({
   isValidGiftId,
   verifyPartyMembership,
   scheduleBotMove,
+  finalizeEndedGame,
   executePick = executePickGift,
 }) {
   if (!isValidPartyId(partyId) || !isValidGiftId(giftId)) {
@@ -42,6 +43,12 @@ export async function handlePickGift({
       playerId: userId,
     });
     io.to(`party:${partyId}`).emit('game-updated', newState);
+
+    // A pick can end the game when the next player has no legal move left (BUG-18).
+    if (newState.phase === 'ENDED') {
+      await finalizeEndedGame(partyId, newState, io);
+      return;
+    }
 
     if (scheduleBotMove) {
       scheduleBotMove(partyId, newState);

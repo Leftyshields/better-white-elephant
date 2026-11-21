@@ -301,3 +301,39 @@ test('rejects email-shaped Firestore and Auth display names in response', async 
   );
   assert.ok(!JSON.stringify(result).includes('@'));
 });
+test('batch drops a display name that is just the email local-part (Firestore email)', async () => {
+  const db = buildMockDb({
+    userDocs: {
+      [CO_PARTICIPANT_ID]: { displayName: 'jdoe.private', email: 'jdoe.private@example.test' },
+    },
+  });
+  const result = await batchUsersLookup(db, mockAuth, CALLER_ID, PARTY_ID, [CO_PARTICIPANT_ID]);
+  assert.equal(result.users[CO_PARTICIPANT_ID], playerFallbackForUserId(CO_PARTICIPANT_ID));
+  const body = JSON.stringify(result);
+  assert.ok(!body.includes('jdoe.private'));
+  assert.ok(!body.includes('@'));
+});
+
+test('batch drops an Auth display name that is the Auth email local-part', async () => {
+  const db = buildMockDb({ userDocs: { [CO_PARTICIPANT_ID]: {} } });
+  const authWithEmail = {
+    async getUser(userId) {
+      return { uid: userId, displayName: 'auth.local', email: 'auth.local@example.test', photoURL: null };
+    },
+  };
+  const result = await batchUsersLookup(db, authWithEmail, CALLER_ID, PARTY_ID, [CO_PARTICIPANT_ID]);
+  assert.equal(result.users[CO_PARTICIPANT_ID], playerFallbackForUserId(CO_PARTICIPANT_ID));
+  assert.ok(!JSON.stringify(result).includes('auth.local'));
+});
+
+test('batch response has only users, bots and photos keys, and no stranger or email anywhere', async () => {
+  const db = buildMockDb();
+  const result = await batchUsersLookup(db, mockAuth, CALLER_ID, PARTY_ID, [
+    CO_PARTICIPANT_ID,
+    STRANGER_ID,
+  ]);
+  assert.deepEqual(Object.keys(result).sort(), ['bots', 'photos', 'users']);
+  const body = JSON.stringify(result);
+  assert.ok(!body.includes(STRANGER_ID));
+  assert.ok(!body.includes('secret.example'));
+});
