@@ -38,6 +38,10 @@ vi.mock('../../utils/firebase.js', () => ({ db: { name: 'test-db' }, auth: authS
 vi.mock('firebase/firestore', () => ({
   doc: vi.fn((_db, ...path) => ({ path: path.join('/') })),
   collection: vi.fn(),
+  getDocs: vi.fn(() => Promise.resolve({ empty: true, docs: [] })),
+  query: vi.fn(),
+  where: vi.fn(),
+  limit: vi.fn(),
   getDoc: (...args) => getDocMock(...args),
   addDoc: (...args) => addDocMock(...args),
   setDoc: vi.fn(() => Promise.resolve()),

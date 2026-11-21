@@ -12,6 +12,7 @@ import { REQUEST_TIMEOUT_MS } from '../../utils/withTimeout.js';
 const updateDocMock = vi.fn();
 const addDocMock = vi.fn();
 const setDocMock = vi.fn();
+const getDocsMock = vi.fn();
 
 vi.mock('../../utils/firebase.js', () => ({ db: {} }));
 vi.mock('../../utils/analytics.js', () => ({ trackSubmitGift: vi.fn() }));
@@ -22,6 +23,10 @@ vi.mock('firebase/firestore', () => ({
   addDoc: (...args) => addDocMock(...args),
   setDoc: (...args) => setDocMock(...args),
   updateDoc: (...args) => updateDocMock(...args),
+  getDocs: (...args) => getDocsMock(...args),
+  query: vi.fn((...args) => ({ args })),
+  where: vi.fn((...args) => args),
+  limit: vi.fn((n) => n),
 }));
 
 let seq = 0;
@@ -86,6 +91,7 @@ describe('GuestJoinCard', () => {
     addDocMock.mockReset().mockResolvedValue({ id: 'g1' });
     setDocMock.mockReset().mockResolvedValue(undefined);
     scrapeGiftUrl.mockReset();
+    getDocsMock.mockReset().mockResolvedValue({ empty: true, docs: [] });
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 

@@ -17,6 +17,10 @@ vi.mock('../../utils/api.js', () => ({ scrapeGiftUrl: vi.fn() }));
 vi.mock('firebase/firestore', () => ({
   doc: vi.fn((_db, ...p) => ({ path: p.join('/') })),
   collection: vi.fn(),
+  getDocs: vi.fn(() => Promise.resolve({ empty: true, docs: [] })),
+  query: vi.fn(),
+  where: vi.fn(),
+  limit: vi.fn(),
   addDoc: vi.fn(() => Promise.resolve({ id: 'g9' })),
   setDoc: vi.fn(() => Promise.resolve()),
   updateDoc: (...a) => updateDocMock(...a),

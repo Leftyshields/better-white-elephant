@@ -49,6 +49,10 @@ vi.mock('firebase/firestore', () => ({
   getDoc: (...args) => getDocMock(...args),
   addDoc: (...args) => addDocMock(...args),
   collection: vi.fn((_db, name) => ({ path: name })),
+  getDocs: vi.fn(() => Promise.resolve({ empty: true, docs: [] })),
+  query: vi.fn(),
+  where: vi.fn(),
+  limit: vi.fn(),
   setDoc: vi.fn(),
   updateDoc: (...args) => updateDocMock(...args),
 }));
@@ -438,9 +442,7 @@ describe('PartyInviteLanding join', () => {
     fireEvent.click(screen.getByRole('button', { name: GUEST_JOIN_COPY.readyCta }));
     await act(async () => {
       finishJoin({ id: 'anon-1' });
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
+      for (let i = 0; i < 10; i += 1) await Promise.resolve();
     });
     expect(addDocMock).toHaveBeenCalledTimes(1);
     expect(updateDocMock).toHaveBeenCalledWith(
