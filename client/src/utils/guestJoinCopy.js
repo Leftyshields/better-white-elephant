@@ -31,6 +31,11 @@ export const GUEST_JOIN_COPY = {
   readyUndo: 'Not ready yet',
   readyLockedName: "Add your name before you're ready.",
   readyLockedGift: "Add your gift before you're ready.",
+  readyLockedSeat: "Saving your spot...",
+  readySaveSlow: "That's taking too long. Your name and gift are still here. Tap I'm ready to try again.",
+  // Copywriter-signed (Nov 21, 2026). Shown under "Not ready yet" when an undo
+  // write times out. No dashes. "spot" is not used here; never say "seat".
+  readyUndoSlow: "That's taking too long. Tap Not ready yet to try again.",
   giftStoreName: "That's the store, not the gift. What's the gift called?",
   giftManualHelper: "This store won't share its gift details with us. Add them below.",
   // Existing shipped lobby strings reused on the card
@@ -41,8 +46,10 @@ export const GUEST_JOIN_COPY = {
   giftPriceLabel: 'Price (optional)',
   giftPricePlaceholder: 'e.g., $25.99',
   giftPending: 'Processing...',
+  giftChecking: 'Checking your gift link...',
+  giftLookupSlow: 'That link is taking too long. Add the details below, or try it again.',
   giftManualToggle: 'Or enter details manually',
-  giftTryUrl: 'Try URL again',
+  giftTryUrl: 'Try the link again',
   goHome: 'Go Home',
   dismiss: 'Dismiss',
 };

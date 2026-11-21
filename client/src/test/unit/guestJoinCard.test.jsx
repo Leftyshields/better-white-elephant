@@ -2,16 +2,23 @@
  * Guest one-screen card (batch 2 item 4): honest progress, one ready control, busy label,
  * error toast that keeps typed values, no address step.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { GuestJoinCard } from '../../components/GuestJoinCard.jsx';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { GuestJoinCard, clearGuestJoinDrafts } from '../../components/GuestJoinCard.jsx';
 import { GUEST_JOIN_COPY as COPY, guestStepsHeader } from '../../utils/guestJoinCopy.js';
+import { scrapeGiftUrl } from '../../utils/api.js';
+import { REQUEST_TIMEOUT_MS } from '../../utils/withTimeout.js';
 
 const updateDocMock = vi.fn();
 const setDocMock = vi.fn();
 const commitMock = vi.fn();
 let batchOps = [];
 const getDocsMock = vi.fn();
+// Ready writes the gift and the seat in one batch (G26); a gift "add" is a batch set on gifts/.
+const giftCreates = () => batchOps.filter((o) => o.op === 'set' && o.path.startsWith('gifts/'));
+const flushMicrotasks = async () => {
+  for (let i = 0; i < 10; i += 1) await Promise.resolve();
+};
 
 vi.mock('../../utils/firebase.js', () => ({ db: {} }));
 vi.mock('../../utils/analytics.js', () => ({ trackSubmitGift: vi.fn() }));
@@ -63,15 +70,41 @@ describe('steps header copy', () => {
     expect(COPY.stepArrived).toBe("You're here");
     expect(COPY.readySaving).toBe('Saving...');
     expect(COPY.joinFailedToast).toBe("We couldn't get you ready. Try again in a moment.");
+    expect(COPY.giftChecking).toBe('Checking your gift link...');
+    expect(COPY.giftLookupSlow).toBe('That link is taking too long. Add the details below, or try it again.');
+    expect(COPY.giftTryUrl).toBe('Try the link again');
+    expect(COPY.readyLockedSeat).toBe('Saving your spot...');
+    expect(COPY.readySaveSlow).toBe("That's taking too long. Your name and gift are still here. Tap I'm ready to try again.");
+    expect(COPY.readyUndoSlow).toBe("That's taking too long. Tap Not ready yet to try again.");
+    expect(COPY.giftPending).toBe('Processing...');
   });
 });
 
+
+function fillNameAndManualGift({
+  name = 'Sam Lee',
+  url = 'https://example.com/socks',
+  title = 'Wool socks',
+  price = '25',
+} = {}) {
+  fireEvent.change(screen.getByLabelText(COPY.nameLabel), { target: { value: name } });
+  fireEvent.click(screen.getByRole('button', { name: COPY.giftManualToggle }));
+  fireEvent.change(screen.getByLabelText(COPY.giftUrlLabel), { target: { value: url } });
+  fireEvent.change(screen.getByLabelText(COPY.giftTitleLabel), { target: { value: title } });
+  fireEvent.change(screen.getByLabelText(COPY.giftPriceLabel), { target: { value: price } });
+}
+
 describe('GuestJoinCard', () => {
+  afterEach(() => {
+    clearGuestJoinDrafts();
+  });
+
   beforeEach(() => {
     updateDocMock.mockReset().mockResolvedValue(undefined);
     setDocMock.mockReset().mockResolvedValue(undefined);
     commitMock.mockReset().mockResolvedValue(undefined);
     batchOps = [];
+    scrapeGiftUrl.mockReset();
     getDocsMock.mockReset().mockResolvedValue({ empty: true, docs: [] });
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
@@ -117,7 +150,8 @@ describe('GuestJoinCard', () => {
     expect(readyButton()).toHaveAttribute('aria-busy', 'true');
     expect(readyButton()).toBeDisabled();
     finish();
-    await waitFor(() => expect(readyButton()).toHaveTextContent(COPY.readyCta));
+    await waitFor(() => expect(screen.getByText(COPY.readyDone)).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: COPY.readyCta })).toBeNull();
     expect(commitMock).toHaveBeenCalledTimes(1);
     expect(batchOps).toHaveLength(2);
     expect(batchOps[0]).toMatchObject({
@@ -206,5 +240,274 @@ describe('GuestJoinCard', () => {
     expect(screen.getByText(COPY.readyDone)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: COPY.readyUndo })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: COPY.readyCta })).toBeNull();
+  });
+
+
+  it('shows Saving your spot when name and gift are in but the seat is still pending', () => {
+    renderCard({ seated: false, participant: null });
+    fillNameAndManualGift();
+    expect(readyButton()).toBeDisabled();
+    expect(screen.getByText(COPY.readyLockedSeat)).toBeInTheDocument();
+    expect(screen.getByText(COPY.readyLockedSeat)).toHaveAttribute('aria-live', 'polite');
+    expect(screen.queryByText(/\bseat\b/i)).toBeNull();
+  });
+});
+
+describe('GuestJoinCard timeouts', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    updateDocMock.mockReset().mockResolvedValue(undefined);
+    commitMock.mockReset().mockResolvedValue(undefined);
+    batchOps = [];
+    getDocsMock.mockReset().mockResolvedValue({ empty: true, docs: [] });
+    setDocMock.mockReset().mockResolvedValue(undefined);
+    scrapeGiftUrl.mockReset();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('unlocks a hung gift lookup at 10s, opens manual entry, keeps the URL, and shows the slow line', async () => {
+    scrapeGiftUrl.mockReturnValue(new Promise(() => {}));
+    renderCard();
+    const urlField = screen.getByLabelText(COPY.giftUrlLabel);
+    fireEvent.change(urlField, { target: { value: 'https://example.com/socks' } });
+    fireEvent.blur(urlField);
+    expect(screen.getByText(COPY.giftChecking)).toBeInTheDocument();
+    expect(screen.getByText(COPY.giftChecking)).toHaveAttribute('aria-live', 'polite');
+    expect(screen.queryByText(COPY.giftPending)).toBeNull();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
+    });
+    expect(screen.getByText(COPY.giftLookupSlow)).toBeInTheDocument();
+    expect(screen.getByText(COPY.giftLookupSlow)).toHaveAttribute('aria-live', 'polite');
+    expect(screen.getByLabelText(COPY.giftUrlLabel)).toHaveValue('https://example.com/socks');
+    expect(screen.getByLabelText(COPY.giftTitleLabel)).toBeInTheDocument();
+    expect(screen.queryByText(COPY.giftChecking)).toBeNull();
+  });
+
+  it('retries a slow lookup and keeps typed values', async () => {
+    scrapeGiftUrl.mockReturnValueOnce(new Promise(() => {}));
+    scrapeGiftUrl.mockResolvedValueOnce({ title: 'Wool socks', image: null, price: '$25', error: null });
+    renderCard();
+    const urlField = screen.getByLabelText(COPY.giftUrlLabel);
+    fireEvent.change(urlField, { target: { value: 'https://example.com/socks' } });
+    fireEvent.blur(urlField);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
+    });
+    fireEvent.change(screen.getByLabelText(COPY.giftTitleLabel), { target: { value: 'Kept title' } });
+    fireEvent.change(screen.getByLabelText(COPY.giftPriceLabel), { target: { value: '12' } });
+    fireEvent.click(screen.getByRole('button', { name: COPY.giftTryUrl }));
+    expect(screen.getByText(COPY.giftChecking)).toBeInTheDocument();
+    expect(screen.getByLabelText(COPY.giftUrlLabel)).toHaveValue('https://example.com/socks');
+    expect(screen.getByLabelText(COPY.giftTitleLabel)).toHaveValue('Kept title');
+    expect(screen.getByLabelText(COPY.giftPriceLabel)).toHaveValue('12');
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.getByTestId('gift-preview')).toHaveTextContent('Wool socks');
+    expect(scrapeGiftUrl).toHaveBeenCalledTimes(2);
+  });
+
+  it('ignores a late lookup result after the timeout', async () => {
+    let finish;
+    scrapeGiftUrl.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    renderCard();
+    const urlField = screen.getByLabelText(COPY.giftUrlLabel);
+    fireEvent.change(urlField, { target: { value: 'https://example.com/socks' } });
+    fireEvent.blur(urlField);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
+    });
+    expect(screen.getByText(COPY.giftLookupSlow)).toBeInTheDocument();
+    await act(async () => {
+      finish({ title: 'Late Gift', image: null, price: null, error: null });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.queryByText('Late Gift')).toBeNull();
+    expect(screen.queryByTestId('gift-preview')).toBeNull();
+    expect(screen.getByText(COPY.giftLookupSlow)).toBeInTheDocument();
+    expect(screen.getByLabelText(COPY.giftUrlLabel)).toHaveValue('https://example.com/socks');
+  });
+
+  it('unlocks a hung ready save at 10s, shows the slow line, and keeps typed values', async () => {
+    commitMock.mockReturnValue(new Promise(() => {}));
+    renderCard();
+    fillNameAndManualGift();
+    fireEvent.click(readyButton());
+    expect(readyButton()).toHaveTextContent(COPY.readySaving);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
+    });
+    expect(screen.getByText(COPY.readySaveSlow)).toBeInTheDocument();
+    expect(screen.getByText(COPY.readySaveSlow)).toHaveAttribute('aria-live', 'polite');
+    expect(readyButton()).toBeEnabled();
+    expect(readyButton()).toHaveTextContent(COPY.readyCta);
+    expect(screen.getByLabelText(COPY.nameLabel)).toHaveValue('Sam Lee');
+    expect(screen.getByLabelText(COPY.giftUrlLabel)).toHaveValue('https://example.com/socks');
+    expect(screen.getByLabelText(COPY.giftTitleLabel)).toHaveValue('Wool socks');
+    expect(screen.getByLabelText(COPY.giftPriceLabel)).toHaveValue('25');
+  });
+
+  it('a late save plus a retry does not create a second gift doc', async () => {
+    let finish;
+    commitMock.mockReturnValueOnce(new Promise((resolve) => { finish = resolve; }));
+    updateDocMock.mockResolvedValue(undefined);
+    renderCard();
+    fillNameAndManualGift();
+    fireEvent.click(readyButton());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
+    });
+    expect(screen.getByText(COPY.readySaveSlow)).toBeInTheDocument();
+    fireEvent.click(readyButton());
+    await act(async () => {
+      finish();
+      await flushMicrotasks();
+    });
+    expect(giftCreates()).toHaveLength(1);
+    expect(batchOps).toContainEqual({
+      op: 'update',
+      path: 'gifts/gift-new',
+      data: expect.objectContaining({ title: 'Wool socks', url: 'https://example.com/socks' }),
+    });
+  });
+
+  it('a timed-out save that later resolves does not overwrite a newer gift title', async () => {
+    let finish;
+    commitMock.mockReturnValueOnce(new Promise((resolve) => { finish = resolve; }));
+    updateDocMock.mockResolvedValue(undefined);
+    renderCard();
+    fillNameAndManualGift();
+    fireEvent.click(readyButton());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
+    });
+    fireEvent.change(screen.getByLabelText(COPY.giftTitleLabel), { target: { value: 'Cashmere socks' } });
+    await act(async () => {
+      finish();
+      await flushMicrotasks();
+    });
+    expect(screen.queryByText(COPY.readyDone)).toBeNull();
+    expect(screen.getByLabelText(COPY.giftTitleLabel)).toHaveValue('Cashmere socks');
+    expect(screen.getByLabelText(COPY.nameLabel)).toHaveValue('Sam Lee');
+    fireEvent.click(readyButton());
+    await act(async () => {
+      await flushMicrotasks();
+    });
+    expect(giftCreates()).toHaveLength(1);
+    expect(batchOps).toContainEqual({
+      op: 'update',
+      path: 'gifts/gift-new',
+      data: expect.objectContaining({ title: 'Cashmere socks' }),
+    });
+    expect(screen.getByText(COPY.readyDone)).toBeInTheDocument();
+  });
+
+  it('shows You are in only after the ready write resolves, not a local pending snapshot', async () => {
+    commitMock.mockResolvedValue(undefined);
+    updateDocMock.mockResolvedValue(undefined);
+    const props = {
+      partyId: 'party-ack',
+      partyTitle: 'Winter Swap',
+      hostFirstName: 'Dana',
+      user: { uid: 'anon-1', isAnonymous: true, displayName: null },
+      gift: null,
+      seated: true,
+      terminalMessage: null,
+    };
+    const { rerender } = render(
+      <GuestJoinCard {...props} participant={{ id: 'anon-1', status: 'GOING', ready: false }} />,
+    );
+    fillNameAndManualGift();
+    fireEvent.click(readyButton());
+    rerender(
+      <GuestJoinCard {...props} participant={{ id: 'anon-1', status: 'GOING', ready: true, hasPendingWrites: true }} />,
+    );
+    expect(screen.queryByText(COPY.readyDone)).toBeNull();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByText(COPY.readyDone)).toBeInTheDocument();
+  });
+
+  it('switches off You are in when a timed-out undo write later lands in the server snapshot', async () => {
+    vi.useFakeTimers();
+    updateDocMock.mockReset().mockReturnValue(new Promise(() => {}));
+    const props = {
+      partyId: 'party-undo-late',
+      partyTitle: 'Winter Swap',
+      hostFirstName: 'Dana',
+      user: { uid: 'anon-1', isAnonymous: true, displayName: null },
+      gift: { id: 'g1', title: 'Socks', url: 'https://example.com/s' },
+      seated: true,
+      terminalMessage: null,
+    };
+    const { rerender } = render(
+      <GuestJoinCard {...props} participant={{ id: 'anon-1', displayName: 'Sam', ready: true }} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: COPY.readyUndo }));
+    rerender(
+      <GuestJoinCard {...props} participant={{ id: 'anon-1', displayName: 'Sam', ready: false, hasPendingWrites: true }} />,
+    );
+    await act(async () => { vi.advanceTimersByTime(REQUEST_TIMEOUT_MS + 100); });
+    expect(screen.getByText(COPY.readyDone)).toBeInTheDocument();
+    expect(screen.getByText(COPY.readyUndoSlow)).toBeInTheDocument();
+    // Confirmed server snapshot: the late un-ready write landed.
+    rerender(
+      <GuestJoinCard {...props} participant={{ id: 'anon-1', displayName: 'Sam', ready: false, hasPendingWrites: false }} />,
+    );
+    expect(screen.queryByText(COPY.readyDone)).toBeNull();
+    expect(screen.queryByText(COPY.readyUndoSlow)).toBeNull();
+    expect(screen.getByRole('button', { name: COPY.readyCta })).toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
+  it('keeps aria-live status mounted and hides the store helper while the link is checked', async () => {
+    let finish;
+    scrapeGiftUrl.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    renderCard();
+    fireEvent.click(screen.getByRole('button', { name: COPY.giftManualToggle }));
+    expect(screen.getByText(COPY.giftManualHelper)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(COPY.giftUrlLabel), { target: { value: 'https://example.com/socks' } });
+    fireEvent.click(screen.getByRole('button', { name: COPY.giftTryUrl }));
+    expect(screen.getByText(COPY.giftChecking)).toBeInTheDocument();
+    expect(screen.queryByText(COPY.giftManualHelper)).toBeNull();
+    const live = document.querySelectorAll('[aria-live="polite"]');
+    expect(live.length).toBeGreaterThanOrEqual(3);
+    await act(async () => {
+      finish({ title: 'Wool socks', image: null, price: null, error: null });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  });
+
+  it('a fast lookup and a fast save are unchanged', async () => {
+    scrapeGiftUrl.mockResolvedValue({ title: 'Wool socks', image: null, price: null, error: null });
+    commitMock.mockResolvedValue(undefined);
+    updateDocMock.mockResolvedValue(undefined);
+    renderCard();
+    fireEvent.change(screen.getByLabelText(COPY.nameLabel), { target: { value: 'Sam Lee' } });
+    const urlField = screen.getByLabelText(COPY.giftUrlLabel);
+    fireEvent.change(urlField, { target: { value: 'https://example.com/socks' } });
+    fireEvent.blur(urlField);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByTestId('gift-preview')).toHaveTextContent('Wool socks');
+    expect(screen.queryByText(COPY.giftLookupSlow)).toBeNull();
+    fireEvent.click(readyButton());
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(giftCreates()).toHaveLength(1);
+    expect(screen.queryByText(COPY.readySaveSlow)).toBeNull();
   });
 });

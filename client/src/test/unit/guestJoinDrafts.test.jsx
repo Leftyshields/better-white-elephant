@@ -444,7 +444,7 @@ describe('G24: gift draft survives F5 in sessionStorage', () => {
       JSON.stringify({ giftUrl: 'https://example.com/socks', preview: null, manual: false }),
     );
     render(card(partyId, { participant: { id: 'anon-1', status: 'GOING', ready: false, displayName: 'Alex' } }));
-    expect(await screen.findByRole('status')).toBeInTheDocument();
+    expect(await screen.findByText(COPY.giftChecking)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: COPY.readyCta })).toBeDisabled();
     finish({ title: 'Wool socks', image: null, price: '$25', error: null });
     await waitFor(() => expect(screen.getByTestId('gift-preview')).toHaveTextContent('Wool socks'));
