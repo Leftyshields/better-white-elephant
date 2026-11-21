@@ -84,7 +84,7 @@ export function LateInviteCard({
         <button
           type="button"
           onClick={handleSignIn}
-          className={`inline-flex items-center justify-center w-full min-h-11 px-2 text-sm text-purple-300 hover:text-purple-200 underline ${FOCUS_RING}`}
+          className={`inline-flex items-center justify-center w-full min-h-11 px-0 text-xs whitespace-nowrap text-purple-300 hover:text-purple-200 underline ${FOCUS_RING}`}
         >
           {LATE_INVITE_COPY.lateSignInLink}
         </button>

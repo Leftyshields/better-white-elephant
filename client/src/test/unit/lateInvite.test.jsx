@@ -127,6 +127,8 @@ describe('LateInviteCard', () => {
     expect(screen.getByText(formatLatePartyLine('Office Swap', null))).toBeInTheDocument();
     expect(screen.getByText(LATE_INVITE_COPY.gameAlreadyOverBody)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: LATE_INVITE_COPY.lateSignInLink })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: LATE_INVITE_COPY.lateSignInLink }).className).toMatch(/text-xs/);
+    expect(screen.getByRole('button', { name: LATE_INVITE_COPY.lateSignInLink }).className).toMatch(/whitespace-nowrap/);
   });
 
   it('stores redirectAfterAuth and opens Google sign-in from the signed-out link', async () => {
