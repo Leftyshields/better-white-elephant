@@ -9,7 +9,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '../hooks/useAuth.js';
 import { Button } from './ui/Button.jsx';
 import { auth, db } from '../utils/firebase.js';
-import { joinPartyWithInviteToken, readInviteTokenFromHash } from '../utils/partyInvite.js';
+import { joinPartyWithInviteToken, readInviteTokenFromHash, stripInviteTokenFromAddressBar } from '../utils/partyInvite.js';
 import { getJoinErrorMessage } from '../utils/partyInviteCopy.js';
 import { seatNameFields } from '../utils/seatDisplayName.js';
 import { trackParticipantJoin, trackError } from '../utils/analytics.js';
@@ -92,7 +92,10 @@ export function PartyInviteLanding({ partyId }) {
       try {
         const sessionUser = await ensureGuestSession();
         const seat = await getDoc(doc(db, 'parties', partyId, 'participants', sessionUser.uid));
-        if (seat.exists()) return;
+        if (seat.exists()) {
+          stripInviteTokenFromAddressBar();
+          return;
+        }
         setSeatCheckDone(true);
         if (!inviteToken) {
           setTerminalMessage(getJoinErrorMessage({ party: partyInfo, error: null, hasToken: false }));
@@ -108,6 +111,7 @@ export function PartyInviteLanding({ partyId }) {
           updatedAt: new Date(),
           ...seatNameFields(sessionUser.displayName, sessionUser.email),
         });
+        stripInviteTokenFromAddressBar();
         trackParticipantJoin(partyId, 'share_link');
       } catch (error) {
         console.error('Error joining party:', { code: error?.code, name: error?.name });
