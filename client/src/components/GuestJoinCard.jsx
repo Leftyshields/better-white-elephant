@@ -7,7 +7,8 @@
  * and ready: true together. No reloads, no alert(), no address step.
  */
 import { useEffect, useId, useRef, useState } from 'react';
-import { addDoc, collection, doc, getDocs, limit, query, setDoc, updateDoc, where } from 'firebase/firestore';
+import { collection, doc, getDocs, limit, query, setDoc, updateDoc, where, writeBatch } from 'firebase/firestore';
+import { seatGiftLink } from '../utils/seatGift.js';
 import { CheckCircleIcon } from '@heroicons/react/24/solid';
 import { db } from '../utils/firebase.js';
 import { scrapeGiftUrl } from '../utils/api.js';
@@ -348,33 +349,48 @@ export function GuestJoinCard({
     }
   };
 
-  const persistGift = async (fields) => {
+  // One batch (G26): the gift plus the seat's name, ready and hasGift link; rules check the link.
+  // newGift set: add that gift under giftId. Otherwise update the existing gift with fields.
+  const commitGiftAndSeat = async (giftId, { fields, newGift, seat }) => {
+    const batch = writeBatch(db);
+    const giftRef = doc(db, 'gifts', giftId);
+    if (newGift) batch.set(giftRef, newGift);
+    else batch.update(giftRef, { ...fields, updatedAt: new Date() });
+    batch.update(doc(db, 'parties', partyId, 'participants', user.uid), {
+      ...seat,
+      ...seatGiftLink(giftId),
+      ready: true,
+      updatedAt: new Date(),
+    });
+    await batch.commit();
+    return giftId;
+  };
+
+  const persistGift = async (fields, seat) => {
     if (giftDocIdRef.current) {
-      await updateDoc(doc(db, 'gifts', giftDocIdRef.current), { ...fields, updatedAt: new Date() });
-      return giftDocIdRef.current;
+      return commitGiftAndSeat(giftDocIdRef.current, { fields, seat });
     }
     if (giftWriteInFlightRef.current) {
       const id = await giftWriteInFlightRef.current;
-      await updateDoc(doc(db, 'gifts', id), { ...fields, updatedAt: new Date() });
-      return id;
+      return commitGiftAndSeat(id, { fields, seat });
     }
     // G24: a gift written before a reload is not in this card's refs; find it instead of adding a second.
     const write = (async () => {
       const existingId = await findOwnGiftId(partyId, user.uid);
-      if (existingId) {
-        await updateDoc(doc(db, 'gifts', existingId), { ...fields, updatedAt: new Date() });
-        return existingId;
-      }
-      const ref = await addDoc(collection(db, 'gifts'), {
-        partyId,
-        submitterId: user.uid,
-        ...fields,
-        isFrozen: false,
-        winnerId: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+      if (existingId) return commitGiftAndSeat(existingId, { fields, seat });
+      const newId = doc(collection(db, 'gifts')).id;
+      return commitGiftAndSeat(newId, {
+        seat,
+        newGift: {
+          partyId,
+          submitterId: user.uid,
+          ...fields,
+          isFrozen: false,
+          winnerId: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
       });
-      return ref.id;
     })().then((id) => {
       giftDocIdRef.current = id;
       return id;
@@ -455,14 +471,18 @@ export function GuestJoinCard({
       }
       const writes = (async () => {
         if (fields) {
-          await persistGift(fields);
+          // Gift and seat (with its hasGift link) land in one batch.
+          await persistGift(fields, seatAtStart);
           trackSubmitGift(partyId);
+        } else {
+          // No gift edit: link the gift I already have, if any (same as the pre-merge single batch).
+          await updateDoc(doc(db, 'parties', partyId, 'participants', user.uid), {
+            ...seatAtStart,
+            ...(gift?.id ? seatGiftLink(gift.id) : {}),
+            ready: true,
+            updatedAt: new Date(),
+          });
         }
-        await updateDoc(doc(db, 'parties', partyId, 'participants', user.uid), {
-          ...seatAtStart,
-          ready: true,
-          updatedAt: new Date(),
-        });
         // Profile name for later games; best effort (the seat name above is what the party shows).
         // Skipped for anonymous guests: their account is temporary (anonymousUserCleanup), the seat name is enough.
         if (!user.isAnonymous) {

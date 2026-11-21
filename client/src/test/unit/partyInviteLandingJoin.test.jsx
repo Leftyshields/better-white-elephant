@@ -24,7 +24,8 @@ const TOKEN = 'feedfacefeedfacefeedfacefeedface';
 const useAuthMock = vi.fn();
 const joinMock = vi.fn();
 const getDocMock = vi.fn();
-const addDocMock = vi.fn();
+const commitMock = vi.fn();
+let batchOps = [];
 const updateDocMock = vi.fn();
 const ensureGuestSession = vi.fn();
 const authState = vi.hoisted(() => ({ currentUser: null }));
@@ -45,9 +46,14 @@ vi.mock('../../utils/firebase.js', () => ({
 }));
 
 vi.mock('firebase/firestore', () => ({
-  doc: vi.fn((_db, ...path) => ({ path: path.join('/') })),
+  // doc(collection) mints the new gift id 'gift-new'; doc(db, ...path) is a path ref.
+  doc: vi.fn((_db, ...path) => (path.length ? { path: path.join('/') } : { path: 'gifts/gift-new', id: 'gift-new' })),
   getDoc: (...args) => getDocMock(...args),
-  addDoc: (...args) => addDocMock(...args),
+  writeBatch: () => ({
+    set: (ref, data) => batchOps.push({ op: 'set', path: ref.path, data }),
+    update: (ref, data) => batchOps.push({ op: 'update', path: ref.path, data }),
+    commit: () => commitMock(),
+  }),
   collection: vi.fn((_db, name) => ({ path: name })),
   getDocs: vi.fn(() => Promise.resolve({ empty: true, docs: [] })),
   query: vi.fn(),
@@ -85,7 +91,8 @@ describe('PartyInviteLanding join', () => {
   beforeEach(() => {
     joinMock.mockReset();
     getDocMock.mockReset();
-    addDocMock.mockReset().mockResolvedValue({ id: 'g1' });
+    commitMock.mockReset().mockResolvedValue(undefined);
+    batchOps = [];
     updateDocMock.mockReset().mockResolvedValue(undefined);
     ensureGuestSession.mockReset();
     ensureGuestSession.mockResolvedValue({ uid: 'anon-1', isAnonymous: true, displayName: null, email: null });
@@ -444,10 +451,13 @@ describe('PartyInviteLanding join', () => {
       finishJoin({ id: 'anon-1' });
       for (let i = 0; i < 10; i += 1) await Promise.resolve();
     });
-    expect(addDocMock).toHaveBeenCalledTimes(1);
-    expect(updateDocMock).toHaveBeenCalledWith(
-      { path: `parties/${PARTY_ID}/participants/anon-1` },
-      expect.objectContaining({ ready: true, displayName: 'Sam', lastInitial: 'L' }),
-    );
+    // Gift, name, ready and the seat's hasGift link go in one batch (G26).
+    expect(commitMock).toHaveBeenCalledTimes(1);
+    expect(batchOps.filter((o) => o.op === 'set' && o.path.startsWith('gifts/'))).toHaveLength(1);
+    expect(batchOps).toContainEqual({
+      op: 'update',
+      path: `parties/${PARTY_ID}/participants/anon-1`,
+      data: expect.objectContaining({ ready: true, displayName: 'Sam', lastInitial: 'L', hasGift: true, giftId: 'gift-new' }),
+    });
   });
 });

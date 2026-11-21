@@ -26,7 +26,8 @@ const usePartyMock = vi.fn();
 const joinMock = vi.fn();
 const getDocMock = vi.fn();
 const updateDocMock = vi.fn();
-const addDocMock = vi.fn();
+const commitMock = vi.fn();
+let batchOps = [];
 const ensureGuestSession = vi.fn();
 const authState = vi.hoisted(() => ({ currentUser: null }));
 
@@ -36,14 +37,19 @@ vi.mock('../../utils/analytics.js', () => ({ trackParticipantJoin: vi.fn(), trac
 vi.mock('../../utils/api.js', () => ({ scrapeGiftUrl: vi.fn() }));
 vi.mock('../../utils/firebase.js', () => ({ db: { name: 'test-db' }, auth: authState }));
 vi.mock('firebase/firestore', () => ({
-  doc: vi.fn((_db, ...path) => ({ path: path.join('/') })),
+  // doc(collection) mints the new gift id 'gift-new'; doc(db, ...path) is a path ref.
+  doc: vi.fn((_db, ...path) => (path.length ? { path: path.join('/') } : { path: 'gifts/gift-new', id: 'gift-new' })),
   collection: vi.fn(),
   getDocs: vi.fn(() => Promise.resolve({ empty: true, docs: [] })),
   query: vi.fn(),
   where: vi.fn(),
   limit: vi.fn(),
   getDoc: (...args) => getDocMock(...args),
-  addDoc: (...args) => addDocMock(...args),
+  writeBatch: () => ({
+    set: (ref, data) => batchOps.push({ op: 'set', path: ref.path, data }),
+    update: (ref, data) => batchOps.push({ op: 'update', path: ref.path, data }),
+    commit: () => commitMock(),
+  }),
   setDoc: vi.fn(() => Promise.resolve()),
   updateDoc: (...args) => updateDocMock(...args),
 }));
@@ -97,7 +103,8 @@ const flush = async (n = 6) => {
 };
 
 beforeEach(() => {
-  [useAuthMock, usePartyMock, joinMock, getDocMock, updateDocMock, addDocMock, ensureGuestSession].forEach((m) => m.mockReset());
+  [useAuthMock, usePartyMock, joinMock, getDocMock, updateDocMock, commitMock, ensureGuestSession].forEach((m) => m.mockReset());
+  batchOps = [];
   vi.spyOn(console, 'error').mockImplementation(() => {});
   authState.currentUser = null;
 });
@@ -120,9 +127,9 @@ describe('UX v3 probe 1: one tap survives the landing-to-lobby swap', () => {
       : missing));
     let finishJoin;
     joinMock.mockReturnValue(new Promise((r) => { finishJoin = r; }));
+    // The ready save (gift + seat in one batch, G26) hangs until finishReady.
     let finishReady;
-    updateDocMock.mockReturnValue(new Promise((r) => { finishReady = r; }));
-    addDocMock.mockResolvedValue({ id: 'gift-1' });
+    commitMock.mockReturnValue(new Promise((r) => { finishReady = r; }));
     partyState(lobbyParty, []);
 
     const view = render(tree());
@@ -152,11 +159,13 @@ describe('UX v3 probe 1: one tap survives the landing-to-lobby swap', () => {
     partyState(lobbyParty, [{ id: 'anon-1', status: 'GOING', ready: false, hasPendingWrites: false }]);
     await act(async () => { finishJoin(); await flush(20); });
     view.rerender(tree());
-    expect(addDocMock).toHaveBeenCalledTimes(1);
-    expect(updateDocMock).toHaveBeenCalledWith(
-      { path: `parties/${PARTY_ID}/participants/anon-1` },
-      expect.objectContaining({ ready: true }),
-    );
+    expect(commitMock).toHaveBeenCalledTimes(1);
+    expect(batchOps.filter((o) => o.op === 'set' && o.path.startsWith('gifts/'))).toHaveLength(1);
+    expect(batchOps).toContainEqual({
+      op: 'update',
+      path: `parties/${PARTY_ID}/participants/anon-1`,
+      data: expect.objectContaining({ ready: true, hasGift: true, giftId: 'gift-new' }),
+    });
     expect(screen.queryByTestId('party-lobby')).toBeNull();
 
     // Ready save acked; the confirmed snapshot has not arrived yet.
@@ -167,8 +176,10 @@ describe('UX v3 probe 1: one tap survives the landing-to-lobby swap', () => {
     expect(screen.getByTestId('party-lobby')).toBeTruthy();
     expect(screen.getByText(COPY.readyDone)).toBeTruthy();
     expect(screen.queryByRole('button', { name: COPY.readyCta })).toBeNull();
-    expect(updateDocMock).toHaveBeenCalledTimes(1);
-    expect(addDocMock).toHaveBeenCalledTimes(1);
+    // Exactly one ready save: one batch, no separate seat write.
+    expect(commitMock).toHaveBeenCalledTimes(1);
+    expect(updateDocMock).not.toHaveBeenCalled();
+    expect(batchOps.filter((o) => o.op === 'set' && o.path.startsWith('gifts/'))).toHaveLength(1);
   });
 });
 

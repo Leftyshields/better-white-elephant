@@ -10,19 +10,32 @@ import { scrapeGiftUrl } from '../../utils/api.js';
 import { REQUEST_TIMEOUT_MS } from '../../utils/withTimeout.js';
 
 const updateDocMock = vi.fn();
-const addDocMock = vi.fn();
 const setDocMock = vi.fn();
+const commitMock = vi.fn();
+let batchOps = [];
 const getDocsMock = vi.fn();
+// Ready writes the gift and the seat in one batch (G26); a gift "add" is a batch set on gifts/.
+const giftCreates = () => batchOps.filter((o) => o.op === 'set' && o.path.startsWith('gifts/'));
+const flushMicrotasks = async () => {
+  for (let i = 0; i < 10; i += 1) await Promise.resolve();
+};
 
 vi.mock('../../utils/firebase.js', () => ({ db: {} }));
 vi.mock('../../utils/analytics.js', () => ({ trackSubmitGift: vi.fn() }));
 vi.mock('../../utils/api.js', () => ({ scrapeGiftUrl: vi.fn() }));
 vi.mock('firebase/firestore', () => ({
-  doc: vi.fn((_db, ...path) => ({ path: path.join('/') })),
+  // doc(collection) mints the new gift id 'gift-new'; doc(db, ...path) is a path ref.
+  doc: vi.fn((first, ...path) => (path.length ? { path: path.join('/') } : { path: 'gifts/gift-new', id: 'gift-new' })),
   collection: vi.fn((_db, name) => ({ path: name })),
-  addDoc: (...args) => addDocMock(...args),
   setDoc: (...args) => setDocMock(...args),
   updateDoc: (...args) => updateDocMock(...args),
+  deleteField: () => '__delete__',
+  writeBatch: () => ({
+    set: (ref, data) => batchOps.push({ op: 'set', path: ref.path, data }),
+    update: (ref, data) => batchOps.push({ op: 'update', path: ref.path, data }),
+    delete: (ref) => batchOps.push({ op: 'delete', path: ref.path }),
+    commit: () => commitMock(),
+  }),
   getDocs: (...args) => getDocsMock(...args),
   query: vi.fn((...args) => ({ args })),
   where: vi.fn((...args) => args),
@@ -88,8 +101,9 @@ describe('GuestJoinCard', () => {
 
   beforeEach(() => {
     updateDocMock.mockReset().mockResolvedValue(undefined);
-    addDocMock.mockReset().mockResolvedValue({ id: 'g1' });
     setDocMock.mockReset().mockResolvedValue(undefined);
+    commitMock.mockReset().mockResolvedValue(undefined);
+    batchOps = [];
     scrapeGiftUrl.mockReset();
     getDocsMock.mockReset().mockResolvedValue({ empty: true, docs: [] });
     vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -122,9 +136,9 @@ describe('GuestJoinCard', () => {
     expect(readyButton()).toBeDisabled();
   });
 
-  it('saves gift, name and ready together, showing Saving... while busy', async () => {
+  it('saves gift, name, ready and the seat hasGift link in one batch, showing Saving... while busy', async () => {
     let finish;
-    updateDocMock.mockReturnValue(new Promise((r) => { finish = r; }));
+    commitMock.mockReturnValue(new Promise((r) => { finish = r; }));
     renderCard();
     fireEvent.change(screen.getByLabelText(COPY.nameLabel), { target: { value: 'Sam Lee' } });
     fireEvent.click(screen.getByRole('button', { name: COPY.giftManualToggle }));
@@ -138,17 +152,25 @@ describe('GuestJoinCard', () => {
     finish();
     await waitFor(() => expect(screen.getByText(COPY.readyDone)).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: COPY.readyCta })).toBeNull();
-    expect(addDocMock).toHaveBeenCalledTimes(1);
-    expect(addDocMock.mock.calls[0][1]).toMatchObject({ submitterId: 'anon-1', title: 'Wool socks', url: 'https://example.com/socks' });
-    expect(updateDocMock).toHaveBeenCalledWith(
-      { path: expect.stringMatching(/participants\/anon-1$/) },
-      expect.objectContaining({ ready: true, displayName: 'Sam', lastInitial: 'L' }),
-    );
+    expect(commitMock).toHaveBeenCalledTimes(1);
+    expect(batchOps).toHaveLength(2);
+    expect(batchOps[0]).toMatchObject({
+      op: 'set',
+      path: 'gifts/gift-new',
+      data: { submitterId: 'anon-1', title: 'Wool socks', url: 'https://example.com/socks' },
+    });
+    expect(batchOps[1].op).toBe('update');
+    expect(batchOps[1].path).toMatch(/participants\/anon-1$/);
+    expect(batchOps[1].data).toMatchObject({ ready: true, displayName: 'Sam', lastInitial: 'L', hasGift: true, giftId: 'gift-new' });
+    // The seat carries the link only, never gift details.
+    expect(batchOps[1].data).not.toHaveProperty('title');
+    expect(batchOps[1].data).not.toHaveProperty('url');
+    expect(updateDocMock).not.toHaveBeenCalled();
     expect(setDocMock).not.toHaveBeenCalled();
   });
 
   it('a failed save shows the toast and keeps every typed value', async () => {
-    updateDocMock.mockRejectedValue(Object.assign(new Error('x'), { code: 'unavailable' }));
+    commitMock.mockRejectedValue(Object.assign(new Error('x'), { code: 'unavailable' }));
     renderCard();
     fireEvent.change(screen.getByLabelText(COPY.nameLabel), { target: { value: 'Sam' } });
     fireEvent.click(screen.getByRole('button', { name: COPY.giftManualToggle }));
@@ -200,6 +222,19 @@ describe('GuestJoinCard', () => {
     expect(screen.getByText("This store won't share its gift details with us. Add them below.")).toBeInTheDocument();
   });
 
+  it('undo Ready changes only ready, so the seat keeps its hasGift link (pot count unchanged)', async () => {
+    renderCard({
+      participant: { id: 'anon-1', ready: true, displayName: 'Sam', hasGift: true, giftId: 'g1' },
+      gift: { id: 'g1', title: 'Socks' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: COPY.readyUndo }));
+    await waitFor(() => expect(updateDocMock).toHaveBeenCalledTimes(1));
+    const fields = updateDocMock.mock.calls[0][1];
+    expect(Object.keys(fields).sort()).toEqual(['ready', 'updatedAt']);
+    expect(fields.ready).toBe(false);
+    expect(batchOps).toHaveLength(0);
+  });
+
   it('shows the ready state with one way back', () => {
     renderCard({ participant: { id: 'anon-1', ready: true, displayName: 'Sam' }, gift: { id: 'g1', title: 'Socks' } });
     expect(screen.getByText(COPY.readyDone)).toBeInTheDocument();
@@ -222,7 +257,9 @@ describe('GuestJoinCard timeouts', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     updateDocMock.mockReset().mockResolvedValue(undefined);
-    addDocMock.mockReset();
+    commitMock.mockReset().mockResolvedValue(undefined);
+    batchOps = [];
+    getDocsMock.mockReset().mockResolvedValue({ empty: true, docs: [] });
     setDocMock.mockReset().mockResolvedValue(undefined);
     scrapeGiftUrl.mockReset();
     vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -298,7 +335,7 @@ describe('GuestJoinCard timeouts', () => {
   });
 
   it('unlocks a hung ready save at 10s, shows the slow line, and keeps typed values', async () => {
-    addDocMock.mockReturnValue(new Promise(() => {}));
+    commitMock.mockReturnValue(new Promise(() => {}));
     renderCard();
     fillNameAndManualGift();
     fireEvent.click(readyButton());
@@ -318,7 +355,7 @@ describe('GuestJoinCard timeouts', () => {
 
   it('a late save plus a retry does not create a second gift doc', async () => {
     let finish;
-    addDocMock.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    commitMock.mockReturnValueOnce(new Promise((resolve) => { finish = resolve; }));
     updateDocMock.mockResolvedValue(undefined);
     renderCard();
     fillNameAndManualGift();
@@ -329,20 +366,20 @@ describe('GuestJoinCard timeouts', () => {
     expect(screen.getByText(COPY.readySaveSlow)).toBeInTheDocument();
     fireEvent.click(readyButton());
     await act(async () => {
-      finish({ id: 'g1' });
-      await Promise.resolve();
-      await Promise.resolve();
+      finish();
+      await flushMicrotasks();
     });
-    expect(addDocMock).toHaveBeenCalledTimes(1);
-    expect(updateDocMock).toHaveBeenCalledWith(
-      { path: 'gifts/g1' },
-      expect.objectContaining({ title: 'Wool socks', url: 'https://example.com/socks' }),
-    );
+    expect(giftCreates()).toHaveLength(1);
+    expect(batchOps).toContainEqual({
+      op: 'update',
+      path: 'gifts/gift-new',
+      data: expect.objectContaining({ title: 'Wool socks', url: 'https://example.com/socks' }),
+    });
   });
 
   it('a timed-out save that later resolves does not overwrite a newer gift title', async () => {
     let finish;
-    addDocMock.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    commitMock.mockReturnValueOnce(new Promise((resolve) => { finish = resolve; }));
     updateDocMock.mockResolvedValue(undefined);
     renderCard();
     fillNameAndManualGift();
@@ -352,28 +389,27 @@ describe('GuestJoinCard timeouts', () => {
     });
     fireEvent.change(screen.getByLabelText(COPY.giftTitleLabel), { target: { value: 'Cashmere socks' } });
     await act(async () => {
-      finish({ id: 'g1' });
-      await Promise.resolve();
-      await Promise.resolve();
+      finish();
+      await flushMicrotasks();
     });
     expect(screen.queryByText(COPY.readyDone)).toBeNull();
     expect(screen.getByLabelText(COPY.giftTitleLabel)).toHaveValue('Cashmere socks');
     expect(screen.getByLabelText(COPY.nameLabel)).toHaveValue('Sam Lee');
     fireEvent.click(readyButton());
     await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
+      await flushMicrotasks();
     });
-    expect(addDocMock).toHaveBeenCalledTimes(1);
-    expect(updateDocMock).toHaveBeenCalledWith(
-      { path: 'gifts/g1' },
-      expect.objectContaining({ title: 'Cashmere socks' }),
-    );
+    expect(giftCreates()).toHaveLength(1);
+    expect(batchOps).toContainEqual({
+      op: 'update',
+      path: 'gifts/gift-new',
+      data: expect.objectContaining({ title: 'Cashmere socks' }),
+    });
     expect(screen.getByText(COPY.readyDone)).toBeInTheDocument();
   });
 
   it('shows You are in only after the ready write resolves, not a local pending snapshot', async () => {
-    addDocMock.mockResolvedValue({ id: 'g1' });
+    commitMock.mockResolvedValue(undefined);
     updateDocMock.mockResolvedValue(undefined);
     const props = {
       partyId: 'party-ack',
@@ -453,7 +489,7 @@ describe('GuestJoinCard timeouts', () => {
 
   it('a fast lookup and a fast save are unchanged', async () => {
     scrapeGiftUrl.mockResolvedValue({ title: 'Wool socks', image: null, price: null, error: null });
-    addDocMock.mockResolvedValue({ id: 'g1' });
+    commitMock.mockResolvedValue(undefined);
     updateDocMock.mockResolvedValue(undefined);
     renderCard();
     fireEvent.change(screen.getByLabelText(COPY.nameLabel), { target: { value: 'Sam Lee' } });
@@ -471,7 +507,7 @@ describe('GuestJoinCard timeouts', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(addDocMock).toHaveBeenCalledTimes(1);
+    expect(giftCreates()).toHaveLength(1);
     expect(screen.queryByText(COPY.readySaveSlow)).toBeNull();
   });
 });

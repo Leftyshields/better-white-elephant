@@ -4,6 +4,8 @@
 import { useState, useEffect, useId } from 'react';
 import { useAuth } from '../hooks/useAuth.js';
 import { useParty } from '../hooks/useParty.js';
+import { lobbyGiftPotCount } from '../utils/giftPotCount.js';
+import { seatGiftLink, seatGiftUnlink, seatGiftReconcileFields } from '../utils/seatGift.js';
 import { Button } from './ui/Button.jsx';
 import { Input } from './ui/Input.jsx';
 import { Modal } from './ui/Modal.jsx';
@@ -19,12 +21,12 @@ import {
   doc,
   setDoc,
   updateDoc,
-  addDoc,
   getDoc,
   deleteDoc,
   query,
   where,
   getDocs,
+  writeBatch,
 } from 'firebase/firestore';
 import { db } from '../utils/firebase.js';
 import { filterVisiblePendingInvites, canResendPartyInvite } from '../utils/pendingInvites.js';
@@ -44,7 +46,7 @@ import { hostFirstNameFromParty } from './PartyInviteLanding.jsx';
 
 export function PartyLobby({ partyId, onStartGame }) {
   const { user } = useAuth();
-  const { party, participants, pendingInvites, gifts, loading } = useParty(partyId);
+  const { party, participants, pendingInvites, gifts, loading } = useParty(partyId, user?.uid ?? null);
   const { socket } = useGameSocket(partyId); // Get socket for simulation controls
   const [giftUrl, setGiftUrl] = useState('');
   const [scraping, setScraping] = useState(false);
@@ -75,6 +77,21 @@ export function PartyLobby({ partyId, onStartGame }) {
   const isGoogleHost = isAdmin && userSignedInWithGoogle(user);
   const currentParticipant = participants.find((p) => p.id === user?.uid);
   const userGift = gifts.find((g) => g.submitterId === user?.uid);
+  const potCount = lobbyGiftPotCount(participants);
+
+  // G26: older seats (and writes from older tabs) may lack the hasGift link. Once my own gift has
+  // loaded, fix my seat only; rules accept the write only if it matches my real gift.
+  const seatGiftFix =
+    !loading && party?.status === 'LOBBY' ? seatGiftReconcileFields(currentParticipant, userGift) : null;
+  const seatGiftFixKey = seatGiftFix ? `${seatGiftFix.hasGift}|${userGift?.id ?? ''}` : null;
+  useEffect(() => {
+    if (!seatGiftFixKey || !user?.uid) return;
+    updateDoc(doc(db, 'parties', partyId, 'participants', user.uid), {
+      ...seatGiftReconcileFields(currentParticipant, userGift),
+      updatedAt: new Date(),
+    }).catch((error) => console.error('Seat gift link fix failed:', { code: error?.code, name: error?.name }));
+    // Runs once per distinct fix; the seat snapshot clears the key when it lands.
+  }, [seatGiftFixKey, partyId, user?.uid]);
   const [adminShippingAddress, setAdminShippingAddress] = useState(null);
   const [loadingAdminAddress, setLoadingAdminAddress] = useState(false);
 
@@ -324,8 +341,12 @@ export function PartyLobby({ partyId, onStartGame }) {
         });
         console.log('Gift updated successfully');
       } else {
-        // Create new gift
-        const giftRef = await addDoc(collection(db, 'gifts'), giftData);
+        // Create the gift and mark my seat hasGift in one batch (rules check the link).
+        const giftRef = doc(collection(db, 'gifts'));
+        const batch = writeBatch(db);
+        batch.set(giftRef, giftData);
+        batch.update(participantRef, { ...seatGiftLink(giftRef.id), updatedAt: new Date() });
+        await batch.commit();
         console.log('Gift created successfully with ID:', giftRef.id);
       }
 
@@ -736,12 +757,12 @@ export function PartyLobby({ partyId, onStartGame }) {
       {/* Gift Pile Hero Section */}
       <div className="bg-slate-900/80 backdrop-blur-xl border border-white/10 shadow-2xl rounded-2xl p-8 text-center">
         <div className="flex justify-center items-center flex-wrap gap-2 mb-4">
-          {gifts.length > 0 ? (
-            gifts.map((gift, index) => (
+          {potCount > 0 ? (
+            Array.from({ length: potCount }, (_, index) => (
               <span
-                key={gift.id}
+                key={index}
                 className="text-6xl -ml-4 first:ml-0 drop-shadow-lg transition-all hover:-translate-y-2"
-                style={{ zIndex: gifts.length - index }}
+                style={{ zIndex: potCount - index }}
               >
                 🎁
               </span>
@@ -753,7 +774,7 @@ export function PartyLobby({ partyId, onStartGame }) {
           )}
         </div>
         <div className="text-2xl font-bold text-white">
-          {gifts.length} Gift{gifts.length !== 1 ? 's' : ''} in the Pot
+          {potCount} Gift{potCount !== 1 ? 's' : ''} in the Pot
         </div>
       </div>
 
@@ -1319,7 +1340,11 @@ export function PartyLobby({ partyId, onStartGame }) {
                                           updatedAt: giftData.updatedAt,
                                         });
                                       } else {
-                                        await addDoc(collection(db, 'gifts'), giftData);
+                                        const giftRef = doc(collection(db, 'gifts'));
+                                        const batch = writeBatch(db);
+                                        batch.set(giftRef, giftData);
+                                        batch.update(participantRef, { ...seatGiftLink(giftRef.id), updatedAt: new Date() });
+                                        await batch.commit();
                                       }
 
                                       // Clear the form
@@ -1385,12 +1410,15 @@ export function PartyLobby({ partyId, onStartGame }) {
                             onClick={async () => {
                               if (confirm('Are you sure you want to delete your gift? You can submit a new one.')) {
                                 try {
-                                  await deleteDoc(doc(db, 'gifts', userGift.id));
                                   const participantRef = doc(db, 'parties', partyId, 'participants', user.uid);
-                                  await updateDoc(participantRef, {
+                                  const batch = writeBatch(db);
+                                  batch.delete(doc(db, 'gifts', userGift.id));
+                                  batch.update(participantRef, {
                                     status: 'PENDING',
+                                    ...seatGiftUnlink(),
                                     updatedAt: new Date(),
                                   });
+                                  await batch.commit();
                                   setOpenStep(step.id);
                                 } catch (error) {
                                   console.error('Error deleting gift:', error);

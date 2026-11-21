@@ -11,18 +11,26 @@ import { readGuestGiftDraft, writeGuestGiftDraft, guestGiftDraftKey } from '../.
 import { scrapeGiftUrl } from '../../utils/api.js';
 
 const updateDocMock = vi.fn();
-const addDocMock = vi.fn();
 const setDocMock = vi.fn();
 const getDocsMock = vi.fn();
+const commitMock = vi.fn();
+let batchOps = [];
 
 vi.mock('../../utils/firebase.js', () => ({ db: {} }));
 vi.mock('../../utils/analytics.js', () => ({ trackSubmitGift: vi.fn() }));
 vi.mock('../../utils/api.js', () => ({ scrapeGiftUrl: vi.fn() }));
 vi.mock('firebase/firestore', () => ({
-  doc: vi.fn((_db, ...path) => ({ path: path.join('/') })),
+  // doc(collection) mints the new gift id 'gift-new'; doc(db, ...path) is a path ref.
+  doc: vi.fn((first, ...path) => (path.length ? { path: path.join('/') } : { path: 'gifts/gift-new', id: 'gift-new' })),
   collection: vi.fn((_db, name) => ({ path: name })),
-  addDoc: (...args) => addDocMock(...args),
   setDoc: (...args) => setDocMock(...args),
+  deleteField: () => '__delete__',
+  writeBatch: () => ({
+    set: (ref, data) => batchOps.push({ op: 'set', path: ref.path, data }),
+    update: (ref, data) => batchOps.push({ op: 'update', path: ref.path, data }),
+    delete: (ref) => batchOps.push({ op: 'delete', path: ref.path }),
+    commit: () => commitMock(),
+  }),
   updateDoc: (...args) => updateDocMock(...args),
   getDocs: (...args) => getDocsMock(...args),
   query: vi.fn((...args) => ({ args })),
@@ -51,12 +59,15 @@ function card(partyId, props = {}) {
 }
 
 const nameField = () => screen.getByLabelText(COPY.nameLabel);
+// Ready saves the gift and the seat (name, ready, hasGift link) in one batch (G26).
+const giftCreates = () => batchOps.filter((o) => o.op === 'set' && o.path.startsWith('gifts/'));
 const seatNameWrites = () =>
   updateDocMock.mock.calls.filter(([ref, data]) => /participants\/anon-1$/.test(ref.path) && !('ready' in data));
 
 beforeEach(() => {
   updateDocMock.mockReset().mockResolvedValue(undefined);
-  addDocMock.mockReset().mockResolvedValue({ id: 'g1' });
+  commitMock.mockReset().mockResolvedValue(undefined);
+  batchOps = [];
   setDocMock.mockReset().mockResolvedValue(undefined);
   getDocsMock.mockReset().mockResolvedValue({ empty: true, docs: [] });
   scrapeGiftUrl.mockReset().mockResolvedValue({ title: '', image: null, price: null, error: 'blocked' });
@@ -275,7 +286,8 @@ describe('G24: gift draft survives F5 in sessionStorage', () => {
     fireEvent.change(screen.getByLabelText(COPY.giftTitleLabel), { target: { value: 'Wool socks' } });
     expect(window.sessionStorage.getItem(KEY(partyId))).not.toBeNull();
     fireEvent.click(screen.getByRole('button', { name: COPY.readyCta }));
-    await waitFor(() => expect(addDocMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(commitMock).toHaveBeenCalledTimes(1));
+    expect(giftCreates()).toHaveLength(1);
     await waitFor(() => expect(window.sessionStorage.getItem(KEY(partyId))).toBeNull());
   });
 
@@ -290,13 +302,19 @@ describe('G24: gift draft survives F5 in sessionStorage', () => {
     getDocsMock.mockResolvedValue({ empty: false, docs: [{ id: 'gift-already-saved' }] });
     render(card(partyId, { participant: { id: 'anon-1', status: 'GOING', ready: false, displayName: 'Sam' } }));
     fireEvent.click(screen.getByRole('button', { name: COPY.readyCta }));
-    await waitFor(() =>
-      expect(updateDocMock).toHaveBeenCalledWith(
-        { path: 'gifts/gift-already-saved' },
-        expect.objectContaining({ title: 'Wool socks', url: 'https://example.com/socks' }),
-      ),
-    );
-    expect(addDocMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(commitMock).toHaveBeenCalledTimes(1));
+    expect(batchOps).toContainEqual({
+      op: 'update',
+      path: 'gifts/gift-already-saved',
+      data: expect.objectContaining({ title: 'Wool socks', url: 'https://example.com/socks' }),
+    });
+    expect(giftCreates()).toHaveLength(0);
+    // The seat links to the gift that already exists.
+    expect(batchOps).toContainEqual({
+      op: 'update',
+      path: expect.stringMatching(/participants\/anon-1$/),
+      data: expect.objectContaining({ ready: true, hasGift: true, giftId: 'gift-already-saved' }),
+    });
     // The lookup is scoped to this guest in this party.
     const { where } = await import('firebase/firestore');
     expect(where).toHaveBeenCalledWith('partyId', '==', partyId);
@@ -311,7 +329,8 @@ describe('G24: gift draft survives F5 in sessionStorage', () => {
     );
     render(card(partyId, { participant: { id: 'anon-1', status: 'GOING', ready: false, displayName: 'Sam' } }));
     fireEvent.click(screen.getByRole('button', { name: COPY.readyCta }));
-    await waitFor(() => expect(addDocMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(commitMock).toHaveBeenCalledTimes(1));
+    expect(giftCreates()).toHaveLength(1);
   });
 
   it('if the gift lookup fails, nothing is added and the typed gift stays', async () => {
@@ -324,12 +343,13 @@ describe('G24: gift draft survives F5 in sessionStorage', () => {
     render(card(partyId, { participant: { id: 'anon-1', status: 'GOING', ready: false, displayName: 'Sam' } }));
     fireEvent.click(screen.getByRole('button', { name: COPY.readyCta }));
     await waitFor(() => expect(screen.getByText(COPY.joinFailedToast)).toBeInTheDocument());
-    expect(addDocMock).not.toHaveBeenCalled();
+    expect(commitMock).not.toHaveBeenCalled();
+    expect(giftCreates()).toHaveLength(0);
     expect(readGuestGiftDraft(partyId, 'anon-1').manualTitle).toBe('Wool socks');
   });
 
   it('a failed Ready keeps the draft', async () => {
-    updateDocMock.mockRejectedValue(Object.assign(new Error('x'), { code: 'unavailable' }));
+    commitMock.mockRejectedValue(Object.assign(new Error('x'), { code: 'unavailable' }));
     const partyId = nextParty();
     render(card(partyId));
     fireEvent.change(nameField(), { target: { value: 'Sam' } });
