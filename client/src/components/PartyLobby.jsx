@@ -30,7 +30,13 @@ import { db } from '../utils/firebase.js';
 import { filterVisiblePendingInvites, canResendPartyInvite } from '../utils/pendingInvites.js';
 import { getStartGameFailureMessage, START_GAME_GENERIC_ERROR } from '../utils/startGameResponse.js';
 import { removeParticipantSeat } from '../utils/partyInvite.js';
-import { rosterDisplayNames } from '../utils/seatDisplayName.js';
+import {
+  effectiveGameRoomBatchStatus,
+  gameRoomNameStates,
+  participantNeedsBatchName,
+} from '../utils/seatDisplayName.js';
+import { GAME_USER_COPY } from '../utils/gameUserCopy.js';
+import { PlayerName } from './PlayerName.jsx';
 import { userSignedInWithGoogle } from '../utils/partyInviteCopy.js';
 import { PartyShareModal } from './PartyShareModal.jsx';
 import { GuestJoinCard } from './GuestJoinCard.jsx';
@@ -51,6 +57,8 @@ export function PartyLobby({ partyId, onStartGame }) {
   const [showShareModal, setShowShareModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [userNames, setUserNames] = useState({});
+  const [userNamesStatus, setUserNamesStatus] = useState('idle');
+  const [userNamesSettledKey, setUserNamesSettledKey] = useState('');
   const [userIsBot, setUserIsBot] = useState({});
   const [newPersonName, setNewPersonName] = useState('');
   const [newPersonEmail, setNewPersonEmail] = useState('');
@@ -70,38 +78,66 @@ export function PartyLobby({ partyId, onStartGame }) {
   const [adminShippingAddress, setAdminShippingAddress] = useState(null);
   const [loadingAdminAddress, setLoadingAdminAddress] = useState(false);
 
-  // Fetch user names and emails for participants
-  useEffect(() => {
-    const fetchUserInfo = async () => {
-      if (participants.length === 0) {
-        setUserNames({});
-        return;
-      }
+  // Seat names first (G2). /api/users/batch is a fallback for seats without a valid displayName
+  // (and tells us which seats are bots). Until it settles a nameless seat shows the loading
+  // skeleton; after it settles with no name it shows "Player". Never a uid fragment.
+  const participantIdsKey = participants
+    .map((p) => p.id)
+    .filter(Boolean)
+    .slice()
+    .sort()
+    .join(',');
 
+  useEffect(() => {
+    if (participants.length === 0) {
+      setUserNames({});
+      return undefined;
+    }
+    let cancelled = false;
+    const key = participantIdsKey;
+    setUserNamesStatus('pending');
+    (async () => {
       try {
-        const userIds = participants.map(p => p.id);
+        const userIds = participants.map((p) => p.id);
         const response = await apiRequest('/api/users/batch', {
           method: 'POST',
           body: JSON.stringify({ partyId, userIds }),
         });
-        
+        if (cancelled) return;
         if (response.users) {
           setUserNames(response.users);
         }
         if (response.bots) {
           setUserIsBot(response.bots);
         }
+        setUserNamesStatus('success');
+        setUserNamesSettledKey(key);
       } catch (error) {
-        console.error('Error fetching user info:', error);
-        // Seat names (rosterNames below) still show; others fall back to Player <id>.
-        setUserNames({});
+        if (cancelled) return;
+        console.error('Error fetching user info:', { name: error?.name });
+        setUserNamesStatus('failed');
+        setUserNamesSettledKey(key);
       }
+    })();
+    return () => {
+      cancelled = true;
     };
+    // participantIdsKey is the sorted id list; seat names come from the live participants.
+  }, [participantIdsKey, partyId]);
 
-    fetchUserInfo();
-  }, [participants, partyId]);
-
-  const rosterNames = rosterDisplayNames(participants, userNames);
+  const rosterBatchStatus = effectiveGameRoomBatchStatus({
+    participantIdsKey,
+    settledKey: userNamesSettledKey,
+    batchStatus: userNamesStatus,
+    needingCount: participants.filter(participantNeedsBatchName).length,
+    participantCount: participants.length,
+  });
+  const rosterNameStates = gameRoomNameStates(
+    participants,
+    userNames,
+    rosterBatchStatus,
+    GAME_USER_COPY.unnamedPlayer,
+  );
 
   // Fetch admin shipping address
   useEffect(() => {
@@ -913,7 +949,9 @@ export function PartyLobby({ partyId, onStartGame }) {
                           const isYou = participant.id === user?.uid;
                           const isAdminParticipant = participant.id === party?.adminId;
                           const isBot = userIsBot[participant.id] || participant.id.startsWith('bot_');
-                          const displayName = isYou ? 'You (Host)' : rosterNames[participant.id];
+                          const nameState = isYou
+                            ? { status: 'ready', name: 'You (Host)' }
+                            : rosterNameStates[participant.id];
                           return (
                             <div
                               key={participant.id}
@@ -922,9 +960,11 @@ export function PartyLobby({ partyId, onStartGame }) {
                               }`}
                             >
                               <div className="min-w-0 flex-1 flex items-center gap-2">
-                                <span className="min-w-0 flex-1 truncate text-white font-medium" title={displayName}>
-                                  {displayName}
-                                </span>
+                                <PlayerName
+                                  nameState={nameState}
+                                  id={participant.id}
+                                  className="flex-1 text-white font-medium"
+                                />
                                 {isBot && (
                                   <span className="shrink-0 text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded border border-purple-500/30">
                                     🤖 Bot
@@ -1406,7 +1446,7 @@ export function PartyLobby({ partyId, onStartGame }) {
                                 .filter((p) => p.status === 'GOING' && p.id !== party?.adminId)
                                 .map((participant) => {
                                   const isBot = userIsBot[participant.id] || participant.id.startsWith('bot_');
-                                  const displayName = rosterNames[participant.id];
+                                  const nameState = rosterNameStates[participant.id];
             
             return (
                                     <div
@@ -1415,9 +1455,11 @@ export function PartyLobby({ partyId, onStartGame }) {
                                         isBot ? 'bg-purple-900/30 border border-purple-500/30' : 'bg-slate-800/50'
                                       }`}
                                     >
-                                      <span className="min-w-0 flex-1 truncate text-white font-medium" title={displayName}>
-                                        {displayName}
-                                      </span>
+                                      <PlayerName
+                                        nameState={nameState}
+                                        id={participant.id}
+                                        className="flex-1 text-white font-medium"
+                                      />
                                       {isBot && (
                                         <span className="shrink-0 text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded border border-purple-500/30">
                                           🤖 Bot

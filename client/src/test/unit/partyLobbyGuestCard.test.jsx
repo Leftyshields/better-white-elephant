@@ -86,4 +86,10 @@ describe('PartyLobby guest card', () => {
     expect(screen.queryByText(/Setup Progress/i)).toBeNull();
     expect(screen.queryByText(/shipping address/i)).toBeNull();
   });
+  it('never shows the anonymous guest uid on the card or the roster before I\'m ready', async () => {
+    render(<PartyLobby partyId={PARTY_ID} onStartGame={vi.fn()} />);
+    await screen.findByTestId('guest-join-card');
+    expect(document.body.textContent).not.toMatch(/anon-gue/i);
+    expect(document.body.textContent).not.toMatch(/Player anon/i);
+  });
 });
