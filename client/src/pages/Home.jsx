@@ -369,12 +369,13 @@ export function Home() {
       <>
       <SEO title={HOME_SEO_TITLE} description={SEO_DEFAULT_DESCRIPTION} url="/" />
       <Snowflakes variant="landing" />
-      <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black relative overflow-hidden">
+      {/* Mobile: -mt-4 and pt-0 pull the hero up so the Join button fits the first 320x640 screen. */}
+      <div className="-mt-4 sm:mt-0 min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black relative overflow-hidden">
         {/* Hero Section */}
         <div className="relative overflow-hidden">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-3 sm:pt-8 md:pt-32 pb-16 relative z-10">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-0 sm:pt-8 md:pt-32 pb-16 relative z-10">
             <div className="text-center">
-              <h1 className="text-4xl md:text-6xl font-bold text-white mb-3 sm:mb-6 tracking-tight">
+              <h1 className="text-2xl sm:text-4xl md:text-6xl font-bold text-white mb-3 sm:mb-6 tracking-tight">
                 <span className="sm:hidden">{LANDING_COPY.heroHeadlineMobile}</span>
                 <span className="hidden sm:inline">{LANDING_COPY.heroHeadline}</span>
               </h1>

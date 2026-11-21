@@ -68,6 +68,78 @@ describe('PartyShareModal', () => {
     );
   });
 
+  it('announces the link copy with its own sr-only status, separate from the code', async () => {
+    renderModal();
+    await screen.findByText('KX7P-4MRB');
+    fireEvent.click(screen.getByRole('button', { name: PARTY_INVITE_COPY['host.share.link.copy_name'] }));
+    const status = await screen.findByText(PARTY_INVITE_COPY['host.share.link.copy_status']);
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    expect(status.className).toMatch(/sr-only/);
+    expect(screen.getByRole('button', { name: PARTY_INVITE_COPY['host.share.link.copy_name'] })).toHaveTextContent(
+      PARTY_INVITE_COPY['host.share.link.copy_done'],
+    );
+    expect(screen.getByRole('button', { name: PARTY_INVITE_COPY['host.share.code.copy_name'] })).toHaveTextContent(
+      PARTY_INVITE_COPY['host.share.code.copy'],
+    );
+    expect(screen.queryByText(PARTY_INVITE_COPY['host.share.code.copy_status'])).toBeNull();
+  });
+
+  it('when both copy methods fail: no Copied!, the visible code is selected, and the fallback line shows', async () => {
+    navigator.clipboard.writeText = vi.fn().mockRejectedValue(new Error('denied'));
+    const originalExec = document.execCommand;
+    document.execCommand = vi.fn(() => false);
+    try {
+      renderModal();
+      await screen.findByText('KX7P-4MRB');
+      const codeBtn = screen.getByRole('button', { name: PARTY_INVITE_COPY['host.share.code.copy_name'] });
+      fireEvent.click(codeBtn);
+      const fallback = await screen.findByTestId('share-code-copy-failed');
+      await waitFor(() => expect(fallback).toHaveTextContent(PARTY_INVITE_COPY['host.share.copy_failed']));
+      expect(fallback).toHaveAttribute('aria-live', 'polite');
+      expect(fallback.className).not.toMatch(/sr-only/);
+      expect(codeBtn).toHaveTextContent(PARTY_INVITE_COPY['host.share.code.copy']);
+      expect(screen.queryByText(PARTY_INVITE_COPY['host.share.code.copy_status'])).toBeNull();
+      expect(window.getSelection().toString()).toBe('KX7P-4MRB');
+
+      const linkBtn = screen.getByRole('button', { name: PARTY_INVITE_COPY['host.share.link.copy_name'] });
+      fireEvent.click(linkBtn);
+      const linkFallback = screen.getByTestId('share-link-copy-failed');
+      await waitFor(() => expect(linkFallback).toHaveTextContent(PARTY_INVITE_COPY['host.share.copy_failed']));
+      expect(linkBtn).toHaveTextContent(PARTY_INVITE_COPY['host.share.link.copy']);
+      const field = screen.getByRole('textbox');
+      expect(field).toHaveFocus();
+      expect(field.selectionStart).toBe(0);
+      expect(field.selectionEnd).toBe(field.value.length);
+    } finally {
+      document.execCommand = originalExec;
+    }
+  });
+
+  it('Copied! clears after 2 seconds', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      renderModal();
+      await screen.findByText('KX7P-4MRB');
+      const codeBtn = screen.getByRole('button', { name: PARTY_INVITE_COPY['host.share.code.copy_name'] });
+      fireEvent.click(codeBtn);
+      await waitFor(() => expect(codeBtn).toHaveTextContent(PARTY_INVITE_COPY['host.share.code.copy_done']));
+      vi.advanceTimersByTime(2100);
+      await waitFor(() => expect(codeBtn).toHaveTextContent(PARTY_INVITE_COPY['host.share.code.copy']));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('scrolls the modal body inside max-h-[90vh] so Close stays reachable on small screens', async () => {
+    renderModal();
+    await screen.findByText('KX7P-4MRB');
+    const closeBtn = screen.getAllByRole('button', { name: 'Close' }).find((b) => b.textContent.trim() === 'Close');
+    const body = closeBtn.closest('.overflow-y-auto');
+    expect(body).not.toBeNull();
+    expect(body.className).toMatch(/min-h-0/);
+    expect(body.parentElement.className).toMatch(/max-h-\[90vh\]/);
+  });
+
   it('shows the load_failed alert when the share route fails', async () => {
     postPartyCodeMock.mockResolvedValue({ ok: false, status: 500, body: {} });
     renderModal();

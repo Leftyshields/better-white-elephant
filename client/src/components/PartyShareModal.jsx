@@ -9,6 +9,7 @@ import { Button } from './ui/Button.jsx';
 import { postPartyCode } from '../utils/api.js';
 import { buildPartyShareLink } from '../utils/partyInvite.js';
 import { formatPartyCode } from '../utils/partyCode.js';
+import { copyText, selectVisibleText } from '../utils/copyText.js';
 import {
   HOST_INVITE_ROTATE_CONFIRM,
   HOST_INVITE_ROTATE_CTA,
@@ -26,24 +27,18 @@ const FOCUS_RING =
 const SHARE_LINK_FIELD_CLASSES =
   'w-full min-h-11 px-3 py-2 bg-slate-950/50 border border-slate-700 rounded-md shadow-sm text-white font-mono text-sm break-all whitespace-pre-wrap resize-none overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 focus-visible:border-purple-500';
 
-async function copyText(text) {
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch {
-    const input = document.createElement('input');
-    input.value = text;
-    document.body.appendChild(input);
-    input.select();
-    document.execCommand('copy');
-    document.body.removeChild(input);
-  }
-}
+const COPIED_MS = 2000;
 
 export function PartyShareModal({ isOpen, onClose, partyId, isGoogleHost }) {
   const [invite, setInvite] = useState(null); // { code, token }
   const [loadFailed, setLoadFailed] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [codeCopyFailed, setCodeCopyFailed] = useState(false);
+  const [linkCopyFailed, setLinkCopyFailed] = useState(false);
+  const codeTimerRef = useRef(null);
+  const linkTimerRef = useRef(null);
+  const codeTextRef = useRef(null);
   const [rotateConfirming, setRotateConfirming] = useState(false);
   const [rotateFailed, setRotateFailed] = useState(false);
   const [rotateDone, setRotateDone] = useState(false);
@@ -59,6 +54,29 @@ export function PartyShareModal({ isOpen, onClose, partyId, isGoogleHost }) {
   const introId = useId();
   const codeLabelId = useId();
   const helperId = useId();
+
+  useEffect(
+    () => () => {
+      clearTimeout(codeTimerRef.current);
+      clearTimeout(linkTimerRef.current);
+    },
+    []
+  );
+
+  const copyCode = async () => {
+    if (!invite) return;
+    clearTimeout(codeTimerRef.current);
+    const ok = await copyText(formatPartyCode(invite.code));
+    if (ok) {
+      setCodeCopyFailed(false);
+      setCodeCopied(true);
+      codeTimerRef.current = setTimeout(() => setCodeCopied(false), COPIED_MS);
+    } else {
+      setCodeCopied(false);
+      selectVisibleText(codeTextRef.current);
+      setCodeCopyFailed(true);
+    }
+  };
 
   const link = invite ? buildPartyShareLink(window.location.origin, partyId, invite.token) : '';
 
@@ -116,9 +134,26 @@ export function PartyShareModal({ isOpen, onClose, partyId, isGoogleHost }) {
     return () => window.removeEventListener('resize', fit);
   }, [isOpen, link]);
 
+  const copyLink = async () => {
+    if (!invite) return;
+    clearTimeout(linkTimerRef.current);
+    const ok = await copyText(link);
+    if (ok) {
+      setLinkCopyFailed(false);
+      setLinkCopied(true);
+      linkTimerRef.current = setTimeout(() => setLinkCopied(false), COPIED_MS);
+    } else {
+      setLinkCopied(false);
+      selectVisibleText(linkFieldRef.current);
+      setLinkCopyFailed(true);
+    }
+  };
+
   const close = () => {
     setCodeCopied(false);
     setLinkCopied(false);
+    setCodeCopyFailed(false);
+    setLinkCopyFailed(false);
     setRotateConfirming(false);
     setRotateFailed(false);
     setRotateDone(false);
@@ -136,6 +171,8 @@ export function PartyShareModal({ isOpen, onClose, partyId, isGoogleHost }) {
       setInvite({ code: res.body.code, token: res.body.token });
       setCodeCopied(false);
       setLinkCopied(false);
+      setCodeCopyFailed(false);
+      setLinkCopyFailed(false);
       setRotateConfirming(false);
       focusCopyAfterRotateRef.current = true;
       setRotateDone(true);
@@ -149,7 +186,13 @@ export function PartyShareModal({ isOpen, onClose, partyId, isGoogleHost }) {
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={close} title={COPY['host.share.title']} titleId={titleId}>
+    <Modal
+      isOpen={isOpen}
+      onClose={close}
+      title={COPY['host.share.title']}
+      titleId={titleId}
+      bodyClassName="px-4 py-4 sm:px-6"
+    >
       <div className="space-y-4">
         <p id={introId} className="text-sm text-slate-300">
           {COPY['host.share.intro']}
@@ -161,6 +204,7 @@ export function PartyShareModal({ isOpen, onClose, partyId, isGoogleHost }) {
           </p>
           <div className="flex flex-col sm:flex-row sm:items-center gap-2">
             <p
+              ref={codeTextRef}
               data-testid="share-party-code"
               className="sm:flex-1 font-mono text-[32px] leading-tight tracking-[0.1em] whitespace-nowrap text-white select-all min-h-11"
             >
@@ -170,12 +214,7 @@ export function PartyShareModal({ isOpen, onClose, partyId, isGoogleHost }) {
               ref={copyCodeRef}
               aria-label={COPY['host.share.code.copy_name']}
               disabled={!invite}
-              onClick={async () => {
-                if (!invite) return;
-                await copyText(formatPartyCode(invite.code));
-                setCodeCopied(true);
-                setTimeout(() => setCodeCopied(false), 2000);
-              }}
+              onClick={copyCode}
               className="w-full sm:w-auto min-h-11 whitespace-nowrap"
             >
               {codeCopied ? COPY['host.share.code.copy_done'] : COPY['host.share.code.copy']}
@@ -184,31 +223,45 @@ export function PartyShareModal({ isOpen, onClose, partyId, isGoogleHost }) {
           <p role="status" aria-live="polite" className="sr-only">
             {codeCopied ? COPY['host.share.code.copy_status'] : ''}
           </p>
+          <p
+            data-testid="share-code-copy-failed"
+            aria-live="polite"
+            className={codeCopyFailed ? 'text-xs text-amber-200' : 'sr-only'}
+          >
+            {codeCopyFailed ? COPY['host.share.copy_failed'] : ''}
+          </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-start">
-          <textarea
-            ref={linkFieldRef}
-            readOnly
-            value={link}
-            aria-labelledby={titleId}
-            aria-describedby={introId}
-            className={`sm:flex-1 ${SHARE_LINK_FIELD_CLASSES}`}
-          />
-          <Button
-            aria-label={COPY['host.share.link.copy_name']}
-            variant={linkCopied ? 'secondary' : 'primary'}
-            disabled={!invite}
-            onClick={async () => {
-              if (!invite) return;
-              await copyText(link);
-              setLinkCopied(true);
-              setTimeout(() => setLinkCopied(false), 2000);
-            }}
-            className="w-full min-h-11 sm:w-auto whitespace-nowrap"
+        <div className="space-y-2">
+          <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-start">
+            <textarea
+              ref={linkFieldRef}
+              readOnly
+              value={link}
+              aria-labelledby={titleId}
+              aria-describedby={introId}
+              className={`sm:flex-1 ${SHARE_LINK_FIELD_CLASSES}`}
+            />
+            <Button
+              aria-label={COPY['host.share.link.copy_name']}
+              variant={linkCopied ? 'secondary' : 'primary'}
+              disabled={!invite}
+              onClick={copyLink}
+              className="w-full min-h-11 sm:w-auto whitespace-nowrap"
+            >
+              {linkCopied ? COPY['host.share.link.copy_done'] : COPY['host.share.link.copy']}
+            </Button>
+          </div>
+          <p role="status" aria-live="polite" className="sr-only">
+            {linkCopied ? COPY['host.share.link.copy_status'] : ''}
+          </p>
+          <p
+            data-testid="share-link-copy-failed"
+            aria-live="polite"
+            className={linkCopyFailed ? 'text-xs text-amber-200' : 'sr-only'}
           >
-            {linkCopied ? COPY['host.share.link.copy_done'] : COPY['host.share.link.copy']}
-          </Button>
+            {linkCopyFailed ? COPY['host.share.copy_failed'] : ''}
+          </p>
         </div>
 
         {loadFailed && !invite && (

@@ -31,6 +31,9 @@ export const PARTY_INVITE_COPY = {
   'host.share.code.copy_status': 'Party code copied.',
   'host.share.code.copy_name': 'Copy party code',
   'host.share.link.copy_name': 'Copy invite link',
+  // Copywriter final Nov 21: link status pairs with code.copy_status; fallback shows inline when copy fails.
+  'host.share.link.copy_status': 'Invite link copied.',
+  'host.share.copy_failed': "Couldn't copy. It's selected, so copy it yourself.",
   // Home "Join a party" (8-character codes, Copywriter final Nov 21).
   'home.join.title': 'Join a party',
   'home.join.helper': 'Enter the 8-character code from your host.',
