@@ -309,3 +309,32 @@ test('picking your own wrapped gift sends the own-gift copy and broadcasts nothi
   assert.equal(socketErrors[0]?.message, PICK_GIFT_OWN_GIFT);
   assert.equal(io.emissions.filter((e) => e.event === 'game-updated').length, 0);
 });
+
+// BUG-18: a pick can end the game when the next player has no legal move left.
+function pickHandlerArgs(newState, calls) {
+  return {
+    partyId: PARTY_ID,
+    giftId: 'hostGift',
+    userId: 'host',
+    socket: { emit: (event, payload) => calls.push(['socket', event, payload]) },
+    io: mockIo(),
+    isValidPartyId: () => true,
+    isValidGiftId: () => true,
+    verifyPartyMembership: async () => true,
+    scheduleBotMove: () => calls.push(['scheduleBotMove']),
+    finalizeEndedGame: async (partyId, state) => calls.push(['finalize', partyId, state.phase]),
+    executePick: async () => ({ newState }),
+  };
+}
+
+test('a pick that ends the game is finalized (party ENDED, winners) and no bot move is scheduled', async () => {
+  const calls = [];
+  await handlePickGift(pickHandlerArgs({ phase: 'ENDED' }, calls));
+  assert.deepEqual(calls, [['finalize', PARTY_ID, 'ENDED']]);
+});
+
+test('a pick that keeps the game going is not finalized', async () => {
+  const calls = [];
+  await handlePickGift(pickHandlerArgs({ phase: 'ACTIVE' }, calls));
+  assert.deepEqual(calls, [['scheduleBotMove']]);
+});

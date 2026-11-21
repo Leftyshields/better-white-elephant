@@ -1,7 +1,7 @@
 /**
  * Game Engine - White Elephant Game Logic
  */
-import { isOwnGiftBlocked, PICK_GIFT_OWN_GIFT } from './utils/pick-gift-guards.js';
+import { isOwnGiftBlocked, pickableWrappedGifts, PICK_GIFT_OWN_GIFT } from './utils/pick-gift-guards.js';
 
 export class GameEngine {
   constructor(gameState, config) {
@@ -306,8 +306,47 @@ export class GameEngine {
     // Recalculate active player (victim-first priority)
     this.currentPlayerId = this.calculateActivePlayer();
     this.releaseStealBackLocks(playerId);
+    this.endTurnIfNoLegalMove();
 
     return this.getState();
+  }
+
+  /**
+   * True when the player has at least one legal action: a wrapped gift they may pick,
+   * or an unwrapped gift they may steal.
+   * @param {string} playerId
+   */
+  hasLegalMove(playerId) {
+    if (this.canPick(playerId) && pickableWrappedGifts(this, playerId).length > 0) return true;
+    for (const giftId of this.unwrappedGifts.keys()) {
+      try {
+        if (this.canSteal(giftId, playerId)) return true;
+      } catch {
+        // canSteal throws for the steal-back lock; that gift is not a legal move.
+      }
+    }
+    return false;
+  }
+
+  /**
+   * BUG-18: a player who holds a gift but has no legal pick or steal never keeps the turn.
+   * Example: in a 2-player game the host picks their own last gift, then lands on the bookend
+   * slot where the only other gift is the one they just lost. Their turn is recorded as a skip
+   * and the game moves on (or ends). Bounded by the queue length so it can't loop.
+   */
+  endTurnIfNoLegalMove() {
+    for (let i = 0; i < this.turnQueue.length && this.phase !== 'ENDED'; i++) {
+      const activePlayer = this.calculateActivePlayer();
+      if (!activePlayer || !this.playerHasGift(activePlayer) || this.hasLegalMove(activePlayer)) {
+        return;
+      }
+      const indexBefore = this.currentTurnIndex;
+      this.currentPlayerId = activePlayer;
+      this.endTurn({ skipStuckFollowUp: true });
+      if (this.phase !== 'ENDED' && this.currentTurnIndex === indexBefore && this.calculateActivePlayer() === activePlayer) {
+        return; // Clamped at the end of the queue with wrapped gifts left; nothing more to advance.
+      }
+    }
   }
 
   /**
@@ -733,7 +772,7 @@ export class GameEngine {
    * - Boomerang Mode: Anyone with a gift can skip
    * - Never allow skip if player has no gift (except deadlock prevention for victims)
    */
-  endTurn() {
+  endTurn({ skipStuckFollowUp = false } = {}) {
     const skippingPlayerId = this.currentPlayerId;
     const playerHasGift = this.playerHasGift(skippingPlayerId);
     
@@ -898,6 +937,9 @@ export class GameEngine {
     // Recalculate active player (victim-first priority)
     this.currentPlayerId = this.calculateActivePlayer();
     this.releaseStealBackLocks(skippingPlayerId);
+    if (!skipStuckFollowUp) {
+      this.endTurnIfNoLegalMove();
+    }
 
     return this.getState();
   }

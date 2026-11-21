@@ -3,7 +3,7 @@
  * - A turn is pick OR steal. Picking ends the turn, so a steal can't follow a pick, in any phase.
  * - When the same player is up again right away, that is a new turn, but they can't take back
  *   the gift they just lost (U-turn lock survives).
- * - A player can't pick their own wrapped gift unless it is the only wrapped gift left.
+ * - A player can't pick their own wrapped gift while someone else's wrapped gift remains.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -114,8 +114,9 @@ test("steal after pick is rejected on Player 1's final (bookend) turn", () => {
   assert.equal(engine.unwrappedGifts.get('g2').ownerId, 'p2');
 });
 
-test('2-player bookend: stolen-from player picks, gets a new turn, but cannot steal back the lost gift', () => {
-  // Queue [g, h, g]: the Playtest BUG-16 game.
+test('2-player bookend: stolen-from player picks, and with no legal move left the turn ends on its own (BUG-18)', () => {
+  // Queue [g, h, g]: the Playtest BUG-16 game. After g picks the last gift, g is up again on the
+  // bookend slot, but the only other gift is the one g just lost (steal-back lock), so g has no move.
   const engine = newGame({ turnOrder: ['g', 'h'], wrappedGifts: ['candle', 'mug'] });
   engine.pickGift('candle', 'g');
   engine.stealGift('candle', 'h');
@@ -123,23 +124,12 @@ test('2-player bookend: stolen-from player picks, gets a new turn, but cannot st
 
   engine.pickGift('mug', 'g');
 
-  // Same player is next in the queue: a fresh turn once the pick settles.
-  assert.equal(engine.currentPlayerId, 'g');
-  assert.equal(engine.turnAction.get('g'), null);
-  // The lock on the gift g just lost survives the pick.
-  assert.equal(engine.unwrappedGifts.get('candle').lastOwnerId, 'g');
-  assert.throws(() => engine.canSteal('candle', 'g'), STEAL_BACK_ERROR);
-  assert.throws(() => engine.stealGift('candle', 'g'), STEAL_BACK_ERROR);
-
-  // Still blocked after a save and reload.
-  const reloaded = rebuild(engine);
-  assert.throws(() => reloaded.stealGift('candle', 'g'), STEAL_BACK_ERROR);
-
-  // Keeping is allowed and ends the game.
-  reloaded.endTurn();
-  assert.equal(reloaded.phase, 'ENDED');
-  assert.equal(reloaded.unwrappedGifts.get('candle').ownerId, 'h');
-  assert.equal(reloaded.unwrappedGifts.get('mug').ownerId, 'g');
+  // Keeping was the only option, so the engine records the skip and the game ends.
+  assert.equal(engine.phase, 'ENDED');
+  assert.equal(engine.history.at(-1).type, 'END_TURN');
+  assert.equal(engine.history.at(-1).playerId, 'g');
+  assert.equal(engine.unwrappedGifts.get('candle').ownerId, 'h');
+  assert.equal(engine.unwrappedGifts.get('mug').ownerId, 'g');
 });
 
 test('bookend new turn can still steal a different gift', () => {
@@ -150,7 +140,10 @@ test('bookend new turn can still steal a different gift', () => {
   engine.pickGift('g3', 'p1'); // bookend slot is p1 again
 
   assert.equal(engine.currentPlayerId, 'p1');
+  assert.equal(engine.turnAction.get('p1'), null);
   assert.throws(() => engine.canSteal('g1', 'p1'), STEAL_BACK_ERROR);
+  // The lock survives a save and reload.
+  assert.throws(() => rebuild(engine).stealGift('g1', 'p1'), STEAL_BACK_ERROR);
   assert.equal(engine.canSteal('g2', 'p1'), true);
   engine.stealGift('g2', 'p1');
   assert.equal(engine.unwrappedGifts.get('g2').ownerId, 'p1');

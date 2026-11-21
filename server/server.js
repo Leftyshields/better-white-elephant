@@ -14,6 +14,7 @@ import { auth, db } from './config/firebase-admin.js';
 import admin from 'firebase-admin';
 import { checkAndMakeBotMove } from './utils/bot-utils.js';
 import { handlePickGift } from './handlers/pick-gift.js';
+import { finalizeEndedGame } from './utils/finalize-ended-game.js';
 import { incrementPartyReactionCount } from './utils/party-reaction-count.mjs';
 import { clientSafeSocketGameErrorMessage } from './utils/socket-error-copy.js';
 import { isPartyHostCaller } from './lib/host-auth.js';
@@ -282,6 +283,7 @@ io.on('connection', (socket) => {
         isValidPartyId,
         isValidGiftId,
         verifyPartyMembership,
+        finalizeEndedGame,
         scheduleBotMove: (savedPartyId, newState) => {
           setTimeout(() => {
             checkAndMakeBotMove(savedPartyId, newState, io).catch(console.error);
@@ -368,9 +370,6 @@ io.on('connection', (socket) => {
         }
         throw error;
       }
-      const config = newState.config || { maxSteals: 3, returnToStart: false };
-      const { GameEngine } = await import('./engine.js');
-
       io.to(`party:${partyId}`).emit('game-updated', newState);
 
       // Check if next player is a bot and trigger auto-play (if game didn't end)
@@ -383,87 +382,7 @@ io.on('connection', (socket) => {
 
       // If game ended, persist winners to Firestore
       if (newState.phase === 'ENDED') {
-        // Create a new engine with the updated state to get correct final ownership
-        const finalEngine = new GameEngine(newState, config);
-        const finalState = finalEngine.endGame();
-        
-        // Write winnerId to Firestore gifts collection - ensure one gift per player
-        const { db } = await import('./config/firebase-admin.js');
-        const finalOwnership = finalState.finalOwnership || {};
-        
-        // Ensure one gift per player - track which gift each winner gets
-        const winnerToGiftMap = new Map();
-        const giftsToUpdate = [];
-        
-        // First pass: build map of winner -> gift (only first gift per winner)
-        for (const [giftId, winnerId] of Object.entries(finalOwnership)) {
-          if (winnerId && !winnerToGiftMap.has(winnerId)) {
-            winnerToGiftMap.set(winnerId, giftId);
-            giftsToUpdate.push({ giftId, winnerId });
-          }
-        }
-        
-        // Clear winnerId from any gifts not in the final assignment
-        const assignedGiftIds = new Set(giftsToUpdate.map(g => g.giftId));
-        const allGiftsSnapshot = await db.collection('gifts').where('partyId', '==', partyId).get();
-        
-        for (const giftDoc of allGiftsSnapshot.docs) {
-          const giftId = giftDoc.id;
-          const giftData = giftDoc.data();
-          
-          if (assignedGiftIds.has(giftId)) {
-            // Update with correct winnerId
-            const assignment = giftsToUpdate.find(g => g.giftId === giftId);
-            if (assignment) {
-              await db.collection('gifts').doc(giftId).update({
-                winnerId: assignment.winnerId,
-                updatedAt: new Date(),
-              });
-            }
-          } else {
-            // Clear winnerId from unassigned gifts
-            if (giftData.winnerId) {
-              await db.collection('gifts').doc(giftId).update({
-                winnerId: null,
-                updatedAt: new Date(),
-              });
-            }
-          }
-        }
-        
-        // Update party status to ENDED and store game history
-        const endedAt = admin.firestore.Timestamp.now();
-        await db.collection('parties').doc(partyId).update({
-          status: 'ENDED',
-          endedAt: endedAt, // Set retention timestamp for data cleanup
-          gameHistory: finalState.state.history || [], // Store history in party document
-          updatedAt: new Date(),
-        });
-
-        // Update all gifts for this party with partyEndedAt timestamp for retention
-        const giftsForRetentionSnapshot = await db.collection('gifts').where('partyId', '==', partyId).get();
-        const giftRetentionBatch = db.batch();
-        giftsForRetentionSnapshot.docs.forEach((giftDoc) => {
-          giftRetentionBatch.update(giftDoc.ref, {
-            partyEndedAt: endedAt,
-            updatedAt: new Date(),
-          });
-        });
-        if (giftsForRetentionSnapshot.docs.length > 0) {
-          await giftRetentionBatch.commit();
-        }
-
-        // Re-save after party is ENDED so Redis TTL is 30 days (not the pre-end 2-year save)
-        const { redisTtlSecondsForPartyStatus } = await import('./utils/game-state-persistence.js');
-        finalState.state.config = config;
-        finalState.state.partyId = partyId;
-        finalState.state.finalOwnership = finalOwnership;
-        const { saveGameState } = await import('./utils/game-state-persistence.js');
-        await saveGameState(partyId, finalState.state, redisTtlSecondsForPartyStatus('ENDED'));
-        const { saveShippingFulfillmentSnapshot } = await import('./utils/shipping-fulfillment-snapshot.js');
-        await saveShippingFulfillmentSnapshot(partyId, finalOwnership, db);
-        
-        io.to(`party:${partyId}`).emit('game-ended', finalState);
+        await finalizeEndedGame(partyId, newState, io);
       }
     } catch (error) {
       if (isGameStateConflictError(error)) {

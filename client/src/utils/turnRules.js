@@ -8,11 +8,12 @@ export function hasPickedThisTurn(gameState, userId) {
 }
 
 /**
- * You can't pick the wrapped gift you brought unless it is the only wrapped gift left.
+ * You can't pick the wrapped gift you brought while someone else's wrapped gift remains.
+ * When every remaining wrapped gift is yours, you may pick one (matches the server, no deadlock).
  * Uses the server's giftSubmitters map, so games started before the rule are unaffected.
  */
 export function isOwnWrappedGiftLocked(gameState, gifts, giftId, userId) {
-  if (!userId || gameState?.giftSubmitters?.[giftId] !== userId) return false;
-  const wrappedCount = Object.values(gifts || {}).filter((gift) => gift.isWrapped).length;
-  return wrappedCount > 1;
+  const submitters = gameState?.giftSubmitters;
+  if (!userId || submitters?.[giftId] !== userId) return false;
+  return Object.entries(gifts || {}).some(([id, gift]) => gift.isWrapped && submitters[id] !== userId);
 }

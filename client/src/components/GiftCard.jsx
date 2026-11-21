@@ -141,13 +141,13 @@ export const GiftCard = memo(function GiftCard({
               <div className="text-4xl">🎁</div>
             )}
             {giftNumber && (
-              <div className="absolute top-1 right-1 bg-slate-800/80 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-white/20">
+              <div className="absolute top-1 right-1 bg-slate-800/80 text-white text-[11px] font-bold px-1.5 py-0.5 rounded-full border border-white/20">
                 #{giftNumber}
               </div>
             )}
             {!pickLocked && computedIsMyGift && (
-              <div className="absolute bottom-1 left-1 bg-amber-500/90 text-white shadow-lg shadow-amber-500/50 text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 z-10 border border-amber-300/50 whitespace-nowrap">
-                <span className="text-[8px]">⚠️</span>
+              <div className="absolute bottom-1 left-1 bg-amber-500/90 text-white shadow-lg shadow-amber-500/50 text-[11px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 z-10 border border-amber-300/50 whitespace-nowrap">
+                <span className="text-[11px]">⚠️</span>
                 <span>Your Gift</span>
               </div>
             )}
@@ -162,7 +162,7 @@ export const GiftCard = memo(function GiftCard({
             <div className="text-6xl mb-4">🎁</div>
             {/* Show "Your Gift" badge during reveal if it's my gift */}
             {computedIsMyGift && !isWrapped && isRevealing && (
-              <div className="absolute top-2 right-2 bg-amber-500/90 text-white shadow-lg shadow-amber-500/50 text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1 z-20 border border-amber-300/50">
+              <div className="absolute top-2 right-2 bg-amber-500/90 text-white shadow-lg shadow-amber-500/50 text-[11px] font-bold px-2 py-1 rounded-full flex items-center gap-1 z-20 border border-amber-300/50">
                 <GiftIcon className="w-3 h-3" />
                 <span>Your Gift</span>
               </div>
@@ -214,19 +214,19 @@ export const GiftCard = memo(function GiftCard({
             
             {/* Status Badge Overlay */}
             {isFrozen ? (
-              <div className="absolute top-2 left-2 bg-cyan-500 text-white shadow-lg shadow-cyan-500/50 text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1 z-10">
+              <div className="absolute top-2 left-2 bg-cyan-500 text-white shadow-lg shadow-cyan-500/50 text-[11px] font-bold px-2 py-1 rounded-full flex items-center gap-1 z-10">
                 <LockClosedIcon className="w-3 h-3" />
                 LOCKED
               </div>
             ) : stealCount > 0 ? (
-              <div className="absolute top-2 left-2 bg-orange-500 text-white shadow-lg shadow-orange-500/50 text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1 z-10">
+              <div className="absolute top-2 left-2 bg-orange-500 text-white shadow-lg shadow-orange-500/50 text-[11px] font-bold px-2 py-1 rounded-full flex items-center gap-1 z-10">
                 <FireIcon className="w-3 h-3" />
                 {stealCount} STEAL{stealCount !== 1 ? 'S' : ''}
               </div>
             ) : null}
             {/* Your Gift Badge - Shows on unwrapped gifts (always visible when gift is unwrapped) */}
             {computedIsMyGift && !isWrapped && (
-              <div className="absolute top-2 right-2 bg-amber-500/90 text-white shadow-lg shadow-amber-500/50 text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1 z-20 border border-amber-300/50">
+              <div className="absolute top-2 right-2 bg-amber-500/90 text-white shadow-lg shadow-amber-500/50 text-[11px] font-bold px-2 py-1 rounded-full flex items-center gap-1 z-20 border border-amber-300/50">
                 <GiftIcon className="w-3 h-3" />
                 <span>Your Gift</span>
               </div>

@@ -3,6 +3,7 @@
  */
 
 import {
+  displayNameMatchesEmailLocalPart,
   pickDisplayName,
   playerFallbackForUserId,
 } from '../lib/display-names.js';
@@ -118,9 +119,12 @@ export async function fetchDisplayProfilesForUserIds(db, auth, userIds) {
       let firestoreName = null;
       let avatarUrl = null;
       let isBotUser = false;
+      // Emails are read only to reject names derived from them; they are never returned.
+      const emails = [];
 
       if (userDoc.exists) {
         const userData = userDoc.data();
+        if (typeof userData.email === 'string') emails.push(userData.email);
         firestoreDisplayName =
           userData.displayName != null ? userData.displayName : null;
         firestoreName = userData.name != null ? userData.name : null;
@@ -133,6 +137,7 @@ export async function fetchDisplayProfilesForUserIds(db, auth, userIds) {
         try {
           const authUser = await auth.getUser(userId);
           authDisplayName = authUser.displayName || null;
+          if (typeof authUser.email === 'string') emails.push(authUser.email);
           if (!avatarUrl && authUser.photoURL) {
             avatarUrl = authUser.photoURL;
           }
@@ -141,11 +146,13 @@ export async function fetchDisplayProfilesForUserIds(db, auth, userIds) {
         }
       }
 
+      const notEmailLocalPart = (name) =>
+        emails.some((email) => displayNameMatchesEmailLocalPart(name, email)) ? null : name;
       const displayName = pickDisplayName(
         userId,
-        firestoreDisplayName,
-        firestoreName,
-        authDisplayName,
+        notEmailLocalPart(firestoreDisplayName),
+        notEmailLocalPart(firestoreName),
+        notEmailLocalPart(authDisplayName),
       );
 
       users[userId] = displayName;
