@@ -11,6 +11,7 @@ import { addDoc, collection, doc, setDoc, updateDoc } from 'firebase/firestore';
 import { CheckCircleIcon } from '@heroicons/react/24/solid';
 import { db } from '../utils/firebase.js';
 import { scrapeGiftUrl } from '../utils/api.js';
+import { REQUEST_TIMEOUT_MS, isTimeoutError, withTimeout } from '../utils/withTimeout.js';
 import { seatNameFields } from '../utils/seatDisplayName.js';
 import { sanitizeUserChosenDisplayName } from '../../../server/lib/display-names.js';
 import { GUEST_JOIN_COPY as COPY, guestStepsHeader } from '../utils/guestJoinCopy.js';
@@ -72,6 +73,8 @@ export function GuestJoinCard({
   gift,
   seated,
   terminalMessage,
+  seatWriteSlow = false,
+  onRetrySeat,
 }) {
   const draft = drafts.get(partyId) || {};
   const savedName = participant?.displayName || sanitizeUserChosenDisplayName(user?.displayName) || '';
@@ -87,11 +90,20 @@ export function GuestJoinCard({
   const [toast, setToast] = useState(null);
   const savingRef = useRef(false);
   const scrapeSeq = useRef(0);
-  const ids = { name: useId(), nameError: useId(), gift: useId(), lock: useId(), header: useId(), manual: useId() };
+  const saveSeq = useRef(0);
+  const giftDocIdRef = useRef(gift?.id || null);
+  const giftWriteInFlightRef = useRef(null);
+  const [lookupSlow, setLookupSlow] = useState(false);
+  const [saveSlow, setSaveSlow] = useState(false);
+  const ids = { name: useId(), nameError: useId(), gift: useId(), lock: useId(), header: useId(), manual: useId(), lookup: useId(), saveSlow: useId() };
 
   useEffect(() => {
     drafts.set(partyId, { name, giftUrl, preview, manual, manualTitle, manualPrice });
   }, [partyId, name, giftUrl, preview, manual, manualTitle, manualPrice]);
+
+  useEffect(() => {
+    if (gift?.id) giftDocIdRef.current = gift.id;
+  }, [gift?.id]);
 
   useEffect(() => {
     if (!nameTouched && !name && savedName) setName(savedName);
@@ -118,78 +130,134 @@ export function GuestJoinCard({
   const giftDone = !!pendingGift || (!!gift && !editingGift);
 
   const remaining = (nameDone ? 0 : 1) + (giftDone ? 0 : 1);
-  const canReady = seated && nameDone && giftDone && !saving && !scraping;
-  const lockReason = !nameDone ? COPY.readyLockedName : !giftDone ? COPY.readyLockedGift : null;
+  const canRetrySeat = !seated && seatWriteSlow && typeof onRetrySeat === 'function';
+  const canReady = (seated || canRetrySeat) && nameDone && giftDone && !saving && !scraping;
+  const lockReason = !nameDone
+    ? COPY.readyLockedName
+    : !giftDone
+      ? COPY.readyLockedGift
+      : !seated && !seatWriteSlow
+        ? COPY.readyLockedSeat
+        : null;
+  const showSaveSlow = (saveSlow && !saving) || (seatWriteSlow && nameDone && giftDone && !seated);
 
   const runScrape = async (rawUrl) => {
     const url = normalizeGiftUrl(rawUrl);
     if (!url) return;
     const seq = ++scrapeSeq.current;
     setScraping(true);
+    setLookupSlow(false);
     setPreview(null);
     try {
-      const { title, image, price, error } = await scrapeGiftUrl(url);
+      const { title, image, price, error } = await withTimeout(scrapeGiftUrl(url), REQUEST_TIMEOUT_MS);
       if (seq !== scrapeSeq.current) return;
       if (!error && usableScrapedTitle(title) && !isBareStoreName(title, url)) {
         setPreview({ url, title: title.trim(), image: image || null, price: price || null });
         setManual(false);
+        setLookupSlow(false);
       } else {
         setManual(true);
         setManualTitle(usableScrapedTitle(title) ? title : '');
         setManualPrice(price || '');
       }
-    } catch {
-      if (seq === scrapeSeq.current) setManual(true);
+    } catch (error) {
+      if (seq !== scrapeSeq.current) return;
+      setManual(true);
+      if (isTimeoutError(error)) {
+        scrapeSeq.current += 1;
+        setLookupSlow(true);
+        setScraping(false);
+        return;
+      }
     } finally {
       if (seq === scrapeSeq.current) setScraping(false);
     }
   };
 
+  const persistGift = async (fields) => {
+    if (giftDocIdRef.current) {
+      await updateDoc(doc(db, 'gifts', giftDocIdRef.current), { ...fields, updatedAt: new Date() });
+      return giftDocIdRef.current;
+    }
+    if (giftWriteInFlightRef.current) {
+      const id = await giftWriteInFlightRef.current;
+      await updateDoc(doc(db, 'gifts', id), { ...fields, updatedAt: new Date() });
+      return id;
+    }
+    const write = addDoc(collection(db, 'gifts'), {
+      partyId,
+      submitterId: user.uid,
+      ...fields,
+      isFrozen: false,
+      winnerId: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }).then((ref) => {
+      giftDocIdRef.current = ref.id;
+      return ref.id;
+    });
+    giftWriteInFlightRef.current = write;
+    try {
+      return await write;
+    } finally {
+      giftWriteInFlightRef.current = null;
+    }
+  };
+
   const handleReady = async () => {
     if (savingRef.current || !canReady) return;
+    if (!seated) {
+      await onRetrySeat();
+      return;
+    }
+    const seq = ++saveSeq.current;
     savingRef.current = true;
     setSaving(true);
+    setSaveSlow(false);
     setToast(null);
     try {
-      if (pendingGift) {
-        const fields = { url: pendingGift.url, title: pendingGift.title, image: pendingGift.image, price: pendingGift.price };
-        if (gift) {
-          await updateDoc(doc(db, 'gifts', gift.id), { ...fields, updatedAt: new Date() });
-        } else {
-          await addDoc(collection(db, 'gifts'), {
-            partyId,
-            submitterId: user.uid,
-            ...fields,
-            isFrozen: false,
-            winnerId: null,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          });
+      const writes = (async () => {
+        if (pendingGift) {
+          const fields = { url: pendingGift.url, title: pendingGift.title, image: pendingGift.image, price: pendingGift.price };
+          await persistGift(fields);
+          trackSubmitGift(partyId);
         }
-        trackSubmitGift(partyId);
-      }
-      await updateDoc(doc(db, 'parties', partyId, 'participants', user.uid), {
-        ...seatName,
-        ready: true,
-        updatedAt: new Date(),
-      });
-      // Profile name for later games; best effort (the seat name above is what the party shows).
-      // Skipped for anonymous guests: their account is temporary (anonymousUserCleanup), the seat name is enough.
-      if (!user.isAnonymous) {
-        setDoc(doc(db, 'users', user.uid), { displayName: sanitizeUserChosenDisplayName(name), updatedAt: new Date() }, { merge: true })
-          .catch(() => {});
-      }
+        await updateDoc(doc(db, 'parties', partyId, 'participants', user.uid), {
+          ...seatName,
+          ready: true,
+          updatedAt: new Date(),
+        });
+        // Profile name for later games; best effort (the seat name above is what the party shows).
+        // Skipped for anonymous guests: their account is temporary (anonymousUserCleanup), the seat name is enough.
+        if (!user.isAnonymous) {
+          setDoc(doc(db, 'users', user.uid), { displayName: sanitizeUserChosenDisplayName(name), updatedAt: new Date() }, { merge: true })
+            .catch(() => {});
+        }
+      })();
+      await withTimeout(writes, REQUEST_TIMEOUT_MS);
+      if (seq !== saveSeq.current) return;
       setGiftUrl('');
       setPreview(null);
       setManual(false);
       setManualTitle('');
       setManualPrice('');
+      setSaveSlow(false);
     } catch (error) {
+      if (seq !== saveSeq.current) return;
+      if (isTimeoutError(error)) {
+        saveSeq.current += 1;
+        setSaveSlow(true);
+        savingRef.current = false;
+        setSaving(false);
+        return;
+      }
       console.error('Guest ready failed:', { code: error?.code, name: error?.name });
       setToast(COPY.joinFailedToast);
     } finally {
-      savingRef.current = false;
-      setSaving(false);
+      if (seq === saveSeq.current) {
+        savingRef.current = false;
+        setSaving(false);
+      }
     }
   };
 
@@ -346,9 +414,9 @@ export function GuestJoinCard({
               className={FIELD}
             />
             {scraping && (
-              <p className="flex items-center gap-2 text-sm text-slate-300" role="status">
+              <p className="flex items-center gap-2 text-sm text-slate-300" role="status" aria-live="polite">
                 <span className="inline-block w-4 h-4 rounded-full border-2 border-purple-400 border-t-transparent animate-spin" aria-hidden="true" />
-                {COPY.giftPending}
+                {COPY.giftChecking}
               </p>
             )}
             {!manual && preview && (
@@ -367,7 +435,7 @@ export function GuestJoinCard({
             )}
             {manual ? (
               <div id={ids.manual} className="space-y-3">
-                <p className="text-sm text-slate-300">{COPY.giftManualHelper}</p>
+                <p id={ids.lookup} className="text-sm text-slate-300" role="status" aria-live="polite">{lookupSlow ? COPY.giftLookupSlow : COPY.giftManualHelper}</p>
                 <div className="space-y-1">
                   <label htmlFor={`${ids.manual}-title`} className="block text-sm font-medium text-slate-200">
                     {COPY.giftTitleLabel}
@@ -408,11 +476,9 @@ export function GuestJoinCard({
                 </div>
                 <button
                   type="button"
-                  disabled={saving}
+                  disabled={saving || scraping}
                   onClick={() => {
-                    setManual(false);
-                    setManualTitle('');
-                    setManualPrice('');
+                    runScrape(giftUrl);
                   }}
                   className={`min-h-11 px-2 text-sm text-purple-300 hover:text-purple-200 underline ${FOCUS_RING}`}
                 >
@@ -437,7 +503,7 @@ export function GuestJoinCard({
               onClick={handleReady}
               disabled={!canReady}
               aria-busy={saving || undefined}
-              aria-describedby={lockReason ? ids.lock : undefined}
+              aria-describedby={lockReason ? ids.lock : showSaveSlow ? ids.saveSlow : undefined}
               className={`inline-flex items-center justify-center gap-2 w-full min-h-12 px-4 py-3 rounded-md text-lg font-semibold text-white bg-gradient-to-r from-indigo-600 to-purple-600 disabled:opacity-50 disabled:cursor-not-allowed ${FOCUS_RING}`}
             >
               {saving && (
@@ -446,8 +512,13 @@ export function GuestJoinCard({
               {saving ? COPY.readySaving : COPY.readyCta}
             </button>
             {lockReason && (
-              <p id={ids.lock} className="text-sm text-slate-400">
+              <p id={ids.lock} className="text-sm text-slate-400" role="status" aria-live="polite">
                 {lockReason}
+              </p>
+            )}
+            {showSaveSlow && (
+              <p id={ids.saveSlow} className="text-sm text-slate-400" role="status" aria-live="polite">
+                {COPY.readySaveSlow}
               </p>
             )}
           </div>

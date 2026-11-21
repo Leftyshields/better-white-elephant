@@ -10,6 +10,7 @@ import { useAuth } from '../hooks/useAuth.js';
 import { Button } from './ui/Button.jsx';
 import { auth, db } from '../utils/firebase.js';
 import { joinPartyWithInviteToken, readInviteTokenFromHash } from '../utils/partyInvite.js';
+import { REQUEST_TIMEOUT_MS, isTimeoutError, withTimeout } from '../utils/withTimeout.js';
 import { getJoinErrorMessage } from '../utils/partyInviteCopy.js';
 import { seatNameFields } from '../utils/seatDisplayName.js';
 import { trackParticipantJoin, trackError } from '../utils/analytics.js';
@@ -41,6 +42,9 @@ export function PartyInviteLanding({ partyId }) {
   // Invite token rides in the URL fragment (#t=...), so it never reaches a server log.
   const [inviteToken] = useState(() => readInviteTokenFromHash(window.location.hash));
   const seatStartedRef = useRef(false);
+  const joinWriteRef = useRef(null);
+  const joinUserRef = useRef(null);
+  const [seatWriteSlow, setSeatWriteSlow] = useState(false);
   // A visitor who already has a session may already hold a seat (a host opening their own party,
   // or a guest coming back). Show the skeleton until that check is done instead of a guest card.
   const [hadSessionAtStart] = useState(() => auth.currentUser != null);
@@ -79,7 +83,57 @@ export function PartyInviteLanding({ partyId }) {
   }, [partyId]);
 
   // Background seat: starts as soon as the party is known. Never mints an anonymous account for a
-  // party that can't be joined (started, cancelled, or no token in the link).
+  // party that can't be joined (started, cancelled, or no token in the link). A hung write is
+  // given the same 10s deadline as gift lookup and ready-save; the card then offers a retry.
+  const writeSeat = async (sessionUser) => {
+    if (!joinWriteRef.current) {
+      const write = joinPartyWithInviteToken(db, partyId, sessionUser.uid, inviteToken, {
+        status: 'GOING',
+        turnNumber: null,
+        ready: false,
+        joinedAt: new Date(),
+        updatedAt: new Date(),
+        ...seatNameFields(sessionUser.displayName, sessionUser.email),
+      });
+      joinWriteRef.current = write;
+      write
+        .then(() => {
+          trackParticipantJoin(partyId, 'share_link');
+        })
+        .catch(() => {
+          joinWriteRef.current = null;
+        });
+    }
+    setSeatWriteSlow(false);
+    try {
+      await withTimeout(joinWriteRef.current, REQUEST_TIMEOUT_MS);
+      setSeatWriteSlow(false);
+    } catch (error) {
+      if (isTimeoutError(error)) {
+        setSeatWriteSlow(true);
+        return;
+      }
+      throw error;
+    }
+  };
+
+  const retrySeatWrite = async () => {
+    if (!inviteToken) return;
+    let partyState = partyInfo;
+    try {
+      const sessionUser = joinUserRef.current || (await ensureGuestSession());
+      joinUserRef.current = sessionUser;
+      const fresh = await getDoc(doc(db, 'parties', partyId));
+      partyState = fresh.exists() ? fresh.data() : partyInfo;
+      await writeSeat(sessionUser);
+    } catch (error) {
+      console.error('Error joining party:', { code: error?.code, name: error?.name });
+      const message = getJoinErrorMessage({ party: partyState, error, hasToken: Boolean(inviteToken) });
+      trackError('join_party_failed', message, 'PartyInviteLanding');
+      setTerminalMessage(message);
+    }
+  };
+
   useEffect(() => {
     if (!partyInfo || authLoading || seatStartedRef.current) return;
     // Only treat the visitor as not seated when there is no session. Party may
@@ -119,6 +173,7 @@ export function PartyInviteLanding({ partyId }) {
       let confirmedNotSeated = false;
       try {
         const sessionUser = await ensureGuestSession();
+        joinUserRef.current = sessionUser;
         const seat = await getDoc(doc(db, 'parties', partyId, 'participants', sessionUser.uid));
         if (seat.exists()) {
           // Leave the skeleton even if the parent's party list never arrives.
@@ -140,16 +195,13 @@ export function PartyInviteLanding({ partyId }) {
         }
         const fresh = await getDoc(doc(db, 'parties', partyId));
         partyState = fresh.exists() ? fresh.data() : null;
-        await joinPartyWithInviteToken(db, partyId, sessionUser.uid, inviteToken, {
-          status: 'GOING',
-          turnNumber: null,
-          ready: false,
-          joinedAt: new Date(),
-          updatedAt: new Date(),
-          ...seatNameFields(sessionUser.displayName, sessionUser.email),
-        });
-        trackParticipantJoin(partyId, 'share_link');
+        await writeSeat(sessionUser);
       } catch (error) {
+        if (isTimeoutError(error)) {
+          setSeatWriteSlow(true);
+          setSeatCheckDone(true);
+          return;
+        }
         console.error('Error joining party:', { code: error?.code, name: error?.name });
         let latestParty = partyState;
         try {
@@ -258,6 +310,8 @@ export function PartyInviteLanding({ partyId }) {
         gift={null}
         seated={alreadySeated}
         terminalMessage={terminalMessage}
+        seatWriteSlow={seatWriteSlow}
+        onRetrySeat={retrySeatWrite}
       />
     </div>
   );

@@ -4,7 +4,7 @@
  * one-screen card is already on screen. Refusals show inline Copywriter strings.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { PartyInviteLanding } from '../../components/PartyInviteLanding.jsx';
 import {
   JOIN_ERROR_CANCELLED,
@@ -15,6 +15,7 @@ import {
 } from '../../utils/partyInviteCopy.js';
 import { GUEST_JOIN_COPY } from '../../utils/guestJoinCopy.js';
 import { LATE_INVITE_COPY, formatLatePartyLine } from '../../utils/lateInvite.js';
+import { REQUEST_TIMEOUT_MS } from '../../utils/withTimeout.js';
 
 const PARTY_ID = 'invite-join-party';
 const TOKEN = 'feedfacefeedfacefeedfacefeedface';
@@ -88,6 +89,7 @@ describe('PartyInviteLanding join', () => {
 
   afterEach(() => {
     window.history.replaceState(null, '', '/');
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -305,5 +307,45 @@ describe('PartyInviteLanding join', () => {
     expect(seatReads).toEqual([]);
     expect(screen.queryByTestId('late-invite-card')).toBeNull();
     expect(window.alert).not.toHaveBeenCalled();
+  });
+
+  it('keeps the join card after a hung seat write, then offers a retry without a second write while the first is in flight', async () => {
+    vi.useFakeTimers();
+    window.history.replaceState(null, '', `/party/${PARTY_ID}#t=${TOKEN}`);
+    joinMock.mockReturnValue(new Promise(() => {}));
+
+    render(<PartyInviteLanding partyId={PARTY_ID} />);
+    await act(async () => {
+      for (let i = 0; i < 20 && joinMock.mock.calls.length === 0; i += 1) {
+        await Promise.resolve();
+      }
+      // Let writeSeat arm withTimeout after joinPartyWithInviteToken returns.
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(joinMock).toHaveBeenCalledTimes(1);
+
+    const name = screen.getByLabelText(GUEST_JOIN_COPY.nameLabel);
+    fireEvent.change(name, { target: { value: 'Sam Lee' } });
+    fireEvent.click(screen.getByRole('button', { name: GUEST_JOIN_COPY.giftManualToggle }));
+    fireEvent.change(screen.getByLabelText(GUEST_JOIN_COPY.giftUrlLabel), { target: { value: 'https://example.com/socks' } });
+    fireEvent.change(screen.getByLabelText(GUEST_JOIN_COPY.giftTitleLabel), { target: { value: 'Wool socks' } });
+    expect(screen.getByText(GUEST_JOIN_COPY.readyLockedSeat)).toBeInTheDocument();
+    const ready = screen.getByRole('button', { name: GUEST_JOIN_COPY.readyCta });
+    expect(ready).toBeDisabled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
+    });
+
+    expect(screen.getByText(GUEST_JOIN_COPY.readySaveSlow)).toBeInTheDocument();
+    expect(screen.queryByText(JOIN_ERROR_GENERIC)).toBeNull();
+    expect(ready).toBeEnabled();
+    fireEvent.click(ready);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(joinMock).toHaveBeenCalledTimes(1);
   });
 });
