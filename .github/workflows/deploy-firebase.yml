@@ -6,6 +6,10 @@ on:
       - main
   workflow_dispatch:  # Allows manual triggering
 
+concurrency:
+  group: firebase-hosting-live
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
