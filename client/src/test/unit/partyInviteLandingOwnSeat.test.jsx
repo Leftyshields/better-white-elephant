@@ -8,6 +8,8 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PartyInviteLanding } from '../../components/PartyInviteLanding.jsx';
 import { LATE_INVITE_COPY, formatLatePartyLine } from '../../utils/lateInvite.js';
+import { JOIN_ERROR_GENERIC } from '../../utils/partyInviteCopy.js';
+import { GUEST_JOIN_COPY } from '../../utils/guestJoinCopy.js';
 
 const PARTY_ID = 'invite-join-party';
 const useAuthMock = vi.fn();
@@ -99,7 +101,8 @@ describe('PartyInviteLanding own-seat read for a signed-in visitor', () => {
     expect(screen.queryByTestId('late-invite-card')).toBeNull();
     expect(screen.queryByRole('heading', { name: LATE_INVITE_COPY.gameAlreadyStartedHeading })).toBeNull();
     expect(joinMock).not.toHaveBeenCalled();
-    expect(await screen.findByTestId('guest-card-skeleton')).toBeInTheDocument();
+    expect(await screen.findByText(GUEST_JOIN_COPY.welcomeTitle('Office Swap'))).toBeInTheDocument();
+    expect(screen.queryByTestId('guest-card-skeleton')).toBeNull();
   });
 
   it('shows the late card only after the own-seat read confirms a signed-in visitor has no seat', async () => {
@@ -120,6 +123,28 @@ describe('PartyInviteLanding own-seat read for a signed-in visitor', () => {
     expect(await screen.findByTestId('late-invite-card')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: LATE_INVITE_COPY.gameAlreadyStartedHeading })).toBeInTheDocument();
     expect(screen.getByText(formatLatePartyLine('Office Swap', 'Dana'))).toBeInTheDocument();
+    expect(joinMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps the real error screen, not the late card, when a signed-in visitor seat check fails on an ACTIVE party', async () => {
+    window.history.replaceState(null, '', `/party/${PARTY_ID}#t=feedfacefeedfacefeedfacefeedface`);
+    signedIn(googleUser);
+    ensureGuestSession.mockResolvedValue(googleUser);
+    getDocMock.mockImplementation(async (ref) => {
+      if (ref.path === `parties/${PARTY_ID}`) {
+        return { exists: () => true, data: () => activeParty };
+      }
+      if (ref.path === `parties/${PARTY_ID}/participants/user-1`) {
+        throw Object.assign(new Error('unavailable'), { code: 'unavailable' });
+      }
+      return missing;
+    });
+
+    render(<PartyInviteLanding partyId={PARTY_ID} />);
+
+    expect(await screen.findByText(JOIN_ERROR_GENERIC)).toBeInTheDocument();
+    expect(screen.queryByTestId('late-invite-card')).toBeNull();
+    expect(screen.queryByRole('heading', { name: LATE_INVITE_COPY.gameAlreadyStartedHeading })).toBeNull();
     expect(joinMock).not.toHaveBeenCalled();
   });
 });

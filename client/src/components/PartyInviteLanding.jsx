@@ -45,6 +45,7 @@ export function PartyInviteLanding({ partyId }) {
   // or a guest coming back). Show the skeleton until that check is done instead of a guest card.
   const [hadSessionAtStart] = useState(() => auth.currentUser != null);
   const [seatCheckDone, setSeatCheckDone] = useState(false);
+  const [alreadySeated, setAlreadySeated] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -84,6 +85,10 @@ export function PartyInviteLanding({ partyId }) {
     // Only treat the visitor as not seated when there is no session. Party may
     // send a signed-in user here on a failed or empty party list; those visitors
     // must wait for the own-seat read below.
+    // Signed-in visitors still refuse CANCELLED (and any other status that is
+    // not LOBBY, ACTIVE, or ENDED) before any seat write, restoring pre-change
+    // behavior. ACTIVE/ENDED still do the own-seat read first so a seated
+    // player is not shown the late card.
     if (!user) {
       const late = lateVisitorState(partyInfo, 'not-seated');
       if (late) {
@@ -98,14 +103,30 @@ export function PartyInviteLanding({ partyId }) {
         setTerminalMessage(preRefusal);
         return;
       }
+    } else if (
+      partyInfo.status !== 'LOBBY'
+      && partyInfo.status !== 'ACTIVE'
+      && partyInfo.status !== 'ENDED'
+    ) {
+      setTerminalMessage(
+        getJoinErrorMessage({ party: partyInfo, error: null, hasToken: Boolean(inviteToken) }),
+      );
+      return;
     }
     seatStartedRef.current = true;
     (async () => {
       let partyState = partyInfo;
+      let confirmedNotSeated = false;
       try {
         const sessionUser = await ensureGuestSession();
         const seat = await getDoc(doc(db, 'parties', partyId, 'participants', sessionUser.uid));
-        if (seat.exists()) return;
+        if (seat.exists()) {
+          // Leave the skeleton even if the parent's party list never arrives.
+          setAlreadySeated(true);
+          setSeatCheckDone(true);
+          return;
+        }
+        confirmedNotSeated = true;
         const lateForSignedIn = lateVisitorState(partyInfo, 'not-seated');
         if (lateForSignedIn) {
           setLateState(lateForSignedIn);
@@ -146,13 +167,21 @@ export function PartyInviteLanding({ partyId }) {
         } catch {
           // Keep the party snapshot we already have.
         }
-        const lateAfter = lateVisitorState(latestParty, 'not-seated');
-        if (lateAfter) {
-          setLateState(lateAfter);
-          setSeatCheckDone(true);
-          return;
+        // A failed seat check is not proof the visitor has no seat. Keep the
+        // real error screen on ACTIVE/ENDED instead of the late card.
+        if (confirmedNotSeated) {
+          const lateAfter = lateVisitorState(latestParty, 'not-seated');
+          if (lateAfter) {
+            setLateState(lateAfter);
+            setSeatCheckDone(true);
+            return;
+          }
         }
-        const message = getJoinErrorMessage({ party: latestParty, error, hasToken: Boolean(inviteToken) });
+        const message = getJoinErrorMessage({
+          party: confirmedNotSeated ? latestParty : null,
+          error,
+          hasToken: Boolean(inviteToken),
+        });
         trackError('join_party_failed', message, 'PartyInviteLanding');
         setTerminalMessage(message);
         setSeatCheckDone(true);
@@ -227,7 +256,7 @@ export function PartyInviteLanding({ partyId }) {
         user={user}
         participant={null}
         gift={null}
-        seated={false}
+        seated={alreadySeated}
         terminalMessage={terminalMessage}
       />
     </div>

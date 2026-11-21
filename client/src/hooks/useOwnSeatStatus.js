@@ -1,13 +1,17 @@
 /**
  * Direct read of parties/{partyId}/participants/{uid} (own seat).
- * Do not infer membership from the useParty participants list: that list is empty
- * both for a late visitor (permission-denied) and for a real player before the
- * first snapshot, which would flash the late-invite card at seated players.
+ *
+ * Callers should pass partyId and uid only when the party is ACTIVE or ENDED
+ * and the visitor is not already in the participants list. Presence on that
+ * list is proof of a seat. Running this read in LOBBY can cache 'not-seated'
+ * before the seat write lands, and that result would stick for the same
+ * partyId+uid when the host starts.
  *
  * The returned status is keyed to the current partyId+uid. When either argument
  * changes, or while that pair's read is still pending, this hook returns
  * 'checking' so a stale 'not-seated' from a previous key cannot leak into
- * the first render of an ACTIVE or ENDED party.
+ * the first render of an ACTIVE or ENDED party. When partyId or uid is
+ * missing, this hook returns 'not-seated' and does not read.
  */
 import { useEffect, useState } from 'react';
 import { doc, getDoc } from 'firebase/firestore';

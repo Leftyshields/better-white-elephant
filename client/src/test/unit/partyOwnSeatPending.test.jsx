@@ -159,4 +159,54 @@ describe('Party + real useOwnSeatStatus (pending seat read)', () => {
     expect(lateCardPaints).toEqual([]);
     expect(screen.queryByTestId('late-invite-card')).toBeNull();
   });
+
+  it('lobby then join then start shows no late card for a seated player', async () => {
+    const lobbyParty = {
+      id: 'p1',
+      title: 'Office Swap',
+      status: 'LOBBY',
+      adminId: 'host-1',
+      hostDisplayName: 'Dana',
+    };
+    // If a LOBBY own-seat read ran, it would resolve not-seated (seat not written yet).
+    getDocMock.mockResolvedValue({ exists: () => false, data: () => undefined });
+    useAuthMock.mockReturnValue({ user: googleUser, loading: false, signInWithGoogle: vi.fn() });
+    usePartyMock.mockReturnValue({
+      party: lobbyParty,
+      participants: [],
+      loading: false,
+      error: null,
+    });
+
+    const view = render(<PartyHarness />);
+
+    expect(await screen.findByTestId('invite-landing')).toBeInTheDocument();
+    expect(lateCardPaints).toEqual([]);
+    expect(screen.queryByTestId('late-invite-card')).toBeNull();
+
+    usePartyMock.mockReturnValue({
+      party: lobbyParty,
+      participants: [{ id: googleUser.uid }],
+      loading: false,
+      error: null,
+    });
+    view.rerender(<PartyHarness />);
+
+    expect(await screen.findByTestId('party-lobby')).toBeInTheDocument();
+    expect(lateCardPaints).toEqual([]);
+    expect(screen.queryByTestId('late-invite-card')).toBeNull();
+
+    usePartyMock.mockReturnValue({
+      party: activeParty,
+      participants: [{ id: googleUser.uid }],
+      loading: false,
+      error: null,
+    });
+    view.rerender(<PartyHarness />);
+
+    expect(await screen.findByTestId('game-room')).toBeInTheDocument();
+    expect(lateCardPaints).toEqual([]);
+    expect(screen.queryByTestId('late-invite-card')).toBeNull();
+    expect(screen.queryByRole('heading', { name: LATE_INVITE_COPY.gameAlreadyStartedHeading })).toBeNull();
+  });
 });

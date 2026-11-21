@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { PartyInviteLanding } from '../../components/PartyInviteLanding.jsx';
 import {
+  JOIN_ERROR_CANCELLED,
   JOIN_ERROR_GENERIC,
   JOIN_ERROR_LINK_INVALID,
   JOIN_ERROR_PARTY_FULL,
@@ -167,7 +168,8 @@ describe('PartyInviteLanding join', () => {
 
     await waitFor(() => expect(ensureGuestSession).toHaveBeenCalled());
     expect(joinMock).not.toHaveBeenCalled();
-    expect(screen.getByTestId('guest-card-skeleton')).toBeInTheDocument();
+    expect(await screen.findByText(GUEST_JOIN_COPY.welcomeTitle('Swap'))).toBeInTheDocument();
+    expect(screen.queryByTestId('guest-card-skeleton')).toBeNull();
   });
 
   it('never makes a guest account for a link with no token, and shows link_invalid inline', async () => {
@@ -283,5 +285,25 @@ describe('PartyInviteLanding join', () => {
 
     expect(await screen.findByText(JOIN_ERROR_GENERIC)).toBeInTheDocument();
     expect(joinMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses a signed-in visitor on a CANCELLED party with an invite token before any seat write', async () => {
+    window.history.replaceState(null, '', `/party/${PARTY_ID}#t=${TOKEN}`);
+    const user = { uid: 'guest-1', displayName: 'Alex Kim', email: 'alex.kim@example.com' };
+    signedIn(user);
+    ensureGuestSession.mockResolvedValue(user);
+    mockPartyReads({ title: 'Swap', adminId: 'host-uid-1', hostDisplayName: 'Dana Host', status: 'CANCELLED', participantCount: 2 });
+
+    render(<PartyInviteLanding partyId={PARTY_ID} />);
+
+    expect(await screen.findByText(JOIN_ERROR_CANCELLED)).toBeInTheDocument();
+    expect(ensureGuestSession).not.toHaveBeenCalled();
+    expect(joinMock).not.toHaveBeenCalled();
+    const seatReads = getDocMock.mock.calls.filter(
+      ([ref]) => ref?.path === `parties/${PARTY_ID}/participants/guest-1`,
+    );
+    expect(seatReads).toEqual([]);
+    expect(screen.queryByTestId('late-invite-card')).toBeNull();
+    expect(window.alert).not.toHaveBeenCalled();
   });
 });

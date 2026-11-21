@@ -40,11 +40,17 @@ export function Party() {
 
   const isParticipant = !!user && (participants?.some((p) => p.id === user.uid) || false);
   const partyIsActiveOrEnded = party?.status === 'ACTIVE' || party?.status === 'ENDED';
-  // Start the own-seat read as soon as a session and party id exist. The hook
-  // keys its result to that pair, so a stale 'not-seated' cannot leak into the
-  // first ACTIVE/ENDED render. Never use the participants list to decide the
-  // late-invite card. Only a confirmed missing seat shows that card.
-  const seatStatus = useOwnSeatStatus(user ? partyId : null, user?.uid ?? null);
+  // Only read the own-seat doc once the party is ACTIVE or ENDED, and only when
+  // the visitor is not already in the participants list. A LOBBY check that ran
+  // before the seat write would otherwise cache 'not-seated' for this
+  // partyId+uid and show the late card when the host starts. Presence in the
+  // participants list is proof of a seat.
+  const shouldCheckOwnSeat = !!user && partyIsActiveOrEnded && !isParticipant;
+  const fetchedSeatStatus = useOwnSeatStatus(
+    shouldCheckOwnSeat ? partyId : null,
+    shouldCheckOwnSeat ? user.uid : null,
+  );
+  const seatStatus = isParticipant ? 'seated' : fetchedSeatStatus;
 
   let content;
   if (authLoading) {
