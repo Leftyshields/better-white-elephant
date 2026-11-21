@@ -23,6 +23,8 @@ import { GameFooter } from './GameFooter.jsx';
 import { apiRequest } from '../utils/api.js';
 import { trackGameAction } from '../utils/analytics.js';
 import { canPlayerSkipTurn } from '../utils/skipTurnEligibility.js';
+import { GAME_USER_COPY } from '../utils/gameUserCopy.js';
+import { areAllGiftsFrozenWithNoLegalAction } from '../utils/allGiftsFrozen.js';
 
 export function GameBoard({ partyId, onEndTurn }) {
   const { user } = useAuth();
@@ -721,11 +723,6 @@ export function GameBoard({ partyId, onEndTurn }) {
 
   const roundsInfo = calculateRoundsRemaining();
 
-  // Check if all unwrapped gifts are frozen
-  const allGiftsFrozen = unwrappedGiftList.length > 0 && unwrappedGiftList.every((gift) => {
-    const giftData = unwrappedMap.get(gift.id);
-    return giftData?.isFrozen === true;
-  });
 
   // Check if this is Player 1's Final Turn (bookend exception)
   // Per GAME_RULES.md Rule 1 Exception 1: Player 1 can act on their final turn even if they have a gift
@@ -752,6 +749,7 @@ export function GameBoard({ partyId, onEndTurn }) {
   for (const [giftId, giftData] of unwrappedMap.entries()) {
     giftsRecord[giftId] = { isWrapped: false, ...giftData };
   }
+  const allGiftsFrozen = areAllGiftsFrozenWithNoLegalAction(giftsRecord);
   const canSkipTurn =
     phase === 'ACTIVE' &&
     currentPlayerId === user?.uid &&
@@ -1296,7 +1294,7 @@ export function GameBoard({ partyId, onEndTurn }) {
               <div className="mt-4 px-4">
                 <div className="bg-orange-50 border-2 border-orange-300 rounded-lg p-4">
                   <p className="text-sm font-semibold text-orange-800 mb-2">
-                    🎉 All gifts are frozen! Waiting for the host to end the game.
+                    {GAME_USER_COPY.waitingForHostEnd}
                   </p>
                 </div>
               </div>

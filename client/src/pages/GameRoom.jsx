@@ -19,6 +19,8 @@ import { GiftIcon } from '@heroicons/react/24/outline';
 import confetti from 'canvas-confetti';
 import { apiRequest } from '../utils/api.js';
 import { isPlayerActionValidationToast } from '../utils/socketGameErrorToast.js';
+import { GAME_USER_COPY } from '../utils/gameUserCopy.js';
+import { areAllGiftsFrozenWithNoLegalAction } from '../utils/allGiftsFrozen.js';
 
 /**
  * One shared toast region above the reaction bar (BUG-19 / batch 1 item 1 D). It never sits in the
@@ -307,7 +309,7 @@ export function GameRoom({ partyId }) {
   const isAdmin = !!user && !!party && party.adminId === user.uid;
   // Use activePlayerId from state machine (accounts for pendingVictimId)
   const currentPlayerId = state.activePlayerId;
-  const allGiftsFrozen = Object.values(state.gifts).filter(g => !g.isWrapped).every(g => g.isFrozen);
+  const allGiftsFrozen = areAllGiftsFrozenWithNoLegalAction(state.gifts);
 
   const getCurrentPlayerName = () => {
     if (currentPlayerId === user?.uid) return 'Your Turn!';
@@ -652,7 +654,7 @@ export function GameRoom({ partyId }) {
               <div className="mt-4 px-4">
                 <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-4">
                   <p className="text-sm font-semibold text-orange-300 mb-2">
-                    🎉 All gifts are frozen! Waiting for the host to end the game.
+                    {GAME_USER_COPY.waitingForHostEnd}
                   </p>
                 </div>
               </div>
