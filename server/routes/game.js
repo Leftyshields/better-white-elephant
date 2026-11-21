@@ -152,6 +152,7 @@ router.post('/start', async (req, res) => {
       giftSubmitters: Object.fromEntries(gifts.map((g) => [g.id, g.submitterId])),
       stateVersion: Date.now(), // Add timestamp for state versioning to prevent stale updates
       updatedAt: new Date().toISOString(), // ISO timestamp for easy comparison
+      turnStartedAt: new Date().toISOString(), // BUG-23: when the active turn began (host takeover clock)
     };
 
     // Save to both Redis and Firestore

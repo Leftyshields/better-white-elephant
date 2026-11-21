@@ -216,6 +216,8 @@ function transformActivities(history) {
     playerId: event.playerId,
     giftId: event.giftId,
     timestamp: event.timestamp,
+    // BUG-23: the host made this move for an away player (any type, including END_TURN).
+    ...(event.assistedBy && { assistedBy: event.assistedBy, assistedAction: event.assistedAction }),
     // Additional metadata for STEAL events
     ...(event.type === 'STEAL' && {
       previousOwnerId: event.previousOwnerId,

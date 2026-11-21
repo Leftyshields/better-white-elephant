@@ -26,12 +26,17 @@ import {
   gameRoomNameStates,
   lookupNameState,
   participantNeedsBatchName,
+  isBotParticipantId,
   rosterDisplayNames,
 } from '../utils/seatDisplayName.js';
 import { PlayerName } from '../components/PlayerName.jsx';
 import { LateInviteCard, LateInvitePage, shouldShowLateSignIn } from '../components/LateInviteCard.jsx';
 import { hostFirstNameFromParty } from '../components/PartyInviteLanding.jsx';
 import { lateVisitorState } from '../utils/lateInvite.js';
+import { useAwayPlayers } from '../hooks/useAwayPlayers.js';
+import { gameActions } from '../reducers/gameReducer.js';
+import { HostTakeoverSlot } from '../components/HostTakeoverSlot.jsx';
+import { HOST_TAKEOVER_COPY, fillCopy, isHostTakeoverNotice } from '../utils/hostTakeoverCopy.js';
 
 /**
  * One shared toast region above the reaction bar (BUG-19 / batch 1 item 1 D). It never sits in the
@@ -40,7 +45,7 @@ import { lateVisitorState } from '../utils/lateInvite.js';
  * with a Report link. Hover or keyboard focus pauses the auto-dismiss timer.
  */
 function GameToast({ message, onDismiss }) {
-  const isNotice = isPlayerActionValidationToast(message);
+  const isNotice = isPlayerActionValidationToast(message) || isHostTakeoverNotice(message);
   const [paused, setPaused] = useState(false);
 
   useEffect(() => {
@@ -87,6 +92,7 @@ export function GameRoom({ partyId }) {
   const { user } = useAuth();
   const { party, participants: liveParticipants } = useParty(partyId);
   const { state, actions, derived, socket, emitReaction, dispatch, joinDeniedAsNonParticipant } = useGameEngine(partyId);
+  const { awayById, serverOffsetMs } = useAwayPlayers(socket);
   const { playTurnNotification, playSteal, playUnwrap } = useGameSounds();
   const [batchNames, setBatchNames] = useState({});
   const [batchStatus, setBatchStatus] = useState('idle');
@@ -380,6 +386,20 @@ export function GameRoom({ partyId }) {
   const currentPlayerNameState = currentPlayerId
     ? lookupNameState(nameStates, currentPlayerId, effectiveBatchStatus, GAME_USER_COPY.unnamedPlayer)
     : null;
+  // BUG-23: a resolved roster name (or the unnamed-player word); null until the name resolves.
+  const currentPlayerName =
+    currentPlayerNameState && currentPlayerNameState.status !== 'loading'
+      ? currentPlayerNameState.name || GAME_USER_COPY.unnamedPlayer
+      : null;
+  const isAwayForMe = (playerId) => !!playerId && playerId !== user?.uid && awayById[playerId]?.awaySince != null;
+  const activePlayerAway = state.status === 'PLAYING' && isAwayForMe(currentPlayerId) && !!currentPlayerName;
+  const showHostTakeover =
+    isAdmin &&
+    state.status === 'PLAYING' &&
+    !!currentPlayerId &&
+    currentPlayerId !== user?.uid &&
+    !isBotParticipantId(currentPlayerId) &&
+    !!state.gameState;
 
   // Socket confirmed this session has no seat. Show the late card at once (no 5s timeout, no toast).
   if (joinDeniedAsNonParticipant) {
@@ -693,6 +713,10 @@ export function GameRoom({ partyId }) {
                       </div>
                     )}
                   </>
+                ) : activePlayerAway ? (
+                  <p className="text-xl text-slate-300 min-w-0 break-words" data-testid="away-turn-line">
+                    {fillCopy(HOST_TAKEOVER_COPY.awayTurnLine, { name: currentPlayerName })}
+                  </p>
                 ) : currentPlayerId ? (
                   <p className="text-xl text-slate-300 animate-pulse flex items-center justify-center gap-1 min-w-0">
                     <span className="shrink-0">Waiting for</span>
@@ -705,6 +729,19 @@ export function GameRoom({ partyId }) {
                     <span className="shrink-0">...</span>
                   </p>
                 ) : null}
+                {showHostTakeover && (
+                  <HostTakeoverSlot
+                    key={currentPlayerId}
+                    socket={socket}
+                    partyId={partyId}
+                    gameState={state.gameState}
+                    playerId={currentPlayerId}
+                    playerName={currentPlayerName}
+                    presence={awayById[currentPlayerId]}
+                    serverOffsetMs={serverOffsetMs}
+                    onNotice={(message) => dispatch?.(gameActions.errorReceived(message))}
+                  />
+                )}
               </div>
 
               {/* Right Section: Player Queue */}
@@ -724,10 +761,13 @@ export function GameRoom({ partyId }) {
                         GAME_USER_COPY.unnamedPlayer,
                       );
                       
+                      const chipAway = isAwayForMe(participant.id);
+                      const chipName = chipNameState.status === 'ready' ? (names[participant.id] || chipNameState.name) : null;
+
                       return (
                         <div
                           key={participant.id}
-                          title={chipNameState.status === 'ready' ? (names[participant.id] || chipNameState.name) : undefined}
+                          title={chipName ? (chipAway ? fillCopy(HOST_TAKEOVER_COPY.awayChipTitle, { name: chipName }) : chipName) : undefined}
                           className={`px-3 py-2 rounded-lg text-sm font-medium transition-all flex-shrink-0 max-w-[10rem] ${
                             isCurrent
                               ? 'bg-indigo-600 text-white border border-indigo-400 shadow-[0_0_20px_rgba(99,102,241,0.4)] scale-125'
@@ -744,6 +784,14 @@ export function GameRoom({ partyId }) {
                               showBotTag
                               className="min-w-0"
                             />
+                            {chipAway && (
+                              <span className="inline-flex items-center gap-0.5 shrink-0 text-[11px] font-semibold text-slate-300" data-testid="away-chip-tag">
+                                <svg aria-hidden="true" className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.36 5.64a9 9 0 11-12.73 0M12 3v9" />
+                                </svg>
+                                {HOST_TAKEOVER_COPY.awayChipTag}
+                              </span>
+                            )}
                             {isCurrent && <span className="ml-1 shrink-0">👈</span>}
                           </span>
                         </div>
