@@ -146,6 +146,20 @@ describe('seat displayName on update', () => {
     await assertFails(updateDoc(guestSeat(GUEST_ID), { lastInitial: 'zz' }));
   });
 
+  it('G18: an anonymous guest saves the blur payload to their own seat before ready; nobody else can', async () => {
+    const anonSeat = (uid) =>
+      doc(
+        testEnv.authenticatedContext(uid, { firebase: { sign_in_provider: 'anonymous' } }).firestore(),
+        'parties', PARTY_ID, 'participants', GUEST_ID,
+      );
+    await assertSucceeds(
+      updateDoc(anonSeat(GUEST_ID), { displayName: 'Alex', lastInitial: 'K', updatedAt: new Date() }),
+    );
+    await assertFails(
+      updateDoc(anonSeat('someone-else'), { displayName: 'Mallory', updatedAt: new Date() }),
+    );
+  });
+
   it('host cannot rename a guest seat but can still change its status', async () => {
     await assertFails(updateDoc(guestSeat(HOST_ID), { displayName: 'Alex' }));
     await assertFails(updateDoc(guestSeat(HOST_ID), { lastInitial: 'Q' }));
