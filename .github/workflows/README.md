@@ -49,14 +49,6 @@ Runs security analysis on code.
 - Runs on pushes, PRs, and weekly schedule
 - Helps identify potential security issues
 
-### 🤖 Dependabot Auto-merge (`dependabot-auto-merge.yml`)
-Automatically merges Dependabot PRs (optional).
-
-**What it does:**
-- Auto-merges Dependabot dependency update PRs
-- Uses squash merge strategy
-- Only runs for Dependabot PRs
-
 ## Setting Up Secrets
 
 1. Go to your repository → **Settings** → **Secrets and variables** → **Actions**
