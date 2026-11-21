@@ -5,9 +5,10 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { GuestJoinCard, NAME_SAVE_DEBOUNCE_MS } from '../../components/GuestJoinCard.jsx';
+import { GuestJoinCard, NAME_SAVE_DEBOUNCE_MS, savedSeatName } from '../../components/GuestJoinCard.jsx';
 import { GUEST_JOIN_COPY as COPY } from '../../utils/guestJoinCopy.js';
-import { readGuestGiftDraft, writeGuestGiftDraft } from '../../utils/guestGiftDraft.js';
+import { readGuestGiftDraft, writeGuestGiftDraft, guestGiftDraftKey } from '../../utils/guestGiftDraft.js';
+import { scrapeGiftUrl } from '../../utils/api.js';
 
 const updateDocMock = vi.fn();
 const addDocMock = vi.fn();
@@ -29,7 +30,7 @@ vi.mock('firebase/firestore', () => ({
   limit: vi.fn((n) => n),
 }));
 
-const KEY = (partyId) => `sor.guestGiftDraft.${partyId}`;
+const KEY = (partyId, uid = 'anon-1') => guestGiftDraftKey(partyId, uid);
 let seq = 0;
 const nextParty = () => `drafts-party-${(seq += 1)}`;
 
@@ -58,6 +59,7 @@ beforeEach(() => {
   addDocMock.mockReset().mockResolvedValue({ id: 'g1' });
   setDocMock.mockReset().mockResolvedValue(undefined);
   getDocsMock.mockReset().mockResolvedValue({ empty: true, docs: [] });
+  scrapeGiftUrl.mockReset().mockResolvedValue({ title: '', image: null, price: null, error: 'blocked' });
   window.sessionStorage.clear();
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
@@ -130,9 +132,33 @@ describe('G18: name saves to the seat on blur', () => {
     expect(seatNameWrites()).toHaveLength(1);
   });
 
+  it('landing-to-lobby remount saves a name typed and blurred before the seat landed', () => {
+    vi.useFakeTimers();
+    const partyId = nextParty();
+    const landing = render(card(partyId, { seated: false, participant: null }));
+    fireEvent.change(nameField(), { target: { value: 'Alex Kim' } });
+    fireEvent.blur(nameField());
+    act(() => vi.advanceTimersByTime(NAME_SAVE_DEBOUNCE_MS * 3));
+    expect(seatNameWrites()).toHaveLength(0);
+    landing.unmount();
+    // PartyLobby mounts a new card, now seated, seat still has no displayName.
+    render(card(partyId, { seated: true, participant: { id: 'anon-1', status: 'GOING', ready: false } }));
+    expect(nameField()).toHaveValue('Alex Kim');
+    act(() => vi.advanceTimersByTime(NAME_SAVE_DEBOUNCE_MS * 3));
+    expect(seatNameWrites()).toHaveLength(1);
+    expect(seatNameWrites()[0][1]).toMatchObject({ displayName: 'Alex', lastInitial: 'K' });
+  });
+
   it('after F5 the name comes back from the seat', () => {
     render(card(nextParty(), { participant: { id: 'anon-1', status: 'GOING', ready: false, displayName: 'Alex' } }));
     expect(nameField()).toHaveValue('Alex');
+  });
+
+  it('after F5, a seat with a last initial shows Alex K in the name field', () => {
+    render(card(nextParty(), { participant: { id: 'anon-1', status: 'GOING', ready: false, displayName: 'Alex', lastInitial: 'K' } }));
+    expect(nameField()).toHaveValue('Alex K');
+    expect(savedSeatName({ displayName: 'Alex', lastInitial: 'K' })).toBe('Alex K');
+    expect(savedSeatName({ displayName: 'Alex' })).toBe('Alex');
   });
 
   it('a failed name save logs only the error code, never the name', async () => {
@@ -142,6 +168,32 @@ describe('G18: name saves to the seat on blur', () => {
     fireEvent.blur(nameField());
     await waitFor(() => expect(console.error).toHaveBeenCalled());
     expect(JSON.stringify(console.error.mock.calls)).not.toMatch(/Alex/);
+  });
+
+  it('retries a failed name save on the next blur, still logging only the code', async () => {
+    updateDocMock
+      .mockRejectedValueOnce(Object.assign(new Error('x'), { code: 'unavailable' }))
+      .mockResolvedValueOnce(undefined);
+    render(card(nextParty()));
+    fireEvent.change(nameField(), { target: { value: 'Alex' } });
+    fireEvent.blur(nameField());
+    await waitFor(() => expect(seatNameWrites()).toHaveLength(1));
+    expect(JSON.stringify(console.error.mock.calls)).not.toMatch(/Alex/);
+    fireEvent.blur(nameField());
+    await waitFor(() => expect(seatNameWrites()).toHaveLength(2));
+  });
+
+  it('retries a failed name save when a later seat snapshot arrives', async () => {
+    updateDocMock
+      .mockRejectedValueOnce(Object.assign(new Error('x'), { code: 'unavailable' }))
+      .mockResolvedValueOnce(undefined);
+    const partyId = nextParty();
+    const { rerender } = render(card(partyId));
+    fireEvent.change(nameField(), { target: { value: 'Alex' } });
+    fireEvent.blur(nameField());
+    await waitFor(() => expect(seatNameWrites()).toHaveLength(1));
+    rerender(card(partyId, { participant: { id: 'anon-1', status: 'GOING', ready: false, updatedAt: 2 } }));
+    await waitFor(() => expect(seatNameWrites()).toHaveLength(2));
   });
 });
 
@@ -231,7 +283,7 @@ describe('G24: gift draft survives F5 in sessionStorage', () => {
     fireEvent.click(screen.getByRole('button', { name: COPY.readyCta }));
     await waitFor(() => expect(screen.getByText(COPY.joinFailedToast)).toBeInTheDocument());
     expect(addDocMock).not.toHaveBeenCalled();
-    expect(readGuestGiftDraft(partyId).manualTitle).toBe('Wool socks');
+    expect(readGuestGiftDraft(partyId, 'anon-1').manualTitle).toBe('Wool socks');
   });
 
   it('a failed Ready keeps the draft', async () => {
@@ -244,28 +296,37 @@ describe('G24: gift draft survives F5 in sessionStorage', () => {
     fireEvent.change(screen.getByLabelText(COPY.giftTitleLabel), { target: { value: 'Wool socks' } });
     fireEvent.click(screen.getByRole('button', { name: COPY.readyCta }));
     await waitFor(() => expect(screen.getByText(COPY.joinFailedToast)).toBeInTheDocument());
-    expect(readGuestGiftDraft(partyId)).toMatchObject({ giftUrl: 'https://example.com/socks', manualTitle: 'Wool socks' });
+    expect(readGuestGiftDraft(partyId, 'anon-1')).toMatchObject({ giftUrl: 'https://example.com/socks', manualTitle: 'Wool socks' });
   });
 
-  it('drafts are per party', () => {
-    writeGuestGiftDraft('party-a', { giftUrl: 'https://a.example/x', preview: null, manual: true, manualTitle: 'A', manualPrice: '' });
-    expect(readGuestGiftDraft('party-b')).toEqual({});
-    expect(readGuestGiftDraft('party-a').manualTitle).toBe('A');
+  it('drafts are per party and uid', () => {
+    writeGuestGiftDraft('party-a', 'anon-1', { giftUrl: 'https://a.example/x', preview: null, manual: true, manualTitle: 'A', manualPrice: '' });
+    expect(readGuestGiftDraft('party-b', 'anon-1')).toEqual({});
+    expect(readGuestGiftDraft('party-a', 'other-2')).toEqual({});
+    expect(readGuestGiftDraft('party-a')).toEqual({});
+    expect(readGuestGiftDraft('party-a', 'anon-1').manualTitle).toBe('A');
+  });
+
+  it('a second account in the same tab does not see the first account\'s gift draft', () => {
+    const partyId = nextParty();
+    writeGuestGiftDraft(partyId, 'anon-1', { giftUrl: 'https://a.example/x', preview: null, manual: true, manualTitle: 'Secret Santa Mug', manualPrice: '20' });
+    render(card(partyId, { user: { uid: 'other-2', isAnonymous: false, displayName: 'Sam Lee' }, participant: { id: 'other-2', status: 'GOING', ready: false } }));
+    expect(screen.queryByDisplayValue('Secret Santa Mug')).toBeNull();
   });
 
   it('ignores a tampered or malformed draft', () => {
     window.sessionStorage.setItem(KEY('bad'), '{not json');
-    expect(readGuestGiftDraft('bad')).toEqual({});
+    expect(readGuestGiftDraft('bad', 'anon-1')).toEqual({});
     window.sessionStorage.setItem(
       KEY('evil'),
       JSON.stringify({ giftUrl: 42, manual: 'yes', preview: { url: 'javascript:alert(1)', title: 'x', image: 'javascript:1' } }),
     );
-    expect(readGuestGiftDraft('evil')).toEqual({ giftUrl: '', preview: null, manual: false, manualTitle: '', manualPrice: '' });
+    expect(readGuestGiftDraft('evil', 'anon-1')).toEqual({ giftUrl: '', preview: null, manual: false, manualTitle: '', manualPrice: '' });
     window.sessionStorage.setItem(
       KEY('img'),
       JSON.stringify({ preview: { url: 'https://a.example/x', title: 'Mug', image: 'javascript:1', price: '$5' } }),
     );
-    expect(readGuestGiftDraft('img').preview).toEqual({ url: 'https://a.example/x', title: 'Mug', image: null, price: '$5' });
+    expect(readGuestGiftDraft('img', 'anon-1').preview).toEqual({ url: 'https://a.example/x', title: 'Mug', image: null, price: '$5' });
   });
 
   it('keeps working when sessionStorage is blocked', () => {
@@ -276,5 +337,36 @@ describe('G24: gift draft survives F5 in sessionStorage', () => {
     fireEvent.change(screen.getByLabelText(COPY.giftUrlLabel), { target: { value: 'https://example.com/x' } });
     expect(screen.getByLabelText(COPY.giftUrlLabel)).toHaveValue('https://example.com/x');
     spy.mockRestore();
+  });
+
+  it('drops a restored preview whose URL does not match the link and re-scrapes', async () => {
+    scrapeGiftUrl.mockResolvedValue({ title: 'New Mug', image: null, price: null, error: null });
+    const partyId = nextParty();
+    window.sessionStorage.setItem(KEY(partyId), JSON.stringify({
+      giftUrl: 'https://b.example/item',
+      preview: { url: 'https://a.example/old', title: 'Old Mug', image: null, price: null },
+      manual: false,
+    }));
+    render(card(partyId));
+    expect(screen.getByLabelText(COPY.giftUrlLabel)).toHaveValue('https://b.example/item');
+    expect(screen.queryByText('Old Mug')).toBeNull();
+    await waitFor(() => expect(screen.getByTestId('gift-preview')).toHaveTextContent('New Mug'));
+    expect(scrapeGiftUrl).toHaveBeenCalled();
+  });
+
+  it('after F5 mid-scrape, re-scrapes on mount so Ready is not stuck', async () => {
+    let finish;
+    scrapeGiftUrl.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    const partyId = nextParty();
+    window.sessionStorage.setItem(
+      KEY(partyId),
+      JSON.stringify({ giftUrl: 'https://example.com/socks', preview: null, manual: false }),
+    );
+    render(card(partyId, { participant: { id: 'anon-1', status: 'GOING', ready: false, displayName: 'Alex' } }));
+    expect(await screen.findByRole('status')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: COPY.readyCta })).toBeDisabled();
+    finish({ title: 'Wool socks', image: null, price: '$25', error: null });
+    await waitFor(() => expect(screen.getByTestId('gift-preview')).toHaveTextContent('Wool socks'));
+    expect(screen.getByRole('button', { name: COPY.readyCta })).toBeEnabled();
   });
 });

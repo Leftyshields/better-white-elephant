@@ -24,9 +24,40 @@ const FIELD =
 
 // Typed values survive the remount when the invite landing hands over to the lobby after the
 // background seat write. The gift part also goes to sessionStorage (this tab only) so F5 keeps it.
+// The name never goes in that gift draft (Security signed that it holds no name). A typed or
+// blurred name lives in this module Map only, keyed by party and uid, so the lobby card can save
+// it once the seat exists. A full reload (F5) clears the Map; the name then comes back from the seat.
 const drafts = new Map();
 // Wait this long after the name field loses focus before saving the name to the seat (G18).
 export const NAME_SAVE_DEBOUNCE_MS = 400;
+
+function memoryDraftKey(partyId, uid) {
+  return uid ? `${partyId}::${uid}` : `${partyId}::pending`;
+}
+
+function readMemoryDraft(partyId, uid) {
+  if (uid) {
+    const keyed = drafts.get(`${partyId}::${uid}`);
+    if (keyed) return keyed;
+  }
+  return drafts.get(`${partyId}::pending`) || null;
+}
+
+function previewMatchesLink(preview, giftUrl) {
+  if (!preview) return null;
+  const a = normalizeGiftUrl(preview.url);
+  const b = normalizeGiftUrl(giftUrl);
+  return a && b && a === b ? preview : null;
+}
+
+/** Field value after F5: the seat's first name, plus a space and last initial when the seat has one. */
+export function savedSeatName(participant, user) {
+  const display = typeof participant?.displayName === 'string' ? participant.displayName : '';
+  const initial = typeof participant?.lastInitial === 'string' ? participant.lastInitial.trim() : '';
+  if (display && initial) return `${display} ${initial}`;
+  if (display) return display;
+  return sanitizeUserChosenDisplayName(user?.displayName) || '';
+}
 
 function normalizeGiftUrl(raw) {
   const trimmed = (raw || '').trim();
@@ -87,12 +118,14 @@ export function GuestJoinCard({
   seated,
   terminalMessage,
 }) {
-  const draft = drafts.get(partyId) || readGuestGiftDraft(partyId);
-  const savedName = participant?.displayName || sanitizeUserChosenDisplayName(user?.displayName) || '';
+  const memory = readMemoryDraft(partyId, user?.uid) || {};
+  const stored = readGuestGiftDraft(partyId, user?.uid);
+  const draft = { ...stored, ...memory };
+  const savedName = savedSeatName(participant, user);
   const [name, setName] = useState(draft.name ?? savedName);
-  const [nameTouched, setNameTouched] = useState(false);
+  const [nameTouched, setNameTouched] = useState(Boolean(draft.nameTouched || draft.blurredName != null));
   const [giftUrl, setGiftUrl] = useState(draft.giftUrl ?? '');
-  const [preview, setPreview] = useState(draft.preview ?? null);
+  const [preview, setPreview] = useState(previewMatchesLink(draft.preview ?? null, draft.giftUrl ?? ''));
   const [manual, setManual] = useState(draft.manual ?? false);
   const [manualTitle, setManualTitle] = useState(draft.manualTitle ?? '');
   const [manualPrice, setManualPrice] = useState(draft.manualPrice ?? '');
@@ -103,17 +136,34 @@ export function GuestJoinCard({
   const scrapeSeq = useRef(0);
   const ids = { name: useId(), nameError: useId(), gift: useId(), lock: useId(), header: useId(), manual: useId() };
 
-  useEffect(() => {
-    drafts.set(partyId, { name, giftUrl, preview, manual, manualTitle, manualPrice });
-    writeGuestGiftDraft(partyId, { giftUrl, preview, manual, manualTitle, manualPrice });
-  }, [partyId, name, giftUrl, preview, manual, manualTitle, manualPrice]);
-
   // G18: the name saves to the guest's own seat a moment after the field loses focus, so the host
   // sees it before Ready and it survives F5. Only a valid name that differs from the seat is written.
-  const [blurredName, setBlurredName] = useState(null);
+  // blurredName and nameTouched also live in the module Map so a remounted lobby card can save a
+  // name that was typed (and usually blurred) on the landing card before the seat existed.
+  const [blurredName, setBlurredName] = useState(
+    draft.blurredName != null ? draft.blurredName : (draft.nameTouched ? (draft.name ?? null) : null),
+  );
+  const [nameSaveGen, setNameSaveGen] = useState(0);
   const nameWriteRef = useRef(null);
+
+  useEffect(() => {
+    const key = memoryDraftKey(partyId, user?.uid);
+    drafts.set(key, { name, giftUrl, preview, manual, manualTitle, manualPrice, nameTouched, blurredName });
+    if (user?.uid) drafts.delete(`${partyId}::pending`);
+    writeGuestGiftDraft(partyId, user?.uid, { giftUrl, preview, manual, manualTitle, manualPrice });
+  }, [partyId, user?.uid, name, giftUrl, preview, manual, manualTitle, manualPrice, nameTouched, blurredName]);
   const seatDisplayName = participant?.displayName;
   const seatLastInitial = participant?.lastInitial;
+  const seatUpdatedAt = participant?.updatedAt?.valueOf?.() ?? participant?.updatedAt ?? null;
+
+  // If the seat lands (or this is the remounted lobby card) and the name was touched but not yet
+  // blurred, treat the current field as ready to save.
+  useEffect(() => {
+    if (seated && nameTouched && blurredName === null && participant?.ready !== true) {
+      setBlurredName(name);
+    }
+  }, [seated, nameTouched, blurredName, participant?.ready]); // name is read once when seated or touched becomes true
+
   useEffect(() => {
     if (blurredName === null || !seated || !user?.uid || participant?.ready === true) return undefined;
     const fields = typedSeatName(blurredName);
@@ -131,7 +181,7 @@ export function GuestJoinCard({
         });
     }, NAME_SAVE_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [blurredName, seated, user?.uid, partyId, participant?.ready, seatDisplayName, seatLastInitial]);
+  }, [blurredName, nameSaveGen, seated, user?.uid, partyId, participant?.ready, seatDisplayName, seatLastInitial, seatUpdatedAt]);
 
   useEffect(() => {
     if (!nameTouched && !name && savedName) setName(savedName);
@@ -184,6 +234,17 @@ export function GuestJoinCard({
       if (seq === scrapeSeq.current) setScraping(false);
     }
   };
+
+  // After F5 mid-scrape the link is back but the preview is gone; start the lookup again so Ready
+  // is not stuck on "Add your gift" until the guest blurs the URL field.
+  const mountScrapeRef = useRef(false);
+  useEffect(() => {
+    if (mountScrapeRef.current) return;
+    mountScrapeRef.current = true;
+    if (!manual && !preview && giftUrl.trim()) {
+      runScrape(giftUrl);
+    }
+  }, []); // mount only: a later blur or Enter still goes through the field handlers
 
   const handleReady = async () => {
     if (savingRef.current || !canReady) return;
@@ -341,6 +402,7 @@ export function GuestJoinCard({
               onBlur={(e) => {
                 setNameTouched(true);
                 setBlurredName(e.target.value);
+                setNameSaveGen((n) => n + 1);
               }}
               aria-invalid={showNameError || undefined}
               aria-describedby={showNameError ? ids.nameError : undefined}

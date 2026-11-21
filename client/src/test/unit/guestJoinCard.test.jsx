@@ -63,7 +63,6 @@ describe('GuestJoinCard', () => {
     updateDocMock.mockReset().mockResolvedValue(undefined);
     addDocMock.mockReset().mockResolvedValue({ id: 'g1' });
     setDocMock.mockReset().mockResolvedValue(undefined);
-  getDocsMock.mockReset().mockResolvedValue({ empty: true, docs: [] });
     getDocsMock.mockReset().mockResolvedValue({ empty: true, docs: [] });
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
