@@ -9,7 +9,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '../hooks/useAuth.js';
 import { Button } from './ui/Button.jsx';
 import { auth, db } from '../utils/firebase.js';
-import { joinPartyWithInviteToken, readInviteTokenFromHash } from '../utils/partyInvite.js';
+import { joinPartyWithInviteToken, readInviteTokenFromHash, stripInviteTokenFromAddressBar } from '../utils/partyInvite.js';
 import { getJoinErrorMessage } from '../utils/partyInviteCopy.js';
 import { seatNameFields } from '../utils/seatDisplayName.js';
 import { trackParticipantJoin, trackError } from '../utils/analytics.js';
@@ -124,6 +124,8 @@ export function PartyInviteLanding({ partyId }) {
           // Leave the skeleton even if the parent's party list never arrives.
           setAlreadySeated(true);
           setSeatCheckDone(true);
+          // Confirmed seat: drop #t= from this history entry (G19).
+          stripInviteTokenFromAddressBar();
           return;
         }
         confirmedNotSeated = true;
@@ -148,6 +150,8 @@ export function PartyInviteLanding({ partyId }) {
           updatedAt: new Date(),
           ...seatNameFields(sessionUser.displayName, sessionUser.email),
         });
+        // Seat write succeeded: drop #t= (G19). A failed join keeps it for a retry.
+        stripInviteTokenFromAddressBar();
         trackParticipantJoin(partyId, 'share_link');
       } catch (error) {
         console.error('Error joining party:', { code: error?.code, name: error?.name });
