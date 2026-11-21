@@ -85,3 +85,27 @@ describe('socket toast dedupe', () => {
     expect(plan.toastMessage).toBe(GAME_USER_COPY.cannotStealGift);
   });
 });
+
+describe('BUG-21 join-party socket codes', () => {
+  it('does not toast on NOT_PARTICIPANT (the late card handles it)', () => {
+    const plan = planSocketGameErrorHandling({
+      ...BASE,
+      ...actingPlayer,
+      message: 'You are not a participant in this party',
+      code: 'NOT_PARTICIPANT',
+    });
+    expect(plan.showToast).toBe(false);
+    expect(plan.toastMessage).toBeNull();
+  });
+
+  it('keeps a real error toast on MEMBERSHIP_CHECK_FAILED', () => {
+    const plan = planSocketGameErrorHandling({
+      ...BASE,
+      ...actingPlayer,
+      message: 'You are not a participant in this party',
+      code: 'MEMBERSHIP_CHECK_FAILED',
+    });
+    expect(plan.showToast).toBe(true);
+    expect(plan.toastMessage).toBeTruthy();
+  });
+});

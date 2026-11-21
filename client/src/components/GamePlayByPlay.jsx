@@ -9,7 +9,8 @@
  * closed choice is remembered for this game in sessionStorage.
  */
 import { useId, useState } from 'react';
-import { GameTicker, latestActivityLine } from './GameTicker.jsx';
+import { GameTicker, latestActivityIsLoading, latestActivityLine } from './GameTicker.jsx';
+import { NameLoadingSkeleton } from './PlayerName.jsx';
 import { ChatBubbleLeftEllipsisIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 
 const LIVE_FEED_LABEL = 'Live Feed';
@@ -24,7 +25,7 @@ function readFeedOpen(storageKey) {
   }
 }
 
-export function GamePlayByPlay({ state, userNames, partyId }) {
+export function GamePlayByPlay({ state, userNames, nameStates = null, partyId }) {
   const listId = useId();
   const storageKey = `sor-live-feed:${partyId || 'game'}`;
   const [isOpen, setIsOpen] = useState(() => readFeedOpen(storageKey));
@@ -37,7 +38,8 @@ export function GamePlayByPlay({ state, userNames, partyId }) {
   // Convert gifts object to array for GameTicker
   const giftsArray = state.gifts ? Object.values(state.gifts) : [];
   const hasActivity = Boolean(state.activities && state.activities.length > 0);
-  const latestLine = hasActivity ? latestActivityLine(state.activities, giftsArray, userNames) : null;
+  const latestLine = hasActivity ? latestActivityLine(state.activities, giftsArray, userNames, nameStates) : null;
+  const latestLoading = hasActivity && latestActivityIsLoading(state.activities, userNames, nameStates);
 
   const toggle = () => {
     const next = !isOpen;
@@ -67,8 +69,17 @@ export function GamePlayByPlay({ state, userNames, partyId }) {
           data-testid="live-feed-toggle"
         >
           <span className="font-bold text-slate-300 text-sm flex-shrink-0">{LIVE_FEED_LABEL}</span>
-          <span className="flex-1 min-w-0 truncate text-sm text-slate-400">
-            {latestLine ? `${LIVE_FEED_LATEST_PREFIX} ${latestLine}` : ''}
+          <span className="flex-1 min-w-0 truncate text-sm text-slate-400 inline-flex items-center gap-1">
+            {latestLine ? (
+              `${LIVE_FEED_LATEST_PREFIX} ${latestLine}`
+            ) : latestLoading ? (
+              <>
+                <span>{LIVE_FEED_LATEST_PREFIX}</span>
+                <NameLoadingSkeleton />
+              </>
+            ) : (
+              ''
+            )}
           </span>
           <ChevronDownIcon
             aria-hidden="true"
@@ -92,6 +103,7 @@ export function GamePlayByPlay({ state, userNames, partyId }) {
             activities={state.activities}
             gifts={giftsArray}
             userNames={userNames}
+            nameStates={nameStates}
           />
         ) : (
           <div className="flex flex-col items-center justify-center h-48 text-center px-6">

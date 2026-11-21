@@ -1,9 +1,11 @@
 /**
  * Party Lobby Component
  */
-import { useState, useEffect, useId, useRef } from 'react';
+import { useState, useEffect, useId } from 'react';
 import { useAuth } from '../hooks/useAuth.js';
 import { useParty } from '../hooks/useParty.js';
+import { lobbyGiftPotCount } from '../utils/giftPotCount.js';
+import { seatGiftLink, seatGiftUnlink, seatGiftReconcileFields } from '../utils/seatGift.js';
 import { Button } from './ui/Button.jsx';
 import { Input } from './ui/Input.jsx';
 import { Modal } from './ui/Modal.jsx';
@@ -19,38 +21,32 @@ import {
   doc,
   setDoc,
   updateDoc,
-  addDoc,
   getDoc,
   deleteDoc,
   query,
   where,
   getDocs,
+  writeBatch,
 } from 'firebase/firestore';
 import { db } from '../utils/firebase.js';
 import { filterVisiblePendingInvites, canResendPartyInvite } from '../utils/pendingInvites.js';
 import { getStartGameFailureMessage, START_GAME_GENERIC_ERROR } from '../utils/startGameResponse.js';
-import { buildPartyShareLink, ensureInviteToken, removeParticipantSeat, rotateInviteToken } from '../utils/partyInvite.js';
-import { rosterDisplayNames } from '../utils/seatDisplayName.js';
+import { removeParticipantSeat } from '../utils/partyInvite.js';
 import {
-  HOST_INVITE_LOAD_FAILED,
-  HOST_INVITE_ROTATE_CONFIRM,
-  HOST_INVITE_ROTATE_CTA,
-  HOST_INVITE_ROTATE_DONE,
-  HOST_INVITE_ROTATE_FAILED,
-  HOST_INVITE_ROTATE_HELPER,
-  HOST_INVITE_ROTATE_RETRY,
-  userSignedInWithGoogle,
-} from '../utils/partyInviteCopy.js';
-
-const INVITE_ROTATE_FOCUS_RING =
-  'focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950';
-
-const SHARE_LINK_FIELD_CLASSES =
-  'w-full min-h-11 px-3 py-2 bg-slate-950/50 border border-slate-700 rounded-md shadow-sm text-white font-mono text-sm break-all whitespace-pre-wrap resize-none overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 focus-visible:border-purple-500';
+  effectiveGameRoomBatchStatus,
+  gameRoomNameStates,
+  participantNeedsBatchName,
+} from '../utils/seatDisplayName.js';
+import { GAME_USER_COPY } from '../utils/gameUserCopy.js';
+import { PlayerName } from './PlayerName.jsx';
+import { userSignedInWithGoogle } from '../utils/partyInviteCopy.js';
+import { PartyShareModal } from './PartyShareModal.jsx';
+import { GuestJoinCard } from './GuestJoinCard.jsx';
+import { hostFirstNameFromParty } from './PartyInviteLanding.jsx';
 
 export function PartyLobby({ partyId, onStartGame }) {
   const { user } = useAuth();
-  const { party, participants, pendingInvites, gifts, loading } = useParty(partyId);
+  const { party, participants, pendingInvites, gifts, loading } = useParty(partyId, user?.uid ?? null);
   const { socket } = useGameSocket(partyId); // Get socket for simulation controls
   const [giftUrl, setGiftUrl] = useState('');
   const [scraping, setScraping] = useState(false);
@@ -62,15 +58,9 @@ export function PartyLobby({ partyId, onStartGame }) {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
-  const [linkCopied, setLinkCopied] = useState(false);
-  const [inviteToken, setInviteToken] = useState(null);
-  const [inviteLoadFailed, setInviteLoadFailed] = useState(false);
-  const [inviteLoadNonce, setInviteLoadNonce] = useState(0);
-  const [inviteRotateDone, setInviteRotateDone] = useState(false);
-  const [inviteRotateConfirming, setInviteRotateConfirming] = useState(false);
-  const [inviteRotateFailed, setInviteRotateFailed] = useState(false);
-  const [rotatingInvite, setRotatingInvite] = useState(false);
   const [userNames, setUserNames] = useState({});
+  const [userNamesStatus, setUserNamesStatus] = useState('idle');
+  const [userNamesSettledKey, setUserNamesSettledKey] = useState('');
   const [userIsBot, setUserIsBot] = useState({});
   const [newPersonName, setNewPersonName] = useState('');
   const [newPersonEmail, setNewPersonEmail] = useState('');
@@ -83,172 +73,88 @@ export function PartyLobby({ partyId, onStartGame }) {
   const [savingRules, setSavingRules] = useState(false);
   const [openStep, setOpenStep] = useState(null); // Track which step is open
   const addPersonNameInputId = useId();
-  const shareModalTitleId = useId();
-  const shareIntroId = useId();
-  const inviteRotateHelperId = useId();
-  const inviteRotateCtaRef = useRef(null);
-  const inviteRotateCancelRef = useRef(null);
-  const shareLinkFieldRef = useRef(null);
-  const shareCopyButtonRef = useRef(null);
-  const rotatingInviteRef = useRef(false);
-  const focusInviteRotateCtaAfterCancelRef = useRef(false);
-  const focusShareCopyAfterRotateRef = useRef(false);
   const isAdmin = !!user && !!party && party.adminId === user.uid;
   const isGoogleHost = isAdmin && userSignedInWithGoogle(user);
   const currentParticipant = participants.find((p) => p.id === user?.uid);
   const userGift = gifts.find((g) => g.submitterId === user?.uid);
+  const potCount = lobbyGiftPotCount(participants);
+
+  // G26: older seats (and writes from older tabs) may lack the hasGift link. Once my own gift has
+  // loaded, fix my seat only; rules accept the write only if it matches my real gift.
+  const seatGiftFix =
+    !loading && party?.status === 'LOBBY' ? seatGiftReconcileFields(currentParticipant, userGift) : null;
+  const seatGiftFixKey = seatGiftFix ? `${seatGiftFix.hasGift}|${userGift?.id ?? ''}` : null;
+  useEffect(() => {
+    if (!seatGiftFixKey || !user?.uid) return;
+    updateDoc(doc(db, 'parties', partyId, 'participants', user.uid), {
+      ...seatGiftReconcileFields(currentParticipant, userGift),
+      updatedAt: new Date(),
+    }).catch((error) => console.error('Seat gift link fix failed:', { code: error?.code, name: error?.name }));
+    // Runs once per distinct fix; the seat snapshot clears the key when it lands.
+  }, [seatGiftFixKey, partyId, user?.uid]);
   const [adminShippingAddress, setAdminShippingAddress] = useState(null);
   const [loadingAdminAddress, setLoadingAdminAddress] = useState(false);
-  const [userShippingAddress, setUserShippingAddress] = useState(null);
-  const [loadingUserAddress, setLoadingUserAddress] = useState(false);
 
-  // Host share link needs the invite token (host-only doc); older parties get one minted here
+  // Seat names first (G2). /api/users/batch is a fallback for seats without a valid displayName
+  // (and tells us which seats are bots). Until it settles a nameless seat shows the loading
+  // skeleton; after it settles with no name it shows "Player". Never a uid fragment.
+  const participantIdsKey = participants
+    .map((p) => p.id)
+    .filter(Boolean)
+    .slice()
+    .sort()
+    .join(',');
+
   useEffect(() => {
-    if (!showShareModal || !isAdmin || inviteToken) return undefined;
+    if (participants.length === 0) {
+      setUserNames({});
+      return undefined;
+    }
     let cancelled = false;
-    setInviteLoadFailed(false);
-    ensureInviteToken(db, partyId)
-      .then((token) => {
-        if (!cancelled) {
-          setInviteToken(token);
-          setInviteLoadFailed(false);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setInviteLoadFailed(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [showShareModal, isAdmin, inviteToken, partyId, inviteLoadNonce]);
-
-  useEffect(() => {
-    if (inviteRotateConfirming) {
-      inviteRotateCancelRef.current?.focus();
-    }
-  }, [inviteRotateConfirming]);
-
-  useEffect(() => {
-    if (!inviteRotateConfirming && focusInviteRotateCtaAfterCancelRef.current) {
-      focusInviteRotateCtaAfterCancelRef.current = false;
-      inviteRotateCtaRef.current?.focus();
-    }
-  }, [inviteRotateConfirming]);
-
-  useEffect(() => {
-    if (inviteRotateDone && focusShareCopyAfterRotateRef.current) {
-      focusShareCopyAfterRotateRef.current = false;
-      shareCopyButtonRef.current?.focus();
-    }
-  }, [inviteRotateDone, inviteToken]);
-
-  useEffect(() => {
-    if (!inviteRotateConfirming || rotatingInvite) return undefined;
-    const onKeyDown = (event) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        focusInviteRotateCtaAfterCancelRef.current = true;
-        setInviteRotateConfirming(false);
-      }
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [inviteRotateConfirming, rotatingInvite]);
-
-  useEffect(() => {
-    if (!showShareModal) return undefined;
-    const el = shareLinkFieldRef.current;
-    if (!el) return undefined;
-
-    const fitShareLinkHeight = () => {
-      el.style.height = 'auto';
-      el.style.height = `${el.scrollHeight}px`;
-    };
-
-    fitShareLinkHeight();
-    window.addEventListener('resize', fitShareLinkHeight);
-    return () => window.removeEventListener('resize', fitShareLinkHeight);
-  }, [showShareModal, inviteToken]);
-
-  const resetInviteRotateUi = () => {
-    setInviteLoadFailed(false);
-    setInviteRotateDone(false);
-    setInviteRotateConfirming(false);
-    setInviteRotateFailed(false);
-    setRotatingInvite(false);
-    rotatingInviteRef.current = false;
-    focusInviteRotateCtaAfterCancelRef.current = false;
-    focusShareCopyAfterRotateRef.current = false;
-  };
-
-  const retryInviteTokenLoad = () => {
-    setInviteLoadFailed(false);
-    setInviteLoadNonce((n) => n + 1);
-  };
-
-  const cancelInviteRotateConfirm = () => {
-    if (rotatingInviteRef.current) return;
-    focusInviteRotateCtaAfterCancelRef.current = true;
-    setInviteRotateConfirming(false);
-  };
-
-  const performInviteRotate = async () => {
-    if (rotatingInviteRef.current || !inviteToken) return;
-    rotatingInviteRef.current = true;
-    setRotatingInvite(true);
-    setInviteRotateFailed(false);
-    try {
-      const nextToken = await rotateInviteToken(db, partyId);
-      setInviteToken(nextToken);
-      setInviteRotateConfirming(false);
-      focusShareCopyAfterRotateRef.current = true;
-      setInviteRotateDone(true);
-    } catch (error) {
-      console.error('Error rotating invite link:', {
-        code: error?.code,
-        name: error?.name,
-      });
-      setInviteRotateConfirming(false);
-      setInviteRotateDone(false);
-      setInviteRotateFailed(true);
-    } finally {
-      rotatingInviteRef.current = false;
-      setRotatingInvite(false);
-    }
-  };
-
-  // Fetch user names and emails for participants
-  useEffect(() => {
-    const fetchUserInfo = async () => {
-      if (participants.length === 0) {
-        setUserNames({});
-        return;
-      }
-
+    const key = participantIdsKey;
+    setUserNamesStatus('pending');
+    (async () => {
       try {
-        const userIds = participants.map(p => p.id);
+        const userIds = participants.map((p) => p.id);
         const response = await apiRequest('/api/users/batch', {
           method: 'POST',
           body: JSON.stringify({ partyId, userIds }),
         });
-        
+        if (cancelled) return;
         if (response.users) {
           setUserNames(response.users);
         }
         if (response.bots) {
           setUserIsBot(response.bots);
         }
+        setUserNamesStatus('success');
+        setUserNamesSettledKey(key);
       } catch (error) {
-        console.error('Error fetching user info:', error);
-        // Seat names (rosterNames below) still show; others fall back to Player <id>.
-        setUserNames({});
+        if (cancelled) return;
+        console.error('Error fetching user info:', { name: error?.name });
+        setUserNamesStatus('failed');
+        setUserNamesSettledKey(key);
       }
+    })();
+    return () => {
+      cancelled = true;
     };
+    // participantIdsKey is the sorted id list; seat names come from the live participants.
+  }, [participantIdsKey, partyId]);
 
-    fetchUserInfo();
-  }, [participants, partyId]);
-
-  const rosterNames = rosterDisplayNames(participants, userNames);
+  const rosterBatchStatus = effectiveGameRoomBatchStatus({
+    participantIdsKey,
+    settledKey: userNamesSettledKey,
+    batchStatus: userNamesStatus,
+    needingCount: participants.filter(participantNeedsBatchName).length,
+    participantCount: participants.length,
+  });
+  const rosterNameStates = gameRoomNameStates(
+    participants,
+    userNames,
+    rosterBatchStatus,
+    GAME_USER_COPY.unnamedPlayer,
+  );
 
   // Fetch admin shipping address
   useEffect(() => {
@@ -276,34 +182,6 @@ export function PartyLobby({ partyId, onStartGame }) {
     };
 
     fetchAdminAddress();
-  }, [isAdmin, user?.uid]);
-
-  // Fetch user shipping address (for non-admin users)
-  useEffect(() => {
-    const fetchUserAddress = async () => {
-      if (isAdmin || !user?.uid) {
-        setUserShippingAddress(null);
-        return;
-      }
-
-      setLoadingUserAddress(true);
-      try {
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
-        if (userDoc.exists()) {
-          const userData = userDoc.data();
-          setUserShippingAddress(userData.shippingAddress || null);
-        } else {
-          setUserShippingAddress(null);
-        }
-      } catch (error) {
-        console.error('Error fetching user address:', error);
-        setUserShippingAddress(null);
-      } finally {
-        setLoadingUserAddress(false);
-      }
-    };
-
-    fetchUserAddress();
   }, [isAdmin, user?.uid]);
 
   // Update local state when party config changes
@@ -463,8 +341,12 @@ export function PartyLobby({ partyId, onStartGame }) {
         });
         console.log('Gift updated successfully');
       } else {
-        // Create new gift
-        const giftRef = await addDoc(collection(db, 'gifts'), giftData);
+        // Create the gift and mark my seat hasGift in one batch (rules check the link).
+        const giftRef = doc(collection(db, 'gifts'));
+        const batch = writeBatch(db);
+        batch.set(giftRef, giftData);
+        batch.update(participantRef, { ...seatGiftLink(giftRef.id), updatedAt: new Date() });
+        await batch.commit();
         console.log('Gift created successfully with ID:', giftRef.id);
       }
 
@@ -503,37 +385,6 @@ export function PartyLobby({ partyId, onStartGame }) {
       alert('Failed to submit gift: ' + error.message);
     } finally {
       setScraping(false);
-    }
-  };
-
-  const handleToggleReady = async () => {
-    if (!user || !currentParticipant) return;
-
-    // Validate shipping address before allowing user to mark as ready
-    if (!currentParticipant.ready) {
-      // Only check when marking as ready (not when unmarking)
-      if (!userShippingAddress || !userShippingAddress.street || !userShippingAddress.city) {
-        alert('Add a shipping address in Profile before you mark yourself ready. The person who owes you a gift will need it.');
-        return;
-      }
-    }
-
-    try {
-      const participantRef = doc(db, 'parties', partyId, 'participants', user.uid);
-      const newReadyState = !currentParticipant.ready;
-      
-      await updateDoc(participantRef, {
-        ready: newReadyState,
-        updatedAt: new Date(),
-      });
-      
-      // If marking as ready, close the step
-      if (newReadyState && !isAdmin) {
-        setOpenStep(null);
-      }
-    } catch (error) {
-      console.error('Error toggling ready state:', error);
-      alert('Failed to update ready state: ' + error.message);
     }
   };
 
@@ -821,14 +672,11 @@ export function PartyLobby({ partyId, onStartGame }) {
       const nonAdminParticipants = participants.filter((p) => p.status === 'GOING' && p.id !== party?.adminId);
       return nonAdminParticipants.length > 0 && nonAdminParticipants.every((p) => p.ready === true);
     })() },
-  ] : [
-    { id: 'gift', label: 'Submit your gift', completed: !!userGift },
-    { id: 'ready', label: 'Mark yourself as ready', completed: currentParticipant?.ready === true },
-  ];
+  ] : [];
 
   const completedSteps = setupSteps.filter(s => s.completed).length;
   const totalSteps = setupSteps.length;
-  const progressPercentage = (completedSteps / totalSteps) * 100;
+  const progressPercentage = totalSteps ? (completedSteps / totalSteps) * 100 : 0;
 
   // Auto-open first incomplete step, or keep current open step
   useEffect(() => {
@@ -864,6 +712,21 @@ export function PartyLobby({ partyId, onStartGame }) {
   console.log('PartyLobby: Rendering content');
   return (
     <div className="max-w-5xl mx-auto p-6 pt-24 space-y-6">
+      {/* Guests: one-screen join card (batch 2 item 4), the only guest ready control.
+          First on the page so it sits where the invite landing showed it (no jump after the seat lands). */}
+      {!isAdmin && party.status === 'LOBBY' && (
+        <GuestJoinCard
+          partyId={partyId}
+          partyTitle={party.title || 'White Elephant Party'}
+          hostFirstName={hostFirstNameFromParty(party)}
+          user={user}
+          participant={currentParticipant}
+          gift={userGift}
+          seated={!!currentParticipant}
+          terminalMessage={null}
+        />
+      )}
+
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl shadow-lg p-8 text-white">
         <div className="flex justify-between items-start">
@@ -894,12 +757,12 @@ export function PartyLobby({ partyId, onStartGame }) {
       {/* Gift Pile Hero Section */}
       <div className="bg-slate-900/80 backdrop-blur-xl border border-white/10 shadow-2xl rounded-2xl p-8 text-center">
         <div className="flex justify-center items-center flex-wrap gap-2 mb-4">
-          {gifts.length > 0 ? (
-            gifts.map((gift, index) => (
+          {potCount > 0 ? (
+            Array.from({ length: potCount }, (_, index) => (
               <span
-                key={gift.id}
+                key={index}
                 className="text-6xl -ml-4 first:ml-0 drop-shadow-lg transition-all hover:-translate-y-2"
-                style={{ zIndex: gifts.length - index }}
+                style={{ zIndex: potCount - index }}
               >
                 🎁
               </span>
@@ -911,11 +774,12 @@ export function PartyLobby({ partyId, onStartGame }) {
           )}
         </div>
         <div className="text-2xl font-bold text-white">
-          {gifts.length} Gift{gifts.length !== 1 ? 's' : ''} in the Pot
+          {potCount} Gift{potCount !== 1 ? 's' : ''} in the Pot
         </div>
       </div>
 
-      {/* Setup Progress - Collapsible Accordion */}
+      {/* Host: Setup Progress - Collapsible Accordion */}
+      {isAdmin && (
       <div className="bg-slate-900/80 backdrop-blur-xl border border-white/10 shadow-2xl rounded-2xl overflow-hidden">
         <div className="p-6 border-b border-white/5">
           <h2 className="text-2xl font-bold text-white mb-2">Setup Progress</h2>
@@ -1106,7 +970,9 @@ export function PartyLobby({ partyId, onStartGame }) {
                           const isYou = participant.id === user?.uid;
                           const isAdminParticipant = participant.id === party?.adminId;
                           const isBot = userIsBot[participant.id] || participant.id.startsWith('bot_');
-                          const displayName = isYou ? 'You (Host)' : rosterNames[participant.id];
+                          const nameState = isYou
+                            ? { status: 'ready', name: 'You (Host)' }
+                            : rosterNameStates[participant.id];
                           return (
                             <div
                               key={participant.id}
@@ -1115,9 +981,11 @@ export function PartyLobby({ partyId, onStartGame }) {
                               }`}
                             >
                               <div className="min-w-0 flex-1 flex items-center gap-2">
-                                <span className="min-w-0 flex-1 truncate text-white font-medium" title={displayName}>
-                                  {displayName}
-                                </span>
+                                <PlayerName
+                                  nameState={nameState}
+                                  id={participant.id}
+                                  className="flex-1 text-white font-medium"
+                                />
                                 {isBot && (
                                   <span className="shrink-0 text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded border border-purple-500/30">
                                     🤖 Bot
@@ -1472,7 +1340,11 @@ export function PartyLobby({ partyId, onStartGame }) {
                                           updatedAt: giftData.updatedAt,
                                         });
                                       } else {
-                                        await addDoc(collection(db, 'gifts'), giftData);
+                                        const giftRef = doc(collection(db, 'gifts'));
+                                        const batch = writeBatch(db);
+                                        batch.set(giftRef, giftData);
+                                        batch.update(participantRef, { ...seatGiftLink(giftRef.id), updatedAt: new Date() });
+                                        await batch.commit();
                                       }
 
                                       // Clear the form
@@ -1538,12 +1410,15 @@ export function PartyLobby({ partyId, onStartGame }) {
                             onClick={async () => {
                               if (confirm('Are you sure you want to delete your gift? You can submit a new one.')) {
                                 try {
-                                  await deleteDoc(doc(db, 'gifts', userGift.id));
                                   const participantRef = doc(db, 'parties', partyId, 'participants', user.uid);
-                                  await updateDoc(participantRef, {
+                                  const batch = writeBatch(db);
+                                  batch.delete(doc(db, 'gifts', userGift.id));
+                                  batch.update(participantRef, {
                                     status: 'PENDING',
+                                    ...seatGiftUnlink(),
                                     updatedAt: new Date(),
                                   });
+                                  await batch.commit();
                                   setOpenStep(step.id);
                                 } catch (error) {
                                   console.error('Error deleting gift:', error);
@@ -1599,7 +1474,7 @@ export function PartyLobby({ partyId, onStartGame }) {
                                 .filter((p) => p.status === 'GOING' && p.id !== party?.adminId)
                                 .map((participant) => {
                                   const isBot = userIsBot[participant.id] || participant.id.startsWith('bot_');
-                                  const displayName = rosterNames[participant.id];
+                                  const nameState = rosterNameStates[participant.id];
             
             return (
                                     <div
@@ -1608,9 +1483,11 @@ export function PartyLobby({ partyId, onStartGame }) {
                                         isBot ? 'bg-purple-900/30 border border-purple-500/30' : 'bg-slate-800/50'
                                       }`}
                                     >
-                                      <span className="min-w-0 flex-1 truncate text-white font-medium" title={displayName}>
-                                        {displayName}
-                                      </span>
+                                      <PlayerName
+                                        nameState={nameState}
+                                        id={participant.id}
+                                        className="flex-1 text-white font-medium"
+                                      />
                                       {isBot && (
                                         <span className="shrink-0 text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded border border-purple-500/30">
                                           🤖 Bot
@@ -1638,47 +1515,8 @@ export function PartyLobby({ partyId, onStartGame }) {
                   )}
                 </div>
                     );
-                  } else {
-                    return (
-                      <div className="p-6">
-                        {currentParticipant?.ready === true ? (
-                          <div className="bg-green-500/10 border-2 border-green-500/30 rounded-lg p-4">
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className="text-green-400 font-semibold">✓ You're Ready!</span>
-                            </div>
-                            <p className="text-sm text-slate-300 mb-4">
-                              You've marked yourself as ready. Waiting for other participants and the host to start the game.
-                            </p>
-                            <Button
-                              variant="secondary"
-                              onClick={handleToggleReady}
-                              className="w-full sm:w-auto"
-                            >
-                              Mark as Not Ready
-                            </Button>
-                          </div>
-                        ) : (
-                          <div className="space-y-3">
-                            <p className="text-slate-300">
-                              Once you've submitted your gift, mark yourself as ready to let the host know you're prepared for the game.
-                            </p>
-                            <Button
-                              onClick={handleToggleReady}
-                              disabled={!userGift}
-                              className="w-full sm:w-auto"
-                            >
-                              I'm Ready!
-                            </Button>
-                            {!userGift && (
-                              <p className="text-sm text-slate-400">
-                                Please submit your gift first before marking yourself as ready.
-                              </p>
-                    )}
-                  </div>
-                  )}
-                </div>
-                    );
                   }
+                  return null;
                 default:
                   return null;
               }
@@ -1737,9 +1575,10 @@ export function PartyLobby({ partyId, onStartGame }) {
           })}
         </div>
       </div>
+      )}
 
-      {/* Action Section */}
-      {party.status === 'LOBBY' && (
+      {/* Action Section (host start) */}
+      {party.status === 'LOBBY' && isAdmin && (
         <div key="action-section" className="bg-slate-900/80 backdrop-blur-xl border border-white/10 shadow-2xl rounded-2xl p-8">
           {isAdmin ? (
             <>
@@ -1853,225 +1692,16 @@ export function PartyLobby({ partyId, onStartGame }) {
                 );
               })()}
             </>
-          ) : (
-            currentParticipant && currentParticipant.status === 'GOING' && (
-              <>
-                {(() => {
-                  const hasShippingAddress = userShippingAddress && userShippingAddress.street && userShippingAddress.city;
-                  const canBeReady = userGift && hasShippingAddress;
-                  
-                  return (
-                    <div className="text-center space-y-4">
-                      <h3 className="text-2xl font-bold text-white mb-2">
-                        {currentParticipant.ready ? "You're Ready!" : "Mark Yourself Ready"}
-                      </h3>
-                      
-                      {!canBeReady && (
-                        <div className="bg-slate-950/50 rounded-lg p-4 mb-4 space-y-2 text-left">
-                          <p className="font-semibold text-white mb-2">Complete these steps first:</p>
-                          <ul className="space-y-1 text-sm text-slate-300">
-                            <li className="flex items-center gap-2">
-                              {userGift ? (
-                                <span className="text-green-400">✓</span>
-                              ) : (
-                                <span className="text-slate-500">○</span>
-                              )}
-                              <span className={userGift ? 'text-slate-300' : ''}>Submit your gift</span>
-                            </li>
-                            <li className="flex items-center gap-2">
-                              {hasShippingAddress ? (
-                                <span className="text-green-400">✓</span>
-                              ) : (
-                                <span className="text-slate-500">○</span>
-                              )}
-                              <span className={hasShippingAddress ? 'text-slate-300' : ''}>Add your shipping address</span>
-                            </li>
-                          </ul>
-                        </div>
-                      )}
-                      
-                      {canBeReady && currentParticipant.ready && (
-                        <div className="bg-green-500/10 border-2 border-green-500/30 rounded-lg p-4 mb-4">
-                          <p className="text-green-400 font-semibold">You&apos;re ready. Waiting for the host to start the game.</p>
-                        </div>
-                      )}
-                      
-                      <Button
-                        onClick={handleToggleReady}
-                        variant={currentParticipant.ready === true ? "secondary" : "primary"}
-                        className="px-12 py-4 text-xl font-bold shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                        disabled={!canBeReady}
-                      >
-                        {currentParticipant.ready === true ? "✓ I'm Ready!" : "🎉 Let's Party!"}
-                      </Button>
-                      
-                      {canBeReady && !currentParticipant.ready && (
-                        <p className="text-sm text-slate-300 mt-3">
-                          Click the button above when you're ready for the game to start!
-                        </p>
-                      )}
-                    </div>
-                  );
-                })()}
-              </>
-            )
-          )}
+          ) : null}
         </div>
       )}
 
-      {/* Share Link Modal */}
-      <Modal
+      <PartyShareModal
         isOpen={showShareModal}
-        onClose={() => {
-          setShowShareModal(false);
-          setLinkCopied(false);
-          resetInviteRotateUi();
-        }}
-        title="Share Party Link"
-        titleId={shareModalTitleId}
-      >
-        <div className="space-y-4">
-          <p id={shareIntroId} className="text-slate-300">
-            Share this link with friends to let them join your party. Anyone with the link can join!
-          </p>
-          <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-start">
-            <textarea
-              ref={shareLinkFieldRef}
-              readOnly
-              value={inviteToken ? buildPartyShareLink(window.location.origin, partyId, inviteToken) : ''}
-              aria-labelledby={shareModalTitleId}
-              aria-describedby={shareIntroId}
-              className={`sm:flex-1 ${SHARE_LINK_FIELD_CLASSES}`}
-            />
-            <Button
-              ref={shareCopyButtonRef}
-              onClick={async () => {
-                if (!inviteToken) return;
-                const link = buildPartyShareLink(window.location.origin, partyId, inviteToken);
-                try {
-                  await navigator.clipboard.writeText(link);
-                  setLinkCopied(true);
-                  setTimeout(() => setLinkCopied(false), 2000);
-                } catch (error) {
-                  // Fallback for older browsers
-                  const input = document.createElement('input');
-                  input.value = link;
-                  document.body.appendChild(input);
-                  input.select();
-                  document.execCommand('copy');
-                  document.body.removeChild(input);
-                  setLinkCopied(true);
-                  setTimeout(() => setLinkCopied(false), 2000);
-                }
-              }}
-              variant={linkCopied ? 'secondary' : 'primary'}
-              disabled={!inviteToken}
-              className="w-full min-h-11 sm:w-auto"
-            >
-              {linkCopied ? 'Copied!' : 'Copy'}
-            </Button>
-          </div>
-          {inviteLoadFailed && !inviteToken && (
-            <div className="flex flex-wrap items-center gap-2">
-              <p role="alert" className="text-sm text-red-300 flex-1 min-w-[12rem]">
-                {HOST_INVITE_LOAD_FAILED}
-              </p>
-              <button
-                type="button"
-                onClick={retryInviteTokenLoad}
-                className={`inline-flex items-center justify-center min-h-11 min-w-11 px-4 py-2 rounded-md font-medium transition-colors bg-blue-600 text-white hover:bg-blue-700 ${INVITE_ROTATE_FOCUS_RING}`}
-              >
-                {HOST_INVITE_ROTATE_RETRY}
-              </button>
-            </div>
-          )}
-          {isGoogleHost && (
-            <div className="space-y-2 pt-1">
-              {inviteRotateFailed ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  <p role="alert" className="text-sm text-red-300 flex-1 min-w-[12rem]">
-                    {HOST_INVITE_ROTATE_FAILED}
-                  </p>
-                  <button
-                    type="button"
-                    disabled={rotatingInvite}
-                    aria-busy={rotatingInvite || undefined}
-                    onClick={performInviteRotate}
-                    className={`inline-flex items-center justify-center min-h-11 min-w-11 px-4 py-2 rounded-md font-medium transition-colors bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-400 disabled:opacity-50 ${INVITE_ROTATE_FOCUS_RING}`}
-                  >
-                    {HOST_INVITE_ROTATE_RETRY}
-                  </button>
-                </div>
-              ) : inviteRotateConfirming ? (
-                <>
-                  <p id={inviteRotateHelperId} className="text-sm text-amber-200">
-                    {HOST_INVITE_ROTATE_HELPER}
-                  </p>
-                  <div className="flex flex-col sm:flex-row flex-wrap gap-2">
-                    <button
-                      type="button"
-                      aria-describedby={inviteRotateHelperId}
-                      disabled={rotatingInvite}
-                      aria-busy={rotatingInvite || undefined}
-                      onClick={performInviteRotate}
-                      className={`inline-flex items-center justify-center min-h-11 min-w-11 flex-1 px-4 py-2 rounded-md font-medium transition-colors border border-red-500 bg-transparent text-red-400 hover:bg-red-950/40 disabled:opacity-50 ${INVITE_ROTATE_FOCUS_RING}`}
-                    >
-                      {HOST_INVITE_ROTATE_CONFIRM}
-                    </button>
-                    <button
-                      ref={inviteRotateCancelRef}
-                      type="button"
-                      disabled={rotatingInvite}
-                      onClick={cancelInviteRotateConfirm}
-                      className={`inline-flex items-center justify-center min-h-11 min-w-11 flex-1 px-4 py-2 rounded-md font-medium transition-colors bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-400 disabled:opacity-50 ${INVITE_ROTATE_FOCUS_RING}`}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <button
-                    ref={inviteRotateCtaRef}
-                    type="button"
-                    aria-describedby={inviteRotateHelperId}
-                    disabled={!inviteToken}
-                    onClick={() => {
-                      setInviteRotateDone(false);
-                      setInviteRotateFailed(false);
-                      setInviteRotateConfirming(true);
-                    }}
-                    className={`inline-flex items-center justify-center min-h-11 min-w-11 w-full px-4 py-2 rounded-md font-medium transition-colors bg-gray-200 text-gray-800 hover:bg-gray-300 disabled:bg-gray-100 disabled:opacity-50 ${INVITE_ROTATE_FOCUS_RING}`}
-                  >
-                    {HOST_INVITE_ROTATE_CTA}
-                  </button>
-                  <p id={inviteRotateHelperId} className="text-sm text-slate-400">
-                    {HOST_INVITE_ROTATE_HELPER}
-                  </p>
-                </>
-              )}
-              {inviteRotateDone && (
-                <p role="status" aria-live="polite" className="text-sm text-green-400">
-                  {HOST_INVITE_ROTATE_DONE}
-                </p>
-              )}
-            </div>
-          )}
-          <div className="pt-2">
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setShowShareModal(false);
-                setLinkCopied(false);
-                resetInviteRotateUi();
-              }}
-              className="w-full"
-            >
-              Close
-            </Button>
-          </div>
-        </div>
-      </Modal>
+        onClose={() => setShowShareModal(false)}
+        partyId={partyId}
+        isGoogleHost={isGoogleHost}
+      />
 
       {/* Email Invite Modal */}
       <Modal

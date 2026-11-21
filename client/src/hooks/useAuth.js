@@ -6,6 +6,7 @@ import {
   onAuthStateChanged,
   signInWithEmailLink,
   signInWithPopup,
+  signInAnonymously,
   GoogleAuthProvider,
   signOut as firebaseSignOut,
 } from 'firebase/auth';
@@ -138,6 +139,16 @@ export function useAuth() {
     }
   };
 
+  /**
+   * Guests (invite link or party code) get a silent anonymous session, with no UI. An existing
+   * session (a Google host joining someone else's party) is reused, never replaced.
+   */
+  const ensureGuestSession = async () => {
+    if (auth.currentUser) return auth.currentUser;
+    const result = await signInAnonymously(auth);
+    return result.user;
+  };
+
   const signOut = async () => {
     try {
       await firebaseSignOut(auth);
@@ -152,6 +163,7 @@ export function useAuth() {
     loading,
     signInWithEmailLink: signInWithEmailLinkHandler,
     signInWithGoogle,
+    ensureGuestSession,
     signOut,
   };
 }

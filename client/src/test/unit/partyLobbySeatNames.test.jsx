@@ -84,13 +84,58 @@ describe('PartyLobby seat names', () => {
     expect(screen.queryByText('Player YJiLkrOt')).not.toBeInTheDocument();
   });
 
-  it('keeps the Player fallback when a seat has no usable name', async () => {
+  it('shows "Player" (G2), never a uid fragment, when a seat has no usable name and the batch fails', async () => {
     apiRequestMock.mockRejectedValue(new Error('network'));
     renderLobby([
       { id: HOST_UID, status: 'GOING', ready: false },
       { id: 'NoNameGuest1', status: 'GOING', ready: false },
     ]);
-    await waitFor(() => expect(screen.getAllByText('Player NoNameGu').length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText('Player').length).toBeGreaterThan(0));
+    expect(document.body.textContent).not.toMatch(/NoNameGu/);
+  });
+
+  it('anonymous guest seated but not ready yet: skeleton while the batch is pending, never a uid', async () => {
+    apiRequestMock.mockReturnValue(new Promise(() => {}));
+    renderLobby([
+      { id: HOST_UID, status: 'GOING', ready: false },
+      { id: 'AnonGuestUid123', status: 'GOING', ready: false },
+    ]);
+    await waitFor(() => expect(apiRequestMock).toHaveBeenCalled());
+    expect(screen.getAllByLabelText('Loading player name').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Player')).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/AnonGuest/);
+  });
+
+  it('anonymous guest not ready: the server batch fallback "Player <id>" still renders as "Player"', async () => {
+    apiRequestMock.mockResolvedValue({ users: { AnonGuestUid123: 'Player AnonGues' } });
+    renderLobby([
+      { id: HOST_UID, status: 'GOING', ready: false },
+      { id: 'AnonGuestUid123', status: 'GOING', ready: false },
+    ]);
+    await waitFor(() => expect(screen.getAllByText('Player').length).toBeGreaterThan(0));
+    expect(screen.queryByLabelText('Loading player name')).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/AnonGues/);
+  });
+
+  it('G18: shows the guest\'s saved seat name before Ready, even when the profile lookup says Player', async () => {
+    apiRequestMock.mockResolvedValue({ users: { AnonGuestUid123: 'Player AnonGues' } });
+    renderLobby([
+      { id: HOST_UID, status: 'GOING', ready: false },
+      { id: 'AnonGuestUid123', status: 'GOING', ready: false, displayName: 'Alex' },
+    ]);
+    await waitFor(() => expect(screen.getAllByText('Alex').length).toBeGreaterThan(0));
+    expect(screen.queryByText('Player')).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/AnonGues/);
+  });
+
+  it('switches to the typed seat name once the guest taps I\'m ready', async () => {
+    apiRequestMock.mockRejectedValue(new Error('network'));
+    renderLobby([
+      { id: HOST_UID, status: 'GOING', ready: false },
+      { id: 'AnonGuestUid123', status: 'GOING', ready: true, displayName: 'Sam' },
+    ]);
+    await waitFor(() => expect(screen.getAllByText('Sam').length).toBeGreaterThan(0));
+    expect(document.body.textContent).not.toMatch(/AnonGuest/);
   });
 
   it('shows the last initial when two guests share a first name', async () => {
@@ -133,8 +178,10 @@ describe('PartyLobby seat names', () => {
     const nameEls = await screen.findAllByText(LONG_NAME);
     expect(nameEls.length).toBeGreaterThan(0);
     for (const nameEl of nameEls) {
-      expect(nameEl).toHaveClass('min-w-0', 'flex-1', 'truncate');
-      expect(nameEl).toHaveAttribute('title', LONG_NAME);
+      expect(nameEl).toHaveClass('truncate');
+      const box = nameEl.closest('[title]');
+      expect(box).toHaveClass('min-w-0', 'flex-1');
+      expect(box).toHaveAttribute('title', LONG_NAME);
     }
     const badges = screen.getAllByText('✓ Ready');
     expect(badges.length).toBeGreaterThan(0);
@@ -152,8 +199,10 @@ describe('PartyLobby seat names', () => {
     const nameEls = await screen.findAllByText(LONG_NAME);
     expect(nameEls.length).toBeGreaterThan(0);
     for (const nameEl of nameEls) {
-      expect(nameEl).toHaveClass('min-w-0', 'flex-1', 'truncate');
-      expect(nameEl).toHaveAttribute('title', LONG_NAME);
+      expect(nameEl).toHaveClass('truncate');
+      const box = nameEl.closest('[title]');
+      expect(box).toHaveClass('min-w-0', 'flex-1');
+      expect(box).toHaveAttribute('title', LONG_NAME);
     }
   });
 

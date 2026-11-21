@@ -17,6 +17,12 @@ import {
 
 const LAST_INITIAL_RE = /^[A-Z]$/;
 
+/** Copywriter-signed unique-name suffix (G21): a space and (N), starting at 2. */
+export function nameCollisionSuffix(n) {
+  return ` (${n})`;
+}
+
+
 /**
  * Seat name fields from a full name (Auth displayName). Returns {} when nothing public remains,
  * so the roster keeps the Player fallback.
@@ -87,5 +93,122 @@ export function rosterDisplayNames(participants, batchNames = {}) {
       names[r.id] = r.fallback;
     }
   }
-  return names;
+  return applyNameCollisionOrdinals(names, participants);
+}
+
+/**
+ * After last-initial disambiguation, labels that still match get " (N)" in seat
+ * order. The first seat keeps the plain label; later seats start at 2.
+ */
+function applyNameCollisionOrdinals(names, participants) {
+  const seen = new Map();
+  const unique = { ...names };
+  for (const participant of participants) {
+    const id = participant?.id;
+    if (!id || unique[id] == null) continue;
+    const label = unique[id];
+    const count = (seen.get(label) || 0) + 1;
+    seen.set(label, count);
+    if (count > 1) {
+      unique[id] = `${label}${nameCollisionSuffix(count)}`;
+    }
+  }
+  return unique;
+}
+
+export function participantNeedsBatchName(participant) {
+  return !isValidPublicHostDisplayName(participant?.displayName);
+}
+
+export function isBotParticipantId(id) {
+  return typeof id === 'string' && id.startsWith('bot_');
+}
+
+/**
+ * Name state for the game room, end screen, and Live Feed.
+ * Seat names are ready on the first frame. The batch call is only a fallback
+ * for seats without a valid displayName. Until the batch settles, unresolved
+ * names are loading (never a uid fragment). After it settles with no name,
+ * use the unnamed-player word.
+ *
+ * @param {Array<{id: string, displayName?: string, lastInitial?: string}>} participants
+ * @param {Record<string, string>} batchNames
+ * @param {'idle'|'pending'|'success'|'failed'} batchStatus
+ * @param {string} unnamedPlayer
+ * @returns {Record<string, {status: 'ready'|'loading'|'failed', name: string|null}>}
+ */
+export function gameRoomNameStates(
+  participants = [],
+  batchNames = {},
+  batchStatus = 'pending',
+  unnamedPlayer = 'Player',
+) {
+  const roster = rosterDisplayNames(participants, batchNames);
+  const states = {};
+  for (const participant of participants) {
+    if (!participant?.id) continue;
+    const hasSeat = isValidPublicHostDisplayName(participant.displayName);
+    const hasBatch = !!fieldsFromBatchName(participant.id, batchNames);
+    if (hasSeat || hasBatch) {
+      states[participant.id] = { status: 'ready', name: roster[participant.id] };
+    } else if (batchStatus === 'success' || batchStatus === 'failed') {
+      states[participant.id] = { status: 'failed', name: unnamedPlayer };
+    } else {
+      states[participant.id] = { status: 'loading', name: null };
+    }
+  }
+  return states;
+}
+
+export function lookupNameState(
+  nameStates,
+  id,
+  batchStatus = 'pending',
+  unnamedPlayer = 'Player',
+) {
+  if (!id) {
+    return { status: 'failed', name: unnamedPlayer };
+  }
+  if (nameStates && nameStates[id]) {
+    return nameStates[id];
+  }
+  if (batchStatus === 'success' || batchStatus === 'failed') {
+    return { status: 'failed', name: unnamedPlayer };
+  }
+  return { status: 'loading', name: null };
+}
+
+/**
+ * Batch status used to resolve game-room names.
+ * An empty roster (the first frame after a refresh or rejoin) is not a settled
+ * lookup. A settled success or failure only applies to the participant id set
+ * it was recorded for, so a newly arrived nameless seat stays loading instead
+ * of flashing the unnamed-player word.
+ *
+ * @param {{
+ *   participantIdsKey: string,
+ *   settledKey: string,
+ *   batchStatus: string,
+ *   needingCount: number,
+ *   participantCount: number,
+ * }} args
+ * @returns {'idle'|'pending'|'success'|'failed'}
+ */
+export function effectiveGameRoomBatchStatus({
+  participantIdsKey,
+  settledKey,
+  batchStatus,
+  needingCount,
+  participantCount,
+}) {
+  if (!participantCount) {
+    return 'idle';
+  }
+  if (!needingCount) {
+    return 'success';
+  }
+  if (settledKey !== participantIdsKey) {
+    return 'pending';
+  }
+  return batchStatus || 'pending';
 }

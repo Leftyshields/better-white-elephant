@@ -1,161 +1,318 @@
 /**
- * Party Invite Landing Component
- * Shows a beautiful "ticket stub" UI for unauthenticated users or users not yet joined
+ * Invite-link landing (batch 2 item 4). No login screen and no reloads: a guest is signed in
+ * silently (anonymous, or their existing session) and seated with the link's invite token in the
+ * background while the one-screen card is already on screen. Once the seat lands, the party page
+ * swaps to the lobby, which shows the same card.
  */
-import { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '../hooks/useAuth.js';
 import { Button } from './ui/Button.jsx';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../utils/firebase.js';
-import { joinPartyWithInviteToken, readInviteTokenFromHash } from '../utils/partyInvite.js';
+import { auth, db } from '../utils/firebase.js';
+import { joinPartyWithInviteToken, readInviteTokenFromHash, stripInviteTokenFromAddressBar } from '../utils/partyInvite.js';
+import { REQUEST_TIMEOUT_MS, isCancelledError, isTimeoutError, withTimeout } from '../utils/withTimeout.js';
 import { getJoinErrorMessage } from '../utils/partyInviteCopy.js';
 import { seatNameFields } from '../utils/seatDisplayName.js';
 import { trackParticipantJoin, trackError } from '../utils/analytics.js';
-import { GiftIcon } from '@heroicons/react/24/outline';
-import { Snowflakes } from './Snowflakes.jsx';
+import { GuestJoinCard } from './GuestJoinCard.jsx';
+import { LateInviteCard, LateInvitePage, shouldShowLateSignIn } from './LateInviteCard.jsx';
+import { lateVisitorState } from '../utils/lateInvite.js';
 import {
-  INVITE_LANDING_HOST_NAME_NOT_SHARED,
   isSyntheticPlayerDisplayName,
   isValidPublicHostDisplayName,
 } from '../../../server/lib/display-names.js';
 
-export function PartyInviteLanding({ partyId }) {
-  const { user, signInWithGoogle, loading: authLoading } = useAuth();
+const PAGE_BG =
+  'min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black';
+
+/** Host first name for the welcome line, or null for the no-name variant. */
+export function hostFirstNameFromParty(data) {
+  const stored = typeof data?.hostDisplayName === 'string' ? data.hostDisplayName.trim() : '';
+  if (!stored || !data?.adminId || isSyntheticPlayerDisplayName(stored, data.adminId)) return null;
+  if (!isValidPublicHostDisplayName(stored)) return null;
+  return stored.split(/\s+/)[0];
+}
+
+export function PartyInviteLanding({ partyId, onJoinBusyChange }) {
+  const { user, loading: authLoading, ensureGuestSession } = useAuth();
   const [partyInfo, setPartyInfo] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [joining, setJoining] = useState(false);
-  const [hostName, setHostName] = useState(null);
+  const [terminalMessage, setTerminalMessage] = useState(null);
+  const [lateState, setLateState] = useState(null);
   // Invite token rides in the URL fragment (#t=...), so it never reaches a server log.
   const [inviteToken] = useState(() => readInviteTokenFromHash(window.location.hash));
+  const seatStartedRef = useRef(false);
+  const joinWriteRef = useRef(null);
+  const joinUserRef = useRef(null);
+  const [joinUser, setJoinUser] = useState(null);
+  const timeoutAbortRef = useRef(null);
+  if (timeoutAbortRef.current == null) {
+    timeoutAbortRef.current = new AbortController();
+  }
+  const [seatWriteSlow, setSeatWriteSlow] = useState(false);
+  // A visitor who already has a session may already hold a seat (a host opening their own party,
+  // or a guest coming back). Show the skeleton until that check is done instead of a guest card.
+  const [hadSessionAtStart] = useState(() => auth.currentUser != null);
+  const [seatCheckDone, setSeatCheckDone] = useState(false);
+  const [alreadySeated, setAlreadySeated] = useState(false);
 
-  // Fetch public party info
   useEffect(() => {
-    const fetchPartyInfo = async () => {
-      if (!partyId) return;
-      
-      setLoading(true);
-      try {
-        const partyDoc = await getDoc(doc(db, 'parties', partyId));
-        if (partyDoc.exists()) {
-          const data = partyDoc.data();
-          setPartyInfo({
-            title: data.title || 'White Elephant Party',
-            date: data.date?.toDate?.() || data.date,
-            adminId: data.adminId,
-          });
-
-          const storedHostName =
-            typeof data.hostDisplayName === 'string'
-              ? data.hostDisplayName.trim()
-              : '';
-          const adminId = data.adminId;
-          if (
-            storedHostName &&
-            adminId &&
-            !isSyntheticPlayerDisplayName(storedHostName, adminId) &&
-            isValidPublicHostDisplayName(storedHostName)
-          ) {
-            setHostName(storedHostName);
-          } else {
-            setHostName(null);
-          }
-        } else {
+    let cancelled = false;
+    if (!partyId) return undefined;
+    setLoading(true);
+    getDoc(doc(db, 'parties', partyId))
+      .then((snap) => {
+        if (cancelled) return;
+        if (!snap.exists()) {
           setPartyInfo(null);
+          return;
         }
-      } catch (error) {
-        console.error('Error fetching party info:', error);
-        setPartyInfo(null);
-      } finally {
-        setLoading(false);
-      }
+        const data = snap.data();
+        setPartyInfo({
+          title: data.title || 'White Elephant Party',
+          hostFirstName: hostFirstNameFromParty(data),
+          status: data.status,
+          participantCount: data.participantCount,
+        });
+      })
+      .catch((error) => {
+        console.error('Error fetching party info:', { code: error?.code, name: error?.name });
+        if (!cancelled) setPartyInfo(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
     };
-
-    fetchPartyInfo();
   }, [partyId]);
 
-  // Check if user is already a participant
   useEffect(() => {
-    const checkParticipant = async () => {
-      if (!user || !partyId || !partyInfo) return;
-
-      try {
-        const participantRef = doc(db, 'parties', partyId, 'participants', user.uid);
-        const participantDoc = await getDoc(participantRef);
-        
-        if (!participantDoc.exists()) {
-          // User is logged in but not a participant - they can join
-          // This will be handled by the join button
-        }
-      } catch (error) {
-        console.error('Error checking participant:', error);
-      }
+    const controller = timeoutAbortRef.current;
+    return () => {
+      controller.abort();
     };
+  }, []);
 
-    checkParticipant();
-  }, [user, partyId, partyInfo]);
+  // Background seat: starts as soon as the party is known. Never mints an anonymous account for a
+  // party that can't be joined (started, cancelled, or no token in the link). A hung write is
+  // given the same 10s deadline as gift lookup and ready-save; the card then offers a retry.
+  const timeoutOpts = () => ({ signal: timeoutAbortRef.current.signal });
+  const timed = (promise) => withTimeout(promise, REQUEST_TIMEOUT_MS, timeoutOpts());
 
-  const handleJoin = async () => {
-    if (!user) {
-      // Not authenticated - trigger sign in
-      window.sessionStorage.setItem('redirectAfterAuth', `/party/${partyId}${window.location.hash}`);
-      const result = await signInWithGoogle();
-      if (result.success) {
-        // After sign in, the component will re-render and we can join
-        window.location.reload();
-      }
-      return;
-    }
-
-    // User is authenticated - join the party
-    setJoining(true);
-    let partyState = null;
-    try {
-      // Read party state before joining so refused joins map to Copywriter errors
-      // (started / full / link_invalid) instead of a raw Firestore message.
-      const partySnap = await getDoc(doc(db, 'parties', partyId));
-      partyState = partySnap.exists() ? partySnap.data() : null;
-
-      // Join batch: seat + join proof (token) + participantCount + 1. Rules check token, LOBBY, cap 30.
-      // acceptInviteOnParticipantJoin marks a matching pending invite ACCEPTED server-side.
-      await joinPartyWithInviteToken(db, partyId, user.uid, inviteToken, {
+  const writeSeat = async (sessionUser) => {
+    if (!joinWriteRef.current) {
+      const write = joinPartyWithInviteToken(db, partyId, sessionUser.uid, inviteToken, {
         status: 'GOING',
         turnNumber: null,
         ready: false,
         joinedAt: new Date(),
         updatedAt: new Date(),
-        ...seatNameFields(user.displayName, user.email),
+        ...seatNameFields(sessionUser.displayName, sessionUser.email),
       });
-
-      // Track join via share link (most common case for invite landing)
-      trackParticipantJoin(partyId, 'share_link');
-
-      // Reload to show the lobby
-      window.location.reload();
+      joinWriteRef.current = write;
+      write
+        .then(() => {
+          trackParticipantJoin(partyId, 'share_link');
+        })
+        .catch(() => {
+          joinWriteRef.current = null;
+        });
+    }
+    setSeatWriteSlow(false);
+    try {
+      await timed(joinWriteRef.current);
+      setSeatWriteSlow(false);
+      setAlreadySeated(true);
+      // Confirmed seat write: drop #t= from this history entry (G19). Timeouts and errors keep it.
+      stripInviteTokenFromAddressBar();
+      return true;
     } catch (error) {
-      console.error('Error joining party:', error);
-      console.error('Error details:', {
-        code: error.code,
-        message: error.message,
-        partyId,
-        userId: user?.uid
-      });
-      const joinMessage = getJoinErrorMessage({
-        party: partyState,
-        error,
-        hasToken: Boolean(inviteToken),
-      });
-      trackError('join_party_failed', joinMessage, 'PartyInviteLanding');
-      alert(joinMessage);
-      setJoining(false);
+      if (isCancelledError(error)) return false;
+      if (isTimeoutError(error)) {
+        setSeatWriteSlow(true);
+        return false;
+      }
+      throw error;
     }
   };
 
-  if (loading || authLoading) {
+  const retrySeatWrite = async () => {
+    if (!inviteToken) return false;
+    // Refuse a started, ended, or cancelled party on the client before writing (Security, non-blocking).
+    if (partyInfo?.status && partyInfo.status !== 'LOBBY') {
+      const message = getJoinErrorMessage({
+        party: partyInfo,
+        error: null,
+        hasToken: Boolean(inviteToken),
+      });
+      setTerminalMessage(message);
+      return false;
+    }
+    let partyState = partyInfo;
+    try {
+      const sessionUser = joinUserRef.current || (await timed(ensureGuestSession()));
+      joinUserRef.current = sessionUser;
+      setJoinUser(sessionUser);
+      const fresh = await timed(getDoc(doc(db, 'parties', partyId)));
+      partyState = fresh.exists() ? fresh.data() : partyInfo;
+      if (partyState?.status && partyState.status !== 'LOBBY') {
+        const message = getJoinErrorMessage({
+          party: partyState,
+          error: null,
+          hasToken: Boolean(inviteToken),
+        });
+        setTerminalMessage(message);
+        return false;
+      }
+      return await writeSeat(sessionUser);
+    } catch (error) {
+      if (isCancelledError(error)) return false;
+      if (isTimeoutError(error)) {
+        setSeatWriteSlow(true);
+        return false;
+      }
+      console.error('Error joining party:', { code: error?.code, name: error?.name });
+      const message = getJoinErrorMessage({ party: partyState, error, hasToken: Boolean(inviteToken) });
+      trackError('join_party_failed', message, 'PartyInviteLanding');
+      setTerminalMessage(message);
+      return false;
+    }
+  };
+
+  useEffect(() => {
+    if (!partyInfo || authLoading || seatStartedRef.current) return;
+    // Only treat the visitor as not seated when there is no session. Party may
+    // send a signed-in user here on a failed or empty party list; those visitors
+    // must wait for the own-seat read below.
+    // Signed-in visitors still refuse CANCELLED (and any other status that is
+    // not LOBBY, ACTIVE, or ENDED) before any seat write, restoring pre-change
+    // behavior. ACTIVE/ENDED still do the own-seat read first so a seated
+    // player is not shown the late card.
+    if (!user) {
+      const late = lateVisitorState(partyInfo, 'not-seated');
+      if (late) {
+        setLateState(late);
+        return;
+      }
+      const preRefusal =
+        partyInfo.status !== 'LOBBY' || !inviteToken
+          ? getJoinErrorMessage({ party: partyInfo, error: null, hasToken: Boolean(inviteToken) })
+          : null;
+      if (preRefusal) {
+        setTerminalMessage(preRefusal);
+        return;
+      }
+    } else if (
+      partyInfo.status !== 'LOBBY'
+      && partyInfo.status !== 'ACTIVE'
+      && partyInfo.status !== 'ENDED'
+    ) {
+      setTerminalMessage(
+        getJoinErrorMessage({ party: partyInfo, error: null, hasToken: Boolean(inviteToken) }),
+      );
+      return;
+    }
+    seatStartedRef.current = true;
+    (async () => {
+      let partyState = partyInfo;
+      let confirmedNotSeated = false;
+      try {
+        const sessionUser = await timed(ensureGuestSession());
+        joinUserRef.current = sessionUser;
+        setJoinUser(sessionUser);
+        const seat = await timed(getDoc(doc(db, 'parties', partyId, 'participants', sessionUser.uid)));
+        if (seat.exists()) {
+          // Leave the skeleton even if the parent's party list never arrives.
+          setAlreadySeated(true);
+          setSeatCheckDone(true);
+          // Confirmed seat: drop #t= from this history entry (G19).
+          stripInviteTokenFromAddressBar();
+          return;
+        }
+        confirmedNotSeated = true;
+        const lateForSignedIn = lateVisitorState(partyInfo, 'not-seated');
+        if (lateForSignedIn) {
+          setLateState(lateForSignedIn);
+          setSeatCheckDone(true);
+          return;
+        }
+        setSeatCheckDone(true);
+        if (!inviteToken) {
+          setTerminalMessage(getJoinErrorMessage({ party: partyInfo, error: null, hasToken: false }));
+          return;
+        }
+        const fresh = await timed(getDoc(doc(db, 'parties', partyId)));
+        partyState = fresh.exists() ? fresh.data() : null;
+        await writeSeat(sessionUser);
+      } catch (error) {
+        if (isCancelledError(error)) {
+          setSeatCheckDone(true);
+          return;
+        }
+        if (isTimeoutError(error)) {
+          setSeatWriteSlow(true);
+          setSeatCheckDone(true);
+          return;
+        }
+        console.error('Error joining party:', { code: error?.code, name: error?.name });
+        let latestParty = partyState;
+        try {
+          const freshAfterError = await getDoc(doc(db, 'parties', partyId));
+          if (freshAfterError.exists()) {
+            const data = freshAfterError.data();
+            latestParty = {
+              title: data.title || partyInfo.title,
+              hostFirstName: hostFirstNameFromParty(data),
+              status: data.status,
+              participantCount: data.participantCount,
+            };
+            setPartyInfo((prev) => ({ ...(prev || {}), ...latestParty }));
+          }
+        } catch {
+          // Keep the party snapshot we already have.
+        }
+        // A failed seat check is not proof the visitor has no seat. Keep the
+        // real error screen on ACTIVE/ENDED instead of the late card.
+        if (confirmedNotSeated) {
+          const lateAfter = lateVisitorState(latestParty, 'not-seated');
+          if (lateAfter) {
+            setLateState(lateAfter);
+            setSeatCheckDone(true);
+            return;
+          }
+        }
+        const message = getJoinErrorMessage({
+          party: confirmedNotSeated ? latestParty : null,
+          error,
+          hasToken: Boolean(inviteToken),
+        });
+        trackError('join_party_failed', message, 'PartyInviteLanding');
+        setTerminalMessage(message);
+        setSeatCheckDone(true);
+      }
+    })();
+  }, [partyInfo, authLoading, user, inviteToken, partyId, ensureGuestSession]);
+
+  const waitingOnSeatCheck = hadSessionAtStart && !seatCheckDone && !terminalMessage && !lateState;
+  if (loading || authLoading || (partyInfo && waitingOnSeatCheck)) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mb-4"></div>
-          <p className="text-white">Loading invitation...</p>
+      <div className={`${PAGE_BG} p-6 pt-24`}>
+        <div
+          data-testid="guest-card-skeleton"
+          aria-busy="true"
+          className="w-full max-w-md mx-auto bg-slate-900/80 border border-white/10 rounded-2xl p-4 sm:p-6 space-y-4 animate-pulse"
+        >
+          <div className="h-7 w-3/4 rounded bg-slate-800" />
+          <div className="h-4 w-full rounded bg-slate-800" />
+          <div className="grid grid-cols-3 gap-2">
+            <div className="h-11 rounded-lg bg-slate-800" />
+            <div className="h-11 rounded-lg bg-slate-800" />
+            <div className="h-11 rounded-lg bg-slate-800" />
+          </div>
+          <div className="h-11 rounded bg-slate-800" />
+          <div className="h-11 rounded bg-slate-800" />
+          <div className="h-12 rounded bg-slate-800" />
         </div>
       </div>
     );
@@ -163,15 +320,17 @@ export function PartyInviteLanding({ partyId }) {
 
   if (!partyInfo) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black py-12">
+      <div className={`${PAGE_BG} flex items-center justify-center px-4 py-12`}>
         <div className="max-w-md w-full bg-slate-900/60 backdrop-blur-xl border border-white/10 shadow-2xl rounded-2xl p-8 text-center">
           <h2 className="text-2xl font-bold mb-4 text-white">Party Not Found</h2>
           <p className="text-slate-400 mb-6">
             This party isn&apos;t available. It may have been canceled or the link may be wrong.
           </p>
           <Button
-            onClick={() => window.location.href = '/'}
-            className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white"
+            onClick={() => {
+              window.location.href = '/';
+            }}
+            className="w-full min-h-11 bg-gradient-to-r from-indigo-600 to-purple-600 text-white"
           >
             Go Home
           </Button>
@@ -180,83 +339,34 @@ export function PartyInviteLanding({ partyId }) {
     );
   }
 
-  const formatDate = (date) => {
-    if (!date) return 'Date TBD';
-    if (date instanceof Date) {
-      return date.toLocaleDateString('en-US', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      });
-    }
-    return 'Date TBD';
-  };
+  if (lateState) {
+    return (
+      <LateInvitePage>
+        <LateInviteCard
+          state={lateState}
+          partyTitle={partyInfo.title}
+          hostFirstName={partyInfo.hostFirstName}
+          showSignIn={shouldShowLateSignIn(user)}
+        />
+      </LateInvitePage>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black relative">
-      <Snowflakes variant="landing" />
-
-      <div className="flex items-center justify-center py-12 px-4 relative z-10">
-        <div className="max-w-md w-full">
-        {/* Ticket Stub Card */}
-        <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 shadow-2xl rounded-2xl p-8 md:p-10 text-center relative overflow-hidden">
-          {/* Decorative gradient overlay */}
-          <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-purple-500/20 to-transparent pointer-events-none"></div>
-          
-          {/* Gift Icon */}
-          <div className="relative z-10 mb-6">
-            <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-purple-500/30 to-indigo-500/30 border border-purple-400/50 shadow-lg shadow-purple-500/20">
-              <GiftIcon className="w-10 h-10 text-purple-300" />
-            </div>
-          </div>
-
-          {/* Header */}
-          <h1 className="text-3xl md:text-4xl font-bold mb-2 text-white relative z-10">
-            You&apos;re invited
-          </h1>
-          <p className="text-slate-400 mb-8 relative z-10">
-            Join this virtual White Elephant gift exchange.
-          </p>
-
-          {/* Party Details */}
-          <div className="space-y-4 mb-8 relative z-10">
-            <div className="bg-slate-950/50 border border-white/5 rounded-lg p-4">
-              <p className="text-sm text-slate-400 mb-1">Host</p>
-              <p className="text-lg font-semibold text-white">
-                {hostName || INVITE_LANDING_HOST_NAME_NOT_SHARED}
-              </p>
-            </div>
-            
-            <div className="bg-slate-950/50 border border-white/5 rounded-lg p-4">
-              <p className="text-sm text-slate-400 mb-1">Party</p>
-              <p className="text-lg font-semibold text-white">{partyInfo.title}</p>
-            </div>
-            
-            <div className="bg-slate-950/50 border border-white/5 rounded-lg p-4">
-              <p className="text-sm text-slate-400 mb-1">Date</p>
-              <p className="text-lg font-semibold text-white">{formatDate(partyInfo.date)}</p>
-            </div>
-          </div>
-
-          {/* Action Button */}
-          <Button
-            onClick={handleJoin}
-            disabled={joining}
-            className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-purple-500/20 hover:scale-[1.02] transition-transform disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 text-lg py-3 font-semibold"
-          >
-            {joining ? 'Joining...' : 'Join this party'}
-          </Button>
-
-          {!user && (
-            <p className="text-xs text-slate-500 mt-4 relative z-10">
-              You&apos;ll sign in with Google, then you&apos;re in.
-            </p>
-          )}
-        </div>
-        </div>
-      </div>
+    <div className={`${PAGE_BG} p-6 pt-24`}>
+      <GuestJoinCard
+        partyId={partyId}
+        partyTitle={partyInfo.title}
+        hostFirstName={partyInfo.hostFirstName}
+        user={user || joinUser}
+        participant={null}
+        gift={null}
+        seated={alreadySeated}
+        terminalMessage={terminalMessage}
+        seatWriteSlow={seatWriteSlow}
+        onRetrySeat={retrySeatWrite}
+        onBusyChange={onJoinBusyChange}
+      />
     </div>
   );
 }
-

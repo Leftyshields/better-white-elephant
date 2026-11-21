@@ -9,6 +9,7 @@ import dotenv from 'dotenv';
 import gameRoutes from './routes/game.js';
 import userRoutes from './routes/users.js';
 import testRoutes from './routes/test.js';
+import partyCodeRoutes from './routes/party-code.js';
 import redisClient from './utils/redis.js';
 import { auth, db } from './config/firebase-admin.js';
 import admin from 'firebase-admin';
@@ -16,6 +17,7 @@ import { checkAndMakeBotMove } from './utils/bot-utils.js';
 import { handlePickGift } from './handlers/pick-gift.js';
 import { finalizeEndedGame } from './utils/finalize-ended-game.js';
 import { incrementPartyReactionCount } from './utils/party-reaction-count.mjs';
+import { joinPartyMembershipRefusal } from './lib/join-party-refusal.mjs';
 import { clientSafeSocketGameErrorMessage } from './utils/socket-error-copy.js';
 import { isPartyHostCaller } from './lib/host-auth.js';
 
@@ -97,7 +99,8 @@ async function verifyPartyMembership(partyId, userId) {
     return participantDoc.exists;
   } catch (error) {
     console.error('Error verifying party membership:', error);
-    return false;
+    // null means the read itself failed (distinct from a confirmed missing seat).
+    return null;
   }
 }
 
@@ -172,6 +175,7 @@ app.get('/health', (req, res) => {
 app.use('/api/game', gameRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/test', testRoutes);
+app.use('/api/party-code', partyCodeRoutes);
 
 // Socket.io authentication and connection handling
 io.use(async (socket, next) => {
@@ -224,8 +228,9 @@ io.on('connection', (socket) => {
     
     // Verify user is a participant
     const isParticipant = await verifyPartyMembership(partyId, socket.userId);
-    if (!isParticipant) {
-      socket.emit('error', { message: 'You are not a participant in this party' });
+    const joinRefusal = joinPartyMembershipRefusal(isParticipant);
+    if (joinRefusal) {
+      socket.emit('error', joinRefusal);
       return;
     }
     
@@ -555,19 +560,22 @@ io.on('connection', (socket) => {
           isBot: true,
         });
 
-        // Create participant document
+        // Create fake gift for this bot
+        const giftData = fakeGifts[i % fakeGifts.length];
+        const giftRef = db.collection('gifts').doc();
+
+        // Create participant document (hasGift/giftId link the seat to its gift for the lobby pot count)
         const participantRef = db.collection('parties').doc(partyId).collection('participants').doc(botId);
         batch.set(participantRef, {
           status: 'GOING',
           turnNumber: null,
           ready: true, // Bots are auto-ready
+          hasGift: true,
+          giftId: giftRef.id,
           joinedAt: new Date(),
           updatedAt: new Date(),
         });
 
-        // Create fake gift for this bot
-        const giftData = fakeGifts[i % fakeGifts.length];
-        const giftRef = db.collection('gifts').doc();
         batch.set(giftRef, {
           partyId,
           submitterId: botId,

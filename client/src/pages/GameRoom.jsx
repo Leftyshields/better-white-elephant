@@ -21,6 +21,17 @@ import { apiRequest } from '../utils/api.js';
 import { isPlayerActionValidationToast } from '../utils/socketGameErrorToast.js';
 import { GAME_USER_COPY } from '../utils/gameUserCopy.js';
 import { areAllGiftsFrozenWithNoLegalAction } from '../utils/allGiftsFrozen.js';
+import {
+  effectiveGameRoomBatchStatus,
+  gameRoomNameStates,
+  lookupNameState,
+  participantNeedsBatchName,
+  rosterDisplayNames,
+} from '../utils/seatDisplayName.js';
+import { PlayerName } from '../components/PlayerName.jsx';
+import { LateInviteCard, LateInvitePage, shouldShowLateSignIn } from '../components/LateInviteCard.jsx';
+import { hostFirstNameFromParty } from '../components/PartyInviteLanding.jsx';
+import { lateVisitorState } from '../utils/lateInvite.js';
 
 /**
  * One shared toast region above the reaction bar (BUG-19 / batch 1 item 1 D). It never sits in the
@@ -74,10 +85,12 @@ function GameToast({ message, onDismiss }) {
 
 export function GameRoom({ partyId }) {
   const { user } = useAuth();
-  const { party } = useParty(partyId);
-  const { state, actions, derived, socket, emitReaction, dispatch } = useGameEngine(partyId);
+  const { party, participants: liveParticipants } = useParty(partyId);
+  const { state, actions, derived, socket, emitReaction, dispatch, joinDeniedAsNonParticipant } = useGameEngine(partyId);
   const { playTurnNotification, playSteal, playUnwrap } = useGameSounds();
-  const [userNames, setUserNames] = useState({});
+  const [batchNames, setBatchNames] = useState({});
+  const [batchStatus, setBatchStatus] = useState('idle');
+  const [batchSettledKey, setBatchSettledKey] = useState('');
   const [revealingGiftId, setRevealingGiftId] = useState(null);
   const [prizeImageError, setPrizeImageError] = useState(false);
   const prevIsMyTurnRef = useRef(false);
@@ -224,38 +237,91 @@ export function GameRoom({ partyId }) {
     };
   }, [socket, playSteal, playUnwrap]);
 
-  // Fetch user names for display
+  // Seat names first; /api/users/batch is only a fallback for seats without a valid
+  // displayName, keyed on the sorted participant id list (not on state.gifts).
+  const rosterParticipants = useMemo(() => {
+    const liveById = new Map((liveParticipants || []).map((p) => [p.id, p]));
+    const ordered = (state.participants || []).map((p) => ({
+      ...p,
+      ...(liveById.get(p.id) || {}),
+    }));
+    return ordered.length > 0 ? ordered : (liveParticipants || []);
+  }, [liveParticipants, state.participants]);
+
+  const participantIdsKey = rosterParticipants
+    .map((p) => p.id)
+    .filter(Boolean)
+    .slice()
+    .sort()
+    .join(',');
+
+  const needingNames = useMemo(
+    () => rosterParticipants.filter(participantNeedsBatchName),
+    [rosterParticipants],
+  );
+
+  // A previous empty roster (typical first frame after refresh/rejoin) must not
+  // count as a settled lookup. Otherwise nameless seats flash "Player".
+  const effectiveBatchStatus = effectiveGameRoomBatchStatus({
+    participantIdsKey,
+    settledKey: batchSettledKey,
+    batchStatus,
+    needingCount: needingNames.length,
+    participantCount: rosterParticipants.length,
+  });
+
   useEffect(() => {
-    const fetchUserNames = async () => {
-      if (!state.participants || state.participants.length === 0) {
-        setUserNames({});
-        return;
+    if (!partyId) return undefined;
+    if (needingNames.length === 0) {
+      // Leave an empty roster idle so arriving seats stay in the loading state
+      // until their batch (or seat names) actually settles.
+      if (rosterParticipants.length > 0) {
+        setBatchStatus('success');
+        setBatchSettledKey(participantIdsKey);
       }
+      return undefined;
+    }
 
+    let cancelled = false;
+    setBatchStatus('pending');
+    (async () => {
       try {
-        const allUserIds = [
-          ...state.participants.map(p => p.id),
-          ...Object.values(state.gifts).map(g => g.ownerId).filter(Boolean),
-        ].filter(Boolean);
-
-        if (allUserIds.length === 0) return;
-
         const response = await apiRequest('/api/users/batch', {
           method: 'POST',
           body: JSON.stringify({
             partyId,
-            userIds: [...new Set(allUserIds)],
+            userIds: [...new Set(needingNames.map((p) => p.id))],
           }),
         });
-        
-        if (response.users) setUserNames(response.users);
+        if (cancelled) return;
+        if (response.users) setBatchNames(response.users);
+        setBatchStatus('success');
+        setBatchSettledKey(participantIdsKey);
       } catch (error) {
         console.error('Error fetching user names:', error);
+        if (!cancelled) {
+          setBatchStatus('failed');
+          setBatchSettledKey(participantIdsKey);
+        }
       }
-    };
+    })();
 
-    fetchUserNames();
-  }, [partyId, state.participants, state.gifts]);
+    return () => {
+      cancelled = true;
+    };
+    // participantIdsKey is the sorted participant id list; names come from live seats.
+  }, [partyId, participantIdsKey, rosterParticipants, needingNames]);
+
+  const names = rosterDisplayNames(rosterParticipants, batchNames);
+  const nameStates = useMemo(
+    () => gameRoomNameStates(
+      rosterParticipants,
+      batchNames,
+      effectiveBatchStatus,
+      GAME_USER_COPY.unnamedPlayer,
+    ),
+    [rosterParticipants, batchNames, effectiveBatchStatus],
+  );
 
   // Calculate rounds remaining
   const calculateRoundsRemaining = () => {
@@ -311,10 +377,24 @@ export function GameRoom({ partyId }) {
   const currentPlayerId = state.activePlayerId;
   const allGiftsFrozen = areAllGiftsFrozenWithNoLegalAction(state.gifts);
 
-  const getCurrentPlayerName = () => {
-    if (currentPlayerId === user?.uid) return 'Your Turn!';
-    return userNames[currentPlayerId] || `Player ${currentPlayerId?.slice(0, 8)}`;
-  };
+  const currentPlayerNameState = currentPlayerId
+    ? lookupNameState(nameStates, currentPlayerId, effectiveBatchStatus, GAME_USER_COPY.unnamedPlayer)
+    : null;
+
+  // Socket confirmed this session has no seat. Show the late card at once (no 5s timeout, no toast).
+  if (joinDeniedAsNonParticipant) {
+    const late = lateVisitorState(party, 'not-seated') || 'started';
+    return (
+      <LateInvitePage>
+        <LateInviteCard
+          state={late}
+          partyTitle={party?.title || 'White Elephant Party'}
+          hostFirstName={hostFirstNameFromParty(party)}
+          showSignIn={shouldShowLateSignIn(user)}
+        />
+      </LateInvitePage>
+    );
+  }
 
   // Loading state
   if (state.status === 'LOBBY' || !state.ui.isSocketConnected) {
@@ -359,7 +439,14 @@ export function GameRoom({ partyId }) {
     const getWinnerName = (ownerId) => {
       if (!ownerId) return 'No Winner';
       if (ownerId === user?.uid) return 'You';
-      return userNames[ownerId] || `Player ${ownerId?.slice(0, 8)}`;
+      const resolved = lookupNameState(
+        nameStates,
+        ownerId,
+        effectiveBatchStatus,
+        GAME_USER_COPY.unnamedPlayer,
+      );
+      if (resolved.status === 'loading') return null;
+      return resolved.name || GAME_USER_COPY.unnamedPlayer;
     };
 
     // Get all gifts as array
@@ -488,7 +575,7 @@ export function GameRoom({ partyId }) {
                   winnerName={getWinnerName(myObligation.winnerId || (state.gameState?.unwrappedGifts 
                     ? new Map(Array.isArray(state.gameState.unwrappedGifts) ? state.gameState.unwrappedGifts : []).get(myObligation.id)?.ownerId
                     : null))}
-                  userNames={userNames}
+                  nameStates={nameStates}
                   isSelfWin={isSelfWin}
                 />
               </div>
@@ -606,31 +693,42 @@ export function GameRoom({ partyId }) {
                       </div>
                     )}
                   </>
-                ) : (
-                  <p className="text-xl text-slate-300 animate-pulse whitespace-nowrap truncate">
-                    Waiting for <span className="text-white font-semibold truncate">{getCurrentPlayerName()}</span>...
+                ) : currentPlayerId ? (
+                  <p className="text-xl text-slate-300 animate-pulse flex items-center justify-center gap-1 min-w-0">
+                    <span className="shrink-0">Waiting for</span>
+                    <PlayerName
+                      nameState={currentPlayerNameState}
+                      id={currentPlayerId}
+                      showBotTag
+                      className="text-white font-semibold"
+                    />
+                    <span className="shrink-0">...</span>
                   </p>
-                )}
+                ) : null}
               </div>
 
               {/* Right Section: Player Queue */}
               {state.participants.length > 0 && (
                 <div className="flex overflow-x-auto gap-2 py-4 max-w-full md:max-w-none [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] [mask-image:linear-gradient(to_right,transparent_0px,black_40px,black_calc(100%_-_40px),transparent_100%)]">
                   <div className="flex gap-2 px-12 items-center">
-                    {state.participants.map((participant, index) => {
+                    {rosterParticipants.map((participant, index) => {
                       const isCurrent = participant.id === state.activePlayerId;
-                      const playerName = participant.id === user?.uid 
-                        ? 'You' 
-                        : (userNames[participant.id] || `Player ${participant.id.slice(0, 8)}`);
                       const participantTurnIndex = state.turnQueue?.indexOf(participant.id) ?? index;
                       const isPast = isBoomerangPhaseForUi 
                         ? participantTurnIndex > state.currentTurnIndex
                         : participantTurnIndex < state.currentTurnIndex;
+                      const chipNameState = lookupNameState(
+                        nameStates,
+                        participant.id,
+                        effectiveBatchStatus,
+                        GAME_USER_COPY.unnamedPlayer,
+                      );
                       
                       return (
                         <div
                           key={participant.id}
-                          className={`px-3 py-2 rounded-lg text-sm font-medium transition-all flex-shrink-0 whitespace-nowrap ${
+                          title={chipNameState.status === 'ready' ? (names[participant.id] || chipNameState.name) : undefined}
+                          className={`px-3 py-2 rounded-lg text-sm font-medium transition-all flex-shrink-0 max-w-[10rem] ${
                             isCurrent
                               ? 'bg-indigo-600 text-white border border-indigo-400 shadow-[0_0_20px_rgba(99,102,241,0.4)] scale-125'
                               : isPast
@@ -638,9 +736,16 @@ export function GameRoom({ partyId }) {
                               : 'bg-slate-800/50 border border-white/10 text-slate-400'
                           }`}
                         >
-                          <span className="font-bold mr-1">{index + 1}.</span>
-                          {playerName}
-                          {isCurrent && <span className="ml-2">👈</span>}
+                          <span className="inline-flex items-center gap-1 min-w-0">
+                            <span className="font-bold shrink-0">{index + 1}.</span>
+                            <PlayerName
+                              nameState={chipNameState}
+                              id={participant.id}
+                              showBotTag
+                              className="min-w-0"
+                            />
+                            {isCurrent && <span className="ml-1 shrink-0">👈</span>}
+                          </span>
                         </div>
                       );
                     })}
@@ -673,7 +778,7 @@ export function GameRoom({ partyId }) {
               actions={actions}
               currentPlayerId={currentPlayerId}
               userId={user?.uid}
-              userNames={userNames}
+              nameStates={nameStates}
               revealingGiftId={revealingGiftId}
             />
           </div>
@@ -685,7 +790,7 @@ export function GameRoom({ partyId }) {
           <div className="lg:col-span-1 lg:border-l border-white/10 lg:h-full flex flex-col bg-slate-900/20 lg:overflow-y-auto px-4 lg:px-0 pb-[calc(96px+env(safe-area-inset-bottom))]">
             <GamePlayByPlay
               state={state}
-              userNames={userNames}
+              nameStates={nameStates}
               partyId={partyId}
             />
           </div>

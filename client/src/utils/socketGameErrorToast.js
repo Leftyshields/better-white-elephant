@@ -55,6 +55,17 @@ export function planSocketGameErrorHandling({
   nowMs = Date.now(),
   dedupeMs = DEFAULT_SOCKET_TOAST_DEDUPE_MS,
 }) {
+  if (code === 'NOT_PARTICIPANT') {
+    return {
+      safePlayerCopy: message || 'NOT_PARTICIPANT',
+      showToast: false,
+      toastMessage: null,
+      consoleLevel: 'log',
+      trackAnalytics: true,
+      rollbackOptimistic: false,
+    };
+  }
+
   const safePlayerCopy = formatSocketErrorForToast(message, code);
   const dedupe = shouldDedupeSocketToast(
     safePlayerCopy,
