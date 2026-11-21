@@ -32,6 +32,7 @@ import { seatNameFields } from '../utils/seatDisplayName.js';
 import { usePartyModal } from '../contexts/PartyModalContext.jsx';
 import { JoinPartyBox } from '../components/JoinPartyBox.jsx';
 import { userSignedInWithGoogle } from '../utils/partyInviteCopy.js';
+import { takeRedirectAfterAuth } from '../utils/redirectAfterAuth.js';
 import { Footer } from '../components/Footer.jsx';
 import { SEO } from '../components/SEO.jsx';
 import { Snowflakes } from '../components/Snowflakes.jsx';
@@ -84,10 +85,7 @@ export function Home() {
   // Check for redirect after authentication
   useEffect(() => {
     if (user) {
-      const redirectPath = window.sessionStorage.getItem('redirectAfterAuth');
-      if (redirectPath) {
-        window.sessionStorage.removeItem('redirectAfterAuth');
-        navigate(redirectPath);
+      if (takeRedirectAfterAuth(window.sessionStorage, navigate)) {
         return;
       }
       if (window.sessionStorage.getItem(OPEN_CREATE_PARTY_AFTER_AUTH_KEY)) {

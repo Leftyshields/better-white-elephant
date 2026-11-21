@@ -9,6 +9,7 @@ import {
   LATE_INVITE_COPY,
   formatLatePartyLine,
 } from '../utils/lateInvite.js';
+import { redirectAfterAuthFromLocation } from '../utils/redirectAfterAuth.js';
 
 const FOCUS_RING =
   'focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950';
@@ -45,10 +46,10 @@ export function LateInviteCard({
 
   async function handleSignIn() {
     try {
-      window.sessionStorage.setItem(
-        'redirectAfterAuth',
-        `${window.location.pathname}${window.location.search}${window.location.hash}`,
-      );
+      const redirectTo = redirectAfterAuthFromLocation(window.location);
+      if (redirectTo) {
+        window.sessionStorage.setItem('redirectAfterAuth', redirectTo);
+      }
     } catch {
       // sessionStorage can throw in a blocked context; sign-in should still run.
     }
