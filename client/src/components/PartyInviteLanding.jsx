@@ -9,7 +9,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '../hooks/useAuth.js';
 import { Button } from './ui/Button.jsx';
 import { auth, db } from '../utils/firebase.js';
-import { joinPartyWithInviteToken, readInviteTokenFromHash } from '../utils/partyInvite.js';
+import { joinPartyWithInviteToken, readInviteTokenFromHash, stripInviteTokenFromAddressBar } from '../utils/partyInvite.js';
 import { REQUEST_TIMEOUT_MS, isCancelledError, isTimeoutError, withTimeout } from '../utils/withTimeout.js';
 import { getJoinErrorMessage } from '../utils/partyInviteCopy.js';
 import { seatNameFields } from '../utils/seatDisplayName.js';
@@ -123,6 +123,8 @@ export function PartyInviteLanding({ partyId }) {
     try {
       await timed(joinWriteRef.current);
       setSeatWriteSlow(false);
+      // Confirmed seat write: drop #t= from this history entry (G19). Timeouts and errors keep it.
+      stripInviteTokenFromAddressBar();
       return true;
     } catch (error) {
       if (isCancelledError(error)) return false;
@@ -223,6 +225,8 @@ export function PartyInviteLanding({ partyId }) {
           // Leave the skeleton even if the parent's party list never arrives.
           setAlreadySeated(true);
           setSeatCheckDone(true);
+          // Confirmed seat: drop #t= from this history entry (G19).
+          stripInviteTokenFromAddressBar();
           return;
         }
         confirmedNotSeated = true;
