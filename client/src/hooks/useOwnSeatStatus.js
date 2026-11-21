@@ -20,7 +20,8 @@ import { db } from '../utils/firebase.js';
 /**
  * @param {string | null} partyId
  * @param {string | null} uid
- * @returns {'checking'|'seated'|'not-seated'|'error'}
+ * @returns {'checking'|'seated'|'seated-pending'|'not-seated'|'error'} 'seated-pending' means
+ *   the seat was found only with an unsent local write, so the server has not confirmed it yet.
  */
 export function useOwnSeatStatus(partyId, uid) {
   const requestPartyId = partyId || null;
@@ -45,7 +46,9 @@ export function useOwnSeatStatus(partyId, uid) {
           setResult({
             partyId: requestPartyId,
             uid: requestUid,
-            status: snap.exists() ? 'seated' : 'not-seated',
+            status: !snap.exists()
+              ? 'not-seated'
+              : snap.metadata?.hasPendingWrites === true ? 'seated-pending' : 'seated',
           });
         }
       })

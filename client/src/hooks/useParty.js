@@ -69,17 +69,26 @@ export function useParty(partyId, authUid = null) {
   useEffect(() => {
     if (!partyId) return undefined;
 
-    // Subscribe to participants
+    // Subscribe to participants. includeMetadataChanges: without it, a seat the player writes
+    // themselves only ever arrives as the local pending snapshot; the server-confirmed one
+    // (hasPendingWrites false) never comes. The join card and Party.jsx wait for that one.
+    let firstParticipantsSnapshot = true;
     const participantsUnsubscribe = onSnapshot(
       query(
         collection(db, 'parties', partyId, 'participants')
       ),
+      { includeMetadataChanges: true },
       (snapshot) => {
+        // Skip snapshots where no seat changed at all (only the cache/online flag flipped),
+        // so consumers do not re-render or refetch names for nothing.
+        if (!firstParticipantsSnapshot && snapshot.docChanges({ includeMetadataChanges: true }).length === 0) return;
+        firstParticipantsSnapshot = false;
         const participantsList = snapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
+          // Needed so the join card does not treat a local pending ready write as confirmed.
+          hasPendingWrites: doc.metadata?.hasPendingWrites === true,
         }));
-        console.log(`📊 Participants updated: ${participantsList.length} total`, participantsList.map(p => ({ id: p.id, status: p.status, ready: p.ready })));
         setParticipants(participantsList);
       },
       (error) => {

@@ -4,8 +4,9 @@
  * one-screen card is already on screen. Refusals show inline Copywriter strings.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { PartyInviteLanding } from '../../components/PartyInviteLanding.jsx';
+import { clearGuestJoinDrafts } from '../../components/GuestJoinCard.jsx';
 import {
   JOIN_ERROR_CANCELLED,
   JOIN_ERROR_GENERIC,
@@ -15,6 +16,7 @@ import {
 } from '../../utils/partyInviteCopy.js';
 import { GUEST_JOIN_COPY } from '../../utils/guestJoinCopy.js';
 import { LATE_INVITE_COPY, formatLatePartyLine } from '../../utils/lateInvite.js';
+import { REQUEST_TIMEOUT_MS } from '../../utils/withTimeout.js';
 
 const PARTY_ID = 'invite-join-party';
 const TOKEN = 'feedfacefeedfacefeedfacefeedface';
@@ -22,6 +24,8 @@ const TOKEN = 'feedfacefeedfacefeedfacefeedface';
 const useAuthMock = vi.fn();
 const joinMock = vi.fn();
 const getDocMock = vi.fn();
+const addDocMock = vi.fn();
+const updateDocMock = vi.fn();
 const ensureGuestSession = vi.fn();
 const authState = vi.hoisted(() => ({ currentUser: null }));
 
@@ -43,10 +47,14 @@ vi.mock('../../utils/firebase.js', () => ({
 vi.mock('firebase/firestore', () => ({
   doc: vi.fn((_db, ...path) => ({ path: path.join('/') })),
   getDoc: (...args) => getDocMock(...args),
-  addDoc: vi.fn(),
-  collection: vi.fn(),
+  addDoc: (...args) => addDocMock(...args),
+  collection: vi.fn((_db, name) => ({ path: name })),
+  getDocs: vi.fn(() => Promise.resolve({ empty: true, docs: [] })),
+  query: vi.fn(),
+  where: vi.fn(),
+  limit: vi.fn(),
   setDoc: vi.fn(),
-  updateDoc: vi.fn(),
+  updateDoc: (...args) => updateDocMock(...args),
 }));
 
 vi.mock('../../utils/partyInvite.js', async (importOriginal) => ({
@@ -77,6 +85,8 @@ describe('PartyInviteLanding join', () => {
   beforeEach(() => {
     joinMock.mockReset();
     getDocMock.mockReset();
+    addDocMock.mockReset().mockResolvedValue({ id: 'g1' });
+    updateDocMock.mockReset().mockResolvedValue(undefined);
     ensureGuestSession.mockReset();
     ensureGuestSession.mockResolvedValue({ uid: 'anon-1', isAnonymous: true, displayName: null, email: null });
     window.sessionStorage.clear();
@@ -87,7 +97,9 @@ describe('PartyInviteLanding join', () => {
   });
 
   afterEach(() => {
+    clearGuestJoinDrafts();
     window.history.replaceState(null, '', '/');
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -305,5 +317,137 @@ describe('PartyInviteLanding join', () => {
     expect(seatReads).toEqual([]);
     expect(screen.queryByTestId('late-invite-card')).toBeNull();
     expect(window.alert).not.toHaveBeenCalled();
+  });
+
+  it('keeps the join card after a hung seat write, then offers a retry without a second write while the first is in flight', async () => {
+    vi.useFakeTimers();
+    window.history.replaceState(null, '', `/party/${PARTY_ID}#t=${TOKEN}`);
+    joinMock.mockReturnValue(new Promise(() => {}));
+
+    render(<PartyInviteLanding partyId={PARTY_ID} />);
+    await act(async () => {
+      for (let i = 0; i < 20 && joinMock.mock.calls.length === 0; i += 1) {
+        await Promise.resolve();
+      }
+      // Let writeSeat arm withTimeout after joinPartyWithInviteToken returns.
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(joinMock).toHaveBeenCalledTimes(1);
+
+    const name = screen.getByLabelText(GUEST_JOIN_COPY.nameLabel);
+    fireEvent.change(name, { target: { value: 'Sam Lee' } });
+    fireEvent.click(screen.getByRole('button', { name: GUEST_JOIN_COPY.giftManualToggle }));
+    fireEvent.change(screen.getByLabelText(GUEST_JOIN_COPY.giftUrlLabel), { target: { value: 'https://example.com/socks' } });
+    fireEvent.change(screen.getByLabelText(GUEST_JOIN_COPY.giftTitleLabel), { target: { value: 'Wool socks' } });
+    expect(screen.getByText(GUEST_JOIN_COPY.readyLockedSeat)).toBeInTheDocument();
+    const ready = screen.getByRole('button', { name: GUEST_JOIN_COPY.readyCta });
+    expect(ready).toBeDisabled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
+    });
+
+    expect(screen.getByText(GUEST_JOIN_COPY.readySaveSlow)).toBeInTheDocument();
+    expect(screen.queryByText(JOIN_ERROR_GENERIC)).toBeNull();
+    expect(ready).toBeEnabled();
+    fireEvent.click(ready);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(joinMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses a seat retry client-side when the party is no longer in the lobby', async () => {
+    vi.useFakeTimers();
+    window.history.replaceState(null, '', `/party/${PARTY_ID}#t=${TOKEN}`);
+    const lobby = { title: 'Swap', adminId: 'host-uid-1', hostDisplayName: 'Dana Host', status: 'LOBBY', participantCount: 2 };
+    mockPartyReads(lobby);
+    joinMock.mockReturnValue(new Promise(() => {}));
+
+    render(<PartyInviteLanding partyId={PARTY_ID} />);
+    await act(async () => {
+      for (let i = 0; i < 20 && joinMock.mock.calls.length === 0; i += 1) {
+        await Promise.resolve();
+      }
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(joinMock).toHaveBeenCalledTimes(1);
+
+    fireEvent.change(screen.getByLabelText(GUEST_JOIN_COPY.nameLabel), { target: { value: 'Sam Lee' } });
+    fireEvent.click(screen.getByRole('button', { name: GUEST_JOIN_COPY.giftManualToggle }));
+    fireEvent.change(screen.getByLabelText(GUEST_JOIN_COPY.giftUrlLabel), { target: { value: 'https://example.com/socks' } });
+    fireEvent.change(screen.getByLabelText(GUEST_JOIN_COPY.giftTitleLabel), { target: { value: 'Wool socks' } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
+    });
+    mockPartyReads({ ...lobby, status: 'ACTIVE' });
+    fireEvent.click(screen.getByRole('button', { name: GUEST_JOIN_COPY.readyCta }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(joinMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(JOIN_ERROR_STARTED)).toBeInTheDocument();
+  });
+
+  it('times out a hung pre-seat session so Saving your spot does not sit forever', async () => {
+    vi.useFakeTimers();
+    window.history.replaceState(null, '', `/party/${PARTY_ID}#t=${TOKEN}`);
+    ensureGuestSession.mockReturnValue(new Promise(() => {}));
+    render(<PartyInviteLanding partyId={PARTY_ID} />);
+    await act(async () => {
+      for (let i = 0; i < 20; i += 1) {
+        await Promise.resolve();
+      }
+    });
+    fireEvent.change(screen.getByLabelText(GUEST_JOIN_COPY.nameLabel), { target: { value: 'Sam Lee' } });
+    fireEvent.click(screen.getByRole('button', { name: GUEST_JOIN_COPY.giftManualToggle }));
+    fireEvent.change(screen.getByLabelText(GUEST_JOIN_COPY.giftUrlLabel), { target: { value: 'https://example.com/socks' } });
+    fireEvent.change(screen.getByLabelText(GUEST_JOIN_COPY.giftTitleLabel), { target: { value: 'Wool socks' } });
+    expect(screen.getByText(GUEST_JOIN_COPY.readyLockedSeat)).toBeInTheDocument();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
+    });
+    expect(screen.getByText(GUEST_JOIN_COPY.readySaveSlow)).toBeInTheDocument();
+    expect(joinMock).not.toHaveBeenCalled();
+    const ready = screen.getByRole('button', { name: GUEST_JOIN_COPY.readyCta });
+    expect(ready).toBeEnabled();
+  });
+
+  it('continues to save the name, gift, and ready flag after a successful seat retry, in one tap', async () => {
+    vi.useFakeTimers();
+    window.history.replaceState(null, '', `/party/${PARTY_ID}#t=${TOKEN}`);
+    let finishJoin;
+    joinMock.mockReturnValue(new Promise((resolve) => { finishJoin = resolve; }));
+    render(<PartyInviteLanding partyId={PARTY_ID} />);
+    await act(async () => {
+      for (let i = 0; i < 20 && joinMock.mock.calls.length === 0; i += 1) {
+        await Promise.resolve();
+      }
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    fireEvent.change(screen.getByLabelText(GUEST_JOIN_COPY.nameLabel), { target: { value: 'Sam Lee' } });
+    fireEvent.click(screen.getByRole('button', { name: GUEST_JOIN_COPY.giftManualToggle }));
+    fireEvent.change(screen.getByLabelText(GUEST_JOIN_COPY.giftUrlLabel), { target: { value: 'https://example.com/socks' } });
+    fireEvent.change(screen.getByLabelText(GUEST_JOIN_COPY.giftTitleLabel), { target: { value: 'Wool socks' } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
+    });
+    expect(screen.getByText(GUEST_JOIN_COPY.readySaveSlow)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: GUEST_JOIN_COPY.readyCta }));
+    await act(async () => {
+      finishJoin({ id: 'anon-1' });
+      for (let i = 0; i < 10; i += 1) await Promise.resolve();
+    });
+    expect(addDocMock).toHaveBeenCalledTimes(1);
+    expect(updateDocMock).toHaveBeenCalledWith(
+      { path: `parties/${PARTY_ID}/participants/anon-1` },
+      expect.objectContaining({ ready: true, displayName: 'Sam', lastInitial: 'L' }),
+    );
   });
 });
