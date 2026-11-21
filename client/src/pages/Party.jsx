@@ -7,9 +7,13 @@ import { useAuth } from '../hooks/useAuth.js';
 import { PartyLobby } from '../components/PartyLobby.jsx';
 import { GameRoom } from './GameRoom.jsx';
 import { PartyInviteLanding } from '../components/PartyInviteLanding.jsx';
+import { LateInviteCard, LateInvitePage, shouldShowLateSignIn } from '../components/LateInviteCard.jsx';
 import { useParty } from '../hooks/useParty.js';
+import { useOwnSeatStatus } from '../hooks/useOwnSeatStatus.js';
 import { SEO } from '../components/SEO.jsx';
 import { INVITE_SEO } from '../utils/landingMarketingCopy.js';
+import { hostFirstNameFromParty } from '../components/PartyInviteLanding.jsx';
+import { lateVisitorState } from '../utils/lateInvite.js';
 import { stripInviteTokenFromAddressBar } from '../utils/partyInvite.js';
 
 function Spinner({ label }) {
@@ -36,6 +40,18 @@ export function Party() {
     : INVITE_SEO.fallbackTitle;
 
   const isParticipant = !!user && (participants?.some((p) => p.id === user.uid) || false);
+  const partyIsActiveOrEnded = party?.status === 'ACTIVE' || party?.status === 'ENDED';
+  // Only read the own-seat doc once the party is ACTIVE or ENDED, and only when
+  // the visitor is not already in the participants list. A LOBBY check that ran
+  // before the seat write would otherwise cache 'not-seated' for this
+  // partyId+uid and show the late card when the host starts. Presence in the
+  // participants list is proof of a seat.
+  const shouldCheckOwnSeat = !!user && partyIsActiveOrEnded && !isParticipant;
+  const fetchedSeatStatus = useOwnSeatStatus(
+    shouldCheckOwnSeat ? partyId : null,
+    shouldCheckOwnSeat ? user.uid : null,
+  );
+  const seatStatus = isParticipant ? 'seated' : fetchedSeatStatus;
 
   // Once the visitor is confirmed seated, drop #t= from this history entry (G19).
   // Do not do this earlier: the landing still needs the token to join.
@@ -54,8 +70,26 @@ export function Party() {
     content = <PartyInviteLanding partyId={partyId} />;
   } else if (loading) {
     content = <Spinner label="Loading party..." />;
-  } else if (party.status === 'ACTIVE' || party.status === 'ENDED' || gameStarted) {
-    content = <GameRoom partyId={partyId} />;
+  } else if (partyIsActiveOrEnded || gameStarted) {
+    if (partyIsActiveOrEnded && seatStatus !== 'not-seated' && seatStatus !== 'seated' && seatStatus !== 'error') {
+      content = <Spinner label="Loading party..." />;
+    } else {
+      const late = lateVisitorState(party, seatStatus);
+      if (late) {
+        content = (
+          <LateInvitePage>
+            <LateInviteCard
+              state={late}
+              partyTitle={party.title || 'White Elephant Party'}
+              hostFirstName={hostFirstNameFromParty(party)}
+              showSignIn={shouldShowLateSignIn(user)}
+            />
+          </LateInvitePage>
+        );
+      } else {
+        content = <GameRoom partyId={partyId} />;
+      }
+    }
   } else {
     content = <PartyLobby partyId={partyId} onStartGame={() => setGameStarted(true)} />;
   }

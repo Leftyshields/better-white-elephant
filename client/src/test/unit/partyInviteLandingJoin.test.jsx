@@ -7,12 +7,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { PartyInviteLanding } from '../../components/PartyInviteLanding.jsx';
 import {
+  JOIN_ERROR_CANCELLED,
   JOIN_ERROR_GENERIC,
   JOIN_ERROR_LINK_INVALID,
   JOIN_ERROR_PARTY_FULL,
   JOIN_ERROR_STARTED,
 } from '../../utils/partyInviteCopy.js';
 import { GUEST_JOIN_COPY } from '../../utils/guestJoinCopy.js';
+import { LATE_INVITE_COPY, formatLatePartyLine } from '../../utils/lateInvite.js';
 
 const PARTY_ID = 'invite-join-party';
 const TOKEN = 'feedfacefeedfacefeedfacefeedface';
@@ -63,12 +65,12 @@ function mockPartyReads(partyData) {
 
 function signedOut() {
   authState.currentUser = null;
-  useAuthMock.mockReturnValue({ user: null, loading: false, ensureGuestSession });
+  useAuthMock.mockReturnValue({ user: null, loading: false, ensureGuestSession, signInWithGoogle: vi.fn() });
 }
 
 function signedIn(user) {
   authState.currentUser = user;
-  useAuthMock.mockReturnValue({ user, loading: false, ensureGuestSession });
+  useAuthMock.mockReturnValue({ user, loading: false, ensureGuestSession, signInWithGoogle: vi.fn() });
 }
 
 describe('PartyInviteLanding join', () => {
@@ -166,7 +168,8 @@ describe('PartyInviteLanding join', () => {
 
     await waitFor(() => expect(ensureGuestSession).toHaveBeenCalled());
     expect(joinMock).not.toHaveBeenCalled();
-    expect(screen.getByTestId('guest-card-skeleton')).toBeInTheDocument();
+    expect(await screen.findByText(GUEST_JOIN_COPY.welcomeTitle('Swap'))).toBeInTheDocument();
+    expect(screen.queryByTestId('guest-card-skeleton')).toBeNull();
   });
 
   it('never makes a guest account for a link with no token, and shows link_invalid inline', async () => {
@@ -180,15 +183,63 @@ describe('PartyInviteLanding join', () => {
     expect(window.alert).not.toHaveBeenCalled();
   });
 
-  it('shows join.error.started for a party that left LOBBY, with no guest account made', async () => {
+  it('shows the started late-invite card for an ACTIVE party, with no guest account made', async () => {
     window.history.replaceState(null, '', `/party/${PARTY_ID}#t=${TOKEN}`);
     mockPartyReads({ title: 'Swap', adminId: 'host-uid-1', status: 'ACTIVE', participantCount: 4 });
 
     render(<PartyInviteLanding partyId={PARTY_ID} />);
 
-    expect(await screen.findByText(JOIN_ERROR_STARTED)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: LATE_INVITE_COPY.gameAlreadyStartedHeading })).toBeInTheDocument();
+    expect(screen.getByText(LATE_INVITE_COPY.gameAlreadyStartedBody)).toBeInTheDocument();
+    expect(screen.getByText(formatLatePartyLine('Swap', null))).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: LATE_INVITE_COPY.lateGoHome })).toHaveAttribute('href', '/');
+    expect(screen.getByRole('button', { name: LATE_INVITE_COPY.lateSignInLink })).toBeInTheDocument();
+    expect(screen.queryByText(JOIN_ERROR_STARTED)).not.toBeInTheDocument();
+    expect(screen.queryByText(GUEST_JOIN_COPY.welcomeTitle('Swap'))).not.toBeInTheDocument();
     expect(ensureGuestSession).not.toHaveBeenCalled();
+    expect(joinMock).not.toHaveBeenCalled();
     expect(screen.queryByRole('button', { name: GUEST_JOIN_COPY.readyCta })).toBeNull();
+  });
+
+  it('shows the over late-invite card for an ENDED party, with no guest account made', async () => {
+    window.history.replaceState(null, '', `/party/${PARTY_ID}#t=${TOKEN}`);
+    mockPartyReads({
+      title: 'Swap',
+      adminId: 'host-uid-1',
+      hostDisplayName: 'Dana',
+      status: 'ENDED',
+      participantCount: 4,
+    });
+
+    render(<PartyInviteLanding partyId={PARTY_ID} />);
+
+    expect(await screen.findByRole('heading', { name: LATE_INVITE_COPY.gameAlreadyOverHeading })).toBeInTheDocument();
+    expect(screen.getByText(LATE_INVITE_COPY.gameAlreadyOverBody)).toBeInTheDocument();
+    expect(screen.getByText(formatLatePartyLine('Swap', 'Dana'))).toBeInTheDocument();
+    expect(ensureGuestSession).not.toHaveBeenCalled();
+    expect(joinMock).not.toHaveBeenCalled();
+    expect(screen.queryByText(JOIN_ERROR_STARTED)).not.toBeInTheDocument();
+  });
+
+  it('swaps to the started late-invite card in place when a lobby join loses the race, with no alert', async () => {
+    window.history.replaceState(null, '', `/party/${PARTY_ID}#t=${TOKEN}`);
+    getDocMock.mockImplementation(async (ref) => {
+      if (ref.path === `parties/${PARTY_ID}`) {
+        const status = joinMock.mock.calls.length > 0 ? 'ACTIVE' : 'LOBBY';
+        return {
+          exists: () => true,
+          data: () => ({ title: 'Swap', adminId: 'host-uid-1', hostDisplayName: 'Dana', status, participantCount: 4 }),
+        };
+      }
+      return missing;
+    });
+    joinMock.mockRejectedValue(Object.assign(new Error('denied'), { code: 'permission-denied' }));
+
+    render(<PartyInviteLanding partyId={PARTY_ID} />);
+
+    expect(await screen.findByRole('heading', { name: LATE_INVITE_COPY.gameAlreadyStartedHeading })).toBeInTheDocument();
+    expect(screen.queryByText(JOIN_ERROR_STARTED)).not.toBeInTheDocument();
+    expect(window.alert).not.toHaveBeenCalled();
   });
 
   it('shows join.error.party_full when the seat write is refused at 30', async () => {
@@ -234,5 +285,25 @@ describe('PartyInviteLanding join', () => {
 
     expect(await screen.findByText(JOIN_ERROR_GENERIC)).toBeInTheDocument();
     expect(joinMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses a signed-in visitor on a CANCELLED party with an invite token before any seat write', async () => {
+    window.history.replaceState(null, '', `/party/${PARTY_ID}#t=${TOKEN}`);
+    const user = { uid: 'guest-1', displayName: 'Alex Kim', email: 'alex.kim@example.com' };
+    signedIn(user);
+    ensureGuestSession.mockResolvedValue(user);
+    mockPartyReads({ title: 'Swap', adminId: 'host-uid-1', hostDisplayName: 'Dana Host', status: 'CANCELLED', participantCount: 2 });
+
+    render(<PartyInviteLanding partyId={PARTY_ID} />);
+
+    expect(await screen.findByText(JOIN_ERROR_CANCELLED)).toBeInTheDocument();
+    expect(ensureGuestSession).not.toHaveBeenCalled();
+    expect(joinMock).not.toHaveBeenCalled();
+    const seatReads = getDocMock.mock.calls.filter(
+      ([ref]) => ref?.path === `parties/${PARTY_ID}/participants/guest-1`,
+    );
+    expect(seatReads).toEqual([]);
+    expect(screen.queryByTestId('late-invite-card')).toBeNull();
+    expect(window.alert).not.toHaveBeenCalled();
   });
 });

@@ -29,6 +29,9 @@ import {
   rosterDisplayNames,
 } from '../utils/seatDisplayName.js';
 import { PlayerName } from '../components/PlayerName.jsx';
+import { LateInviteCard, LateInvitePage, shouldShowLateSignIn } from '../components/LateInviteCard.jsx';
+import { hostFirstNameFromParty } from '../components/PartyInviteLanding.jsx';
+import { lateVisitorState } from '../utils/lateInvite.js';
 
 /**
  * One shared toast region above the reaction bar (BUG-19 / batch 1 item 1 D). It never sits in the
@@ -83,7 +86,7 @@ function GameToast({ message, onDismiss }) {
 export function GameRoom({ partyId }) {
   const { user } = useAuth();
   const { party, participants: liveParticipants } = useParty(partyId);
-  const { state, actions, derived, socket, emitReaction, dispatch } = useGameEngine(partyId);
+  const { state, actions, derived, socket, emitReaction, dispatch, joinDeniedAsNonParticipant } = useGameEngine(partyId);
   const { playTurnNotification, playSteal, playUnwrap } = useGameSounds();
   const [batchNames, setBatchNames] = useState({});
   const [batchStatus, setBatchStatus] = useState('idle');
@@ -377,6 +380,21 @@ export function GameRoom({ partyId }) {
   const currentPlayerNameState = currentPlayerId
     ? lookupNameState(nameStates, currentPlayerId, effectiveBatchStatus, GAME_USER_COPY.unnamedPlayer)
     : null;
+
+  // Socket confirmed this session has no seat. Show the late card at once (no 5s timeout, no toast).
+  if (joinDeniedAsNonParticipant) {
+    const late = lateVisitorState(party, 'not-seated') || 'started';
+    return (
+      <LateInvitePage>
+        <LateInviteCard
+          state={late}
+          partyTitle={party?.title || 'White Elephant Party'}
+          hostFirstName={hostFirstNameFromParty(party)}
+          showSignIn={shouldShowLateSignIn(user)}
+        />
+      </LateInvitePage>
+    );
+  }
 
   // Loading state
   if (state.status === 'LOBBY' || !state.ui.isSocketConnected) {

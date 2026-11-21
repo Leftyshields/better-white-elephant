@@ -182,6 +182,58 @@ describe('PartyInviteLanding strips #t= only after a successful seat', () => {
     expect(await screen.findByText(JOIN_ERROR_GENERIC)).toBeInTheDocument();
     expect(readInviteTokenFromHash(window.location.hash)).toBe(TOKEN);
   });
+
+  // PR 130 behaviors kept after the G19 rebase onto main.
+  function signedInWithParty(status, { seated }) {
+    const user = { uid: 'guest-1', isAnonymous: false, displayName: 'Alex Kim', email: null };
+    signedIn(user);
+    ensureGuestSession.mockResolvedValue(user);
+    getDocMock.mockImplementation(async (ref) => {
+      if (ref.path === `parties/${PARTY_ID}`) {
+        return { exists: () => true, data: () => ({ title: 'Swap', adminId: 'h', status, participantCount: 2 }) };
+      }
+      if (ref.path === `parties/${PARTY_ID}/participants/guest-1`) {
+        return seated ? { exists: () => true, data: () => ({}) } : missing;
+      }
+      return missing;
+    });
+  }
+
+  it('keeps #t= and writes nothing for a signed-in visitor to a CANCELLED party', async () => {
+    window.history.replaceState(null, '', `/party/${PARTY_ID}#t=${TOKEN}`);
+    signedInWithParty('CANCELLED', { seated: false });
+
+    render(<PartyInviteLanding partyId={PARTY_ID} />);
+
+    await waitFor(() => expect(getDocMock).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 20));
+    expect(ensureGuestSession).not.toHaveBeenCalled();
+    expect(joinMock).not.toHaveBeenCalled();
+    expect(address()).toBe(`/party/${PARTY_ID}#t=${TOKEN}`);
+  });
+
+  it('shows the late card and keeps #t= for a signed-in visitor with no seat in an ACTIVE party', async () => {
+    window.history.replaceState(null, '', `/party/${PARTY_ID}#t=${TOKEN}`);
+    signedInWithParty('ACTIVE', { seated: false });
+
+    render(<PartyInviteLanding partyId={PARTY_ID} />);
+
+    expect(await screen.findByTestId('late-invite-card')).toBeInTheDocument();
+    expect(joinMock).not.toHaveBeenCalled();
+    expect(address()).toBe(`/party/${PARTY_ID}#t=${TOKEN}`);
+  });
+
+  it('strips #t= and never shows the late card for a seated player returning to an ACTIVE party', async () => {
+    window.history.replaceState(null, '', `/party/${PARTY_ID}#t=${TOKEN}`);
+    signedInWithParty('ACTIVE', { seated: true });
+
+    render(<PartyInviteLanding partyId={PARTY_ID} />);
+
+    await waitFor(() => expect(readInviteTokenFromHash(window.location.hash)).toBeNull());
+    expect(screen.queryByTestId('late-invite-card')).toBeNull();
+    expect(joinMock).not.toHaveBeenCalled();
+    expect(address()).toBe(`/party/${PARTY_ID}`);
+  });
 });
 
 describe('Party strips #t= for an already-seated member', () => {

@@ -17,6 +17,7 @@ import { checkAndMakeBotMove } from './utils/bot-utils.js';
 import { handlePickGift } from './handlers/pick-gift.js';
 import { finalizeEndedGame } from './utils/finalize-ended-game.js';
 import { incrementPartyReactionCount } from './utils/party-reaction-count.mjs';
+import { joinPartyMembershipRefusal } from './lib/join-party-refusal.mjs';
 import { clientSafeSocketGameErrorMessage } from './utils/socket-error-copy.js';
 import { isPartyHostCaller } from './lib/host-auth.js';
 
@@ -98,7 +99,8 @@ async function verifyPartyMembership(partyId, userId) {
     return participantDoc.exists;
   } catch (error) {
     console.error('Error verifying party membership:', error);
-    return false;
+    // null means the read itself failed (distinct from a confirmed missing seat).
+    return null;
   }
 }
 
@@ -226,8 +228,9 @@ io.on('connection', (socket) => {
     
     // Verify user is a participant
     const isParticipant = await verifyPartyMembership(partyId, socket.userId);
-    if (!isParticipant) {
-      socket.emit('error', { message: 'You are not a participant in this party' });
+    const joinRefusal = joinPartyMembershipRefusal(isParticipant);
+    if (joinRefusal) {
+      socket.emit('error', joinRefusal);
       return;
     }
     
