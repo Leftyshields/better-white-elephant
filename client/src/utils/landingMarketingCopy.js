@@ -2,6 +2,8 @@
  * Canonical user-facing marketing copy for the landing page and shared SEO strings.
  */
 
+// TODO-COPY (party-code spec section 6 Coder note): SEO_DEFAULT_DESCRIPTION, heroSubhead and
+// SIGNED_IN_COPY.emptyBody should mention the party code. Waiting on Copywriter's signed lines.
 export const SEO_DEFAULT_DESCRIPTION =
   'Host a free remote White Elephant or virtual Dirty Santa. Play live in your browser during Zoom, Teams, or Meet. Guests join from a link.';
 
@@ -13,7 +15,11 @@ export const LANDING_COPY = {
     'Host a free online White Elephant, or Dirty Santa, and play in the browser during Zoom, Teams, or Meet. Guests join from a link. The game handles turns, steals, and the rules.',
   primaryCta: 'Host a free game',
   secondaryCta: 'See how it works',
-  microline: 'Free. You and your guests sign in with Google.',
+  // [S:home.microline] (party-code spec Rev 3, Copywriter final)
+  microline: 'Free to host. Guests join with a link or a party code.',
+  // [S:home.hero.headline_mobile] / [S:home.hero.subhead_mobile], below `sm` only
+  heroHeadlineMobile: 'White Elephant, played live on your call.',
+  heroSubheadMobile: 'Play in your browser on any video call. The game runs the turns and steals.',
   sectionHeading: "Built for the call you're already on",
   calloutZoom: 'Works alongside Zoom, Teams, or Meet.',
   calloutTimezone: 'Works for distributed teams. Everyone just needs to be on the same call.',

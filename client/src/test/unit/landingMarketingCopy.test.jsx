@@ -17,7 +17,11 @@ describe('landingMarketingCopy', () => {
     expect(HOME_SEO_TITLE).toBe('Virtual White Elephant for Remote Teams');
     expect(LANDING_COPY.primaryCta).toBe('Host a free game');
     expect(LANDING_COPY.secondaryCta).toBe('See how it works');
-    expect(LANDING_COPY.microline).toBe('Free. You and your guests sign in with Google.');
+    expect(LANDING_COPY.microline).toBe('Free to host. Guests join with a link or a party code.');
+    expect(LANDING_COPY.heroHeadlineMobile).toBe('White Elephant, played live on your call.');
+    expect(LANDING_COPY.heroSubheadMobile).toBe(
+      'Play in your browser on any video call. The game runs the turns and steals.',
+    );
     expect(LANDING_COPY.heroHeadline).toContain('Virtual White Elephant for remote teams');
     expect(LANDING_COPY.demoToastFrozen).toContain('frozen');
   });

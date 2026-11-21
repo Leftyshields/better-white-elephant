@@ -1,7 +1,8 @@
 /**
  * Rules-only party invite token (item 1).
  *
- * parties/{id}/private/invite {token} is readable and writable only by the Google host.
+ * parties/{id}/private/invite {token, code} is readable only by the Google host; the game server
+ * issues and rotates the token and party code together (server/lib/party-code.js).
  * The share link carries the token in the URL fragment (#t=...), which browsers never send to servers.
  * A join is one batch: the participant seat, a write-only join proof holding the token, and
  * participantCount + 1 on the party. Firestore rules check the token, LOBBY status and the 30-seat cap.
@@ -9,9 +10,7 @@
 import {
   collection,
   doc,
-  getDoc,
   increment,
-  setDoc,
   writeBatch,
 } from 'firebase/firestore';
 
@@ -80,21 +79,4 @@ export async function removeParticipantSeat(db, party, participantId) {
     batch.update(doc(db, 'parties', party.id), { participantCount: increment(-1) });
   }
   await batch.commit();
-}
-
-/** Host only. Returns the party's token, creating one for parties made before tokens existed. */
-export async function ensureInviteToken(db, partyId) {
-  const snap = await getDoc(inviteTokenRef(db, partyId));
-  const existing = snap.exists() ? snap.data()?.token : null;
-  if (isValidInviteToken(existing)) {
-    return existing;
-  }
-  return rotateInviteToken(db, partyId);
-}
-
-/** Host only. Replaces the token so old share links stop working for new joins. */
-export async function rotateInviteToken(db, partyId) {
-  const token = generateInviteToken();
-  await setDoc(inviteTokenRef(db, partyId), { token, updatedAt: new Date() });
-  return token;
 }

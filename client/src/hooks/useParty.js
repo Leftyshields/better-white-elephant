@@ -11,7 +11,13 @@ import {
 } from 'firebase/firestore';
 import { db } from '../utils/firebase.js';
 
-export function useParty(partyId) {
+/**
+ * @param {string} partyId
+ * @param {string | null} [authUid] pass the signed-in uid so seat, gift and invite listeners
+ *   re-subscribe after a guest's silent sign-in (they fail while signed out). The party doc
+ *   listener does not restart, so there is no loading flash.
+ */
+export function useParty(partyId, authUid = null) {
   const [party, setParty] = useState(null);
   const [participants, setParticipants] = useState([]);
   const [pendingInvites, setPendingInvites] = useState([]);
@@ -54,6 +60,14 @@ export function useParty(partyId) {
         setError(error);
       }
     );
+
+    return () => {
+      partyUnsubscribe();
+    };
+  }, [partyId]);
+
+  useEffect(() => {
+    if (!partyId) return undefined;
 
     // Subscribe to participants
     const participantsUnsubscribe = onSnapshot(
@@ -119,12 +133,11 @@ export function useParty(partyId) {
     );
 
     return () => {
-      partyUnsubscribe();
       participantsUnsubscribe();
       giftsUnsubscribe();
       pendingInvitesUnsubscribe();
     };
-  }, [partyId]);
+  }, [partyId, authUid]);
 
   return { party, participants, pendingInvites, gifts, loading, error };
 }

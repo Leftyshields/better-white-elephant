@@ -30,6 +30,8 @@ import { trackCreateParty, trackButtonClick, trackGameAbandoned, trackError } fr
 import { createPartyWithInviteToken } from '../utils/partyInvite.js';
 import { seatNameFields } from '../utils/seatDisplayName.js';
 import { usePartyModal } from '../contexts/PartyModalContext.jsx';
+import { JoinPartyBox } from '../components/JoinPartyBox.jsx';
+import { userSignedInWithGoogle } from '../utils/partyInviteCopy.js';
 import { Footer } from '../components/Footer.jsx';
 import { SEO } from '../components/SEO.jsx';
 import { Snowflakes } from '../components/Snowflakes.jsx';
@@ -370,13 +372,15 @@ export function Home() {
       <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black relative overflow-hidden">
         {/* Hero Section */}
         <div className="relative overflow-hidden">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 md:pt-32 pb-16 relative z-10">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-3 sm:pt-8 md:pt-32 pb-16 relative z-10">
             <div className="text-center">
-              <h1 className="text-4xl md:text-6xl font-bold text-white mb-6 tracking-tight">
-                {LANDING_COPY.heroHeadline}
+              <h1 className="text-4xl md:text-6xl font-bold text-white mb-3 sm:mb-6 tracking-tight">
+                <span className="sm:hidden">{LANDING_COPY.heroHeadlineMobile}</span>
+                <span className="hidden sm:inline">{LANDING_COPY.heroHeadline}</span>
               </h1>
-              <p className="text-lg md:text-xl text-gray-100 mb-8 max-w-3xl mx-auto leading-relaxed">
-                {LANDING_COPY.heroSubhead}
+              <p className="text-lg md:text-xl text-gray-100 mb-3 sm:mb-8 max-w-3xl mx-auto leading-relaxed">
+                <span className="sm:hidden">{LANDING_COPY.heroSubheadMobile}</span>
+                <span className="hidden sm:inline">{LANDING_COPY.heroSubhead}</span>
               </p>
               
               {/* CTAs */}
@@ -395,13 +399,13 @@ export function Home() {
                   </button>
                 </p>
               ) : null}
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-3">
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4 mb-3">
                 <button
                   ref={hostHeroButtonRef}
                   id="host-free-game-cta"
                   type="button"
                   onClick={() => void handleHostFreeGame('hero')}
-                  className="px-8 py-4 text-lg font-semibold bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg hover:from-indigo-600 hover:to-purple-700 transition-all shadow-lg"
+                  className="min-h-11 px-8 py-2 sm:py-4 text-lg font-semibold bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg hover:from-indigo-600 hover:to-purple-700 transition-all shadow-lg"
                 >
                   {LANDING_COPY.primaryCta}
                 </button>
@@ -411,12 +415,13 @@ export function Home() {
                     trackButtonClick(LANDING_COPY.secondaryCta, 'hero');
                     scrollToFeatures();
                   }}
-                  className="px-8 py-4 text-lg font-semibold bg-white/10 backdrop-blur-md text-gray-100 border border-white/25 rounded-lg hover:bg-white/10 transition-all"
+                  className="min-h-11 px-8 py-2 sm:py-4 text-lg font-semibold bg-white/10 backdrop-blur-md text-gray-100 border border-white/25 rounded-lg hover:bg-white/10 transition-all"
                 >
                   {LANDING_COPY.secondaryCta}
                 </button>
               </div>
-              <p className="text-sm text-gray-300 mb-12">{LANDING_COPY.microline}</p>
+              <p className="text-sm text-gray-300 mb-3 sm:mb-6">{LANDING_COPY.microline}</p>
+              <JoinPartyBox className="mb-12" />
 
               {/* Tilted UI Mockup Placeholder */}
               <div className="max-w-4xl mx-auto mt-16 relative">
@@ -664,6 +669,7 @@ export function Home() {
     <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900 via-slate-900 to-black relative flex flex-col">
       {/* My Parties Section */}
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 z-10 pt-4">
+        <JoinPartyBox className="mb-8 md:mx-0" />
         <div className="mb-8">
           <div>
             <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">{SIGNED_IN_COPY.heading}</h2>
@@ -684,7 +690,7 @@ export function Home() {
           </div>
         )}
 
-        {myParties.length === 0 && !loadingParties && !partiesError && (
+        {myParties.length === 0 && !loadingParties && !partiesError && userSignedInWithGoogle(user) && (
           <div 
             onClick={() => setShowCreatePartyModal(true)}
             className="text-center py-16 bg-white/5 backdrop-blur-sm rounded-xl border-2 border-dashed border-white/10 hover:border-white/20 cursor-pointer transition-all max-w-2xl mx-auto"

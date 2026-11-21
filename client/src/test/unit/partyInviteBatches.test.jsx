@@ -30,7 +30,6 @@ vi.mock('firebase/firestore', () => ({
 const {
   buildPartyShareLink,
   createPartyWithInviteToken,
-  ensureInviteToken,
   generateInviteToken,
   joinPartyWithInviteToken,
   readInviteTokenFromHash,
@@ -114,19 +113,5 @@ describe('write batches', () => {
     ops.length = 0;
     await removeParticipantSeat({}, { id: 'legacy' }, 'guest-1');
     expect(ops).toEqual([{ type: 'delete', path: 'parties/legacy/participants/guest-1' }]);
-  });
-
-  it('ensureInviteToken reuses a stored token and mints one for older parties', async () => {
-    getDocMock.mockResolvedValueOnce({ exists: () => true, data: () => ({ token: TOKEN }) });
-    await expect(ensureInviteToken({}, 'p1')).resolves.toBe(TOKEN);
-    expect(setDocMock).not.toHaveBeenCalled();
-
-    getDocMock.mockResolvedValueOnce({ exists: () => false, data: () => undefined });
-    const minted = await ensureInviteToken({}, 'p1');
-    expect(minted).toMatch(HEX_128);
-    expect(setDocMock).toHaveBeenCalledWith(
-      { path: 'parties/p1/private/invite', id: 'invite' },
-      { token: minted, updatedAt: expect.any(Date) },
-    );
   });
 });
