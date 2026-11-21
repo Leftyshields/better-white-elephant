@@ -80,3 +80,35 @@ export async function removeParticipantSeat(db, party, participantId) {
   }
   await batch.commit();
 }
+
+/**
+ * Path + query with the invite token removed from the hash. Other hash params are kept.
+ * Used so a seated guest does not leave #t= in the address bar (G19).
+ */
+export function locationWithoutInviteToken(pathname = '', search = '', hash = '') {
+  if (!readInviteTokenFromHash(hash)) {
+    return `${pathname}${search}${hash || ''}`;
+  }
+  const params = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash);
+  params.delete('t');
+  const rest = params.toString();
+  return `${pathname}${search}${rest ? `#${rest}` : ''}`;
+}
+
+/**
+ * Replace the current history entry, dropping #t= and keeping path and query.
+ * Does not push a new entry and does not navigate or reload.
+ * @returns {boolean} true when the address bar was changed
+ */
+export function stripInviteTokenFromAddressBar(historyObj = window.history, loc = window.location) {
+  if (!historyObj || !loc || typeof historyObj.replaceState !== 'function') {
+    return false;
+  }
+  const current = `${loc.pathname}${loc.search}${loc.hash || ''}`;
+  const next = locationWithoutInviteToken(loc.pathname, loc.search, loc.hash);
+  if (next === current) {
+    return false;
+  }
+  historyObj.replaceState(historyObj.state, '', next);
+  return true;
+}

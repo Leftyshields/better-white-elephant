@@ -1,7 +1,7 @@
 /**
  * Party Page
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth.js';
 import { PartyLobby } from '../components/PartyLobby.jsx';
@@ -14,6 +14,7 @@ import { SEO } from '../components/SEO.jsx';
 import { INVITE_SEO } from '../utils/landingMarketingCopy.js';
 import { hostFirstNameFromParty } from '../components/PartyInviteLanding.jsx';
 import { lateVisitorState } from '../utils/lateInvite.js';
+import { stripInviteTokenFromAddressBar } from '../utils/partyInvite.js';
 
 function Spinner({ label }) {
   return (
@@ -51,6 +52,14 @@ export function Party() {
     shouldCheckOwnSeat ? user.uid : null,
   );
   const seatStatus = isParticipant ? 'seated' : fetchedSeatStatus;
+
+  // Once the visitor is confirmed seated, drop #t= from this history entry (G19).
+  // Do not do this earlier: the landing still needs the token to join.
+  useEffect(() => {
+    if (!isParticipant) return undefined;
+    stripInviteTokenFromAddressBar();
+    return undefined;
+  }, [isParticipant]);
 
   let content;
   if (authLoading) {
