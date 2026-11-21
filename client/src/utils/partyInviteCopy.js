@@ -11,15 +11,41 @@ export const PARTY_INVITE_COPY = {
   'join.error.cancelled': 'This party was canceled.',
   'join.error.generic':
     "We couldn't get you into this party. Try again in a moment.",
-  'host.invite.rotate_cta': 'Make a new invite link',
+  // Party-code spec Rev 2/3 (Copywriter final): rotate replaces the code and the link together.
+  'host.invite.rotate_cta': 'Make a new code and link',
   'host.invite.rotate_helper':
-    'Your old link and any invites you already sent will stop working.',
-  'host.invite.rotate_confirm': 'Make new link',
-  'host.invite.rotate_failed':
-    "We couldn't make a new link. Your old one still works.",
+    'Your old code and link will stop working, including any invites you already sent.',
+  'host.invite.rotate_confirm': 'Make new code and link',
+  'host.invite.rotate_failed': "Couldn't make a new code and link. Your old ones still work.",
   'host.invite.rotate_retry': 'Try again',
-  'host.invite.rotate_done': 'New link ready. Resend any invites you still need.',
-  'host.invite.load_failed': "We couldn't load your invite link.",
+  'host.invite.rotate_done':
+    'Your new code and link are ready. Resend them to anyone who still needs to join.',
+  'host.share.load_failed': "Couldn't load your party code and link. Refresh to try again.",
+  'host.share.title': 'Share your party',
+  'host.share.intro': 'Send guests the party code or the link. Either one gets them in.',
+  'host.share.code.label': 'Party code',
+  'host.share.code.copy': 'Copy code',
+  'host.share.link.copy': 'Copy link',
+  'host.share.code.copy_done': 'Copied!',
+  'host.share.link.copy_done': 'Copied!',
+  'host.share.code.copy_status': 'Party code copied.',
+  'host.share.code.copy_name': 'Copy party code',
+  'host.share.link.copy_name': 'Copy invite link',
+  // Copywriter final Nov 21: link status pairs with code.copy_status; fallback shows inline when copy fails.
+  'host.share.link.copy_status': 'Invite link copied.',
+  'host.share.copy_failed': "Couldn't copy. It's selected, so copy it yourself.",
+  // Home "Join a party" (8-character codes, Copywriter final Nov 21).
+  'home.join.title': 'Join a party',
+  'home.join.helper': 'Enter the 8-character code from your host.',
+  'home.join.label': 'Party code',
+  'home.join.placeholder': 'XXXX-XXXX',
+  'home.join.cta': 'Join',
+  'home.join.checking': 'Checking...',
+  'home.join.error.format':
+    'Codes have 8 letters and numbers, like KX7P-4MRB. They never use 0, O, 1, I, L, or U.',
+  'home.join.error.generic': "That code didn't get you in. Check it with your host, or try again later.",
+  'home.join.error.full': 'This party is full. Every spot is taken.',
+  'home.join.hint.excluded': "Codes don't use 0, O, 1, I, L, or U.",
 };
 
 export const JOIN_ERROR_LINK_INVALID = PARTY_INVITE_COPY['join.error.link_invalid'];
@@ -33,7 +59,7 @@ export const HOST_INVITE_ROTATE_CONFIRM = PARTY_INVITE_COPY['host.invite.rotate_
 export const HOST_INVITE_ROTATE_FAILED = PARTY_INVITE_COPY['host.invite.rotate_failed'];
 export const HOST_INVITE_ROTATE_RETRY = PARTY_INVITE_COPY['host.invite.rotate_retry'];
 export const HOST_INVITE_ROTATE_DONE = PARTY_INVITE_COPY['host.invite.rotate_done'];
-export const HOST_INVITE_LOAD_FAILED = PARTY_INVITE_COPY['host.invite.load_failed'];
+export const HOST_SHARE_LOAD_FAILED = PARTY_INVITE_COPY['host.share.load_failed'];
 
 /** Firebase Auth provider id for Google hosts (matches server HOST_SIGN_IN_PROVIDER). */
 export const GOOGLE_SIGN_IN_PROVIDER = 'google.com';

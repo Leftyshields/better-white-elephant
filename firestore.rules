@@ -378,7 +378,13 @@ service cloud.firestore {
       allow read: if isAuthenticated() && participantId == request.auth.uid;
     }
 
-    // Invite rate-limit counters: Cloud Functions (Admin SDK) only
+    // Party code index (item 10): written and read only by the game server (Admin SDK,
+    // server/lib/party-code.js). No client may get or list codes, so they can't be enumerated.
+    match /partyCodes/{code} {
+      allow read, write: if false;
+    }
+
+    // Rate-limit counters (invite sends, party-code guesses): Admin SDK only
     match /_rateLimits/{document=**} {
       allow read, write: if false;
     }
