@@ -7,9 +7,13 @@ import { useAuth } from '../hooks/useAuth.js';
 import { PartyLobby } from '../components/PartyLobby.jsx';
 import { GameRoom } from './GameRoom.jsx';
 import { PartyInviteLanding } from '../components/PartyInviteLanding.jsx';
+import { LateInviteCard, LateInvitePage, shouldShowLateSignIn } from '../components/LateInviteCard.jsx';
 import { useParty } from '../hooks/useParty.js';
+import { useOwnSeatStatus } from '../hooks/useOwnSeatStatus.js';
 import { SEO } from '../components/SEO.jsx';
 import { INVITE_SEO } from '../utils/landingMarketingCopy.js';
+import { hostFirstNameFromParty } from '../components/PartyInviteLanding.jsx';
+import { lateVisitorState } from '../utils/lateInvite.js';
 
 function Spinner({ label }) {
   return (
@@ -35,6 +39,13 @@ export function Party() {
     : INVITE_SEO.fallbackTitle;
 
   const isParticipant = !!user && (participants?.some((p) => p.id === user.uid) || false);
+  const partyIsActiveOrEnded = party?.status === 'ACTIVE' || party?.status === 'ENDED';
+  // Own-seat read only when a session exists on an ACTIVE or ENDED party. Never use
+  // the participants list to decide the late-invite card.
+  const seatStatus = useOwnSeatStatus(
+    user && partyIsActiveOrEnded ? partyId : null,
+    user && partyIsActiveOrEnded ? user.uid : null,
+  );
 
   let content;
   if (authLoading) {
@@ -45,8 +56,26 @@ export function Party() {
     content = <PartyInviteLanding partyId={partyId} />;
   } else if (loading) {
     content = <Spinner label="Loading party..." />;
-  } else if (party.status === 'ACTIVE' || party.status === 'ENDED' || gameStarted) {
-    content = <GameRoom partyId={partyId} />;
+  } else if (partyIsActiveOrEnded || gameStarted) {
+    if (partyIsActiveOrEnded && seatStatus === 'checking') {
+      content = <Spinner label="Loading party..." />;
+    } else {
+      const late = lateVisitorState(party, seatStatus);
+      if (late) {
+        content = (
+          <LateInvitePage>
+            <LateInviteCard
+              state={late}
+              partyTitle={party.title || 'White Elephant Party'}
+              hostFirstName={hostFirstNameFromParty(party)}
+              showSignIn={shouldShowLateSignIn(user)}
+            />
+          </LateInvitePage>
+        );
+      } else {
+        content = <GameRoom partyId={partyId} />;
+      }
+    }
   } else {
     content = <PartyLobby partyId={partyId} onStartGame={() => setGameStarted(true)} />;
   }

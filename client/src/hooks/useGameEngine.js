@@ -28,12 +28,17 @@ export function useGameEngine(partyId) {
   const retryCountRef = useRef(0);
   const retryTimeoutRef = useRef(null);
   const lastSocketToastRef = useRef({ message: null, atMs: 0 });
+  const [joinDeniedAsNonParticipant, setJoinDeniedAsNonParticipant] = useState(false);
 
   // Keep refs in sync with latest values
   useEffect(() => {
     giftsRef.current = gifts;
     participantsRef.current = participants;
   }, [gifts, participants]);
+
+  useEffect(() => {
+    setJoinDeniedAsNonParticipant(false);
+  }, [partyId, user?.uid]);
 
   // Initialize socket connection
   useEffect(() => {
@@ -175,6 +180,10 @@ export function useGameEngine(partyId) {
 
       socket.on('error', ({ message, code }) => {
         const hasPendingPlayerAction = Boolean(pendingOptimisticUpdateRef.current);
+        if (code === 'NOT_PARTICIPANT') {
+          setJoinDeniedAsNonParticipant(true);
+        }
+
         const plan = planSocketGameErrorHandling({
           message,
           code,
@@ -494,6 +503,7 @@ export function useGameEngine(partyId) {
     socket,
     emitReaction,
     dispatch,
+    joinDeniedAsNonParticipant,
   };
 }
 
