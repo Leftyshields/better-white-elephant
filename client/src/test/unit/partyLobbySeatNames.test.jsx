@@ -117,6 +117,17 @@ describe('PartyLobby seat names', () => {
     expect(document.body.textContent).not.toMatch(/AnonGues/);
   });
 
+  it('G18: shows the guest\'s saved seat name before Ready, even when the profile lookup says Player', async () => {
+    apiRequestMock.mockResolvedValue({ users: { AnonGuestUid123: 'Player AnonGues' } });
+    renderLobby([
+      { id: HOST_UID, status: 'GOING', ready: false },
+      { id: 'AnonGuestUid123', status: 'GOING', ready: false, displayName: 'Alex' },
+    ]);
+    await waitFor(() => expect(screen.getAllByText('Alex').length).toBeGreaterThan(0));
+    expect(screen.queryByText('Player')).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/AnonGues/);
+  });
+
   it('switches to the typed seat name once the guest taps I\'m ready', async () => {
     apiRequestMock.mockRejectedValue(new Error('network'));
     renderLobby([

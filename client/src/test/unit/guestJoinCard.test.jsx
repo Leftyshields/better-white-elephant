@@ -11,6 +11,7 @@ const updateDocMock = vi.fn();
 const setDocMock = vi.fn();
 const commitMock = vi.fn();
 let batchOps = [];
+const getDocsMock = vi.fn();
 
 vi.mock('../../utils/firebase.js', () => ({ db: {} }));
 vi.mock('../../utils/analytics.js', () => ({ trackSubmitGift: vi.fn() }));
@@ -28,6 +29,10 @@ vi.mock('firebase/firestore', () => ({
     delete: (ref) => batchOps.push({ op: 'delete', path: ref.path }),
     commit: () => commitMock(),
   }),
+  getDocs: (...args) => getDocsMock(...args),
+  query: vi.fn((...args) => ({ args })),
+  where: vi.fn((...args) => args),
+  limit: vi.fn((n) => n),
 }));
 
 let seq = 0;
@@ -67,6 +72,7 @@ describe('GuestJoinCard', () => {
     setDocMock.mockReset().mockResolvedValue(undefined);
     commitMock.mockReset().mockResolvedValue(undefined);
     batchOps = [];
+    getDocsMock.mockReset().mockResolvedValue({ empty: true, docs: [] });
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
