@@ -34,12 +34,17 @@ export function Party() {
   // landing to the lobby the moment the background seat write lands (no reload).
   const { party, participants, loading, error } = useParty(partyId, user?.uid ?? null);
   const [gameStarted, setGameStarted] = useState(false);
+  // True while the invite landing's card has a seat retry or ready save in flight. The landing
+  // stays on screen until it settles: swapping to the lobby would unmount the card mid-save
+  // (the seat shows up locally about 1ms after it is sent) and drop the guest's tap.
+  const [landingBusy, setLandingBusy] = useState(false);
 
   const inviteSeoTitle = party?.title
     ? `You're invited to ${party.title}`
     : INVITE_SEO.fallbackTitle;
 
-  const isParticipant = !!user && (participants?.some((p) => p.id === user.uid) || false);
+  const ownSeat = user ? participants?.find((p) => p.id === user.uid) : undefined;
+  const isParticipant = !!ownSeat;
   const partyIsActiveOrEnded = party?.status === 'ACTIVE' || party?.status === 'ENDED';
   // Only read the own-seat doc once the party is ACTIVE or ENDED, and only when
   // the visitor is not already in the participants list. A LOBBY check that ran
@@ -51,13 +56,17 @@ export function Party() {
     shouldCheckOwnSeat ? partyId : null,
     shouldCheckOwnSeat ? user.uid : null,
   );
-  const seatStatus = isParticipant ? 'seated' : fetchedSeatStatus;
+  // 'seated-pending' (seat found only with an unsent local write) routes like a seat.
+  const seatStatus = isParticipant || fetchedSeatStatus === 'seated-pending' ? 'seated' : fetchedSeatStatus;
 
   // Once the visitor is confirmed seated, drop #t= from this history entry (G19).
-  // Confirmed means on the participants list or, in an ACTIVE/ENDED game whose
-  // list is empty or lagging, an own-seat read that found the seat.
-  // Do not do this earlier: the landing still needs the token to join.
-  const confirmedSeated = seatStatus === 'seated';
+  // Confirmed means the server has the seat: the own seat on the participants list
+  // with no pending local write or, in an ACTIVE/ENDED game whose list is empty or
+  // lagging, an own-seat read that found the seat on the server. A seat that only
+  // exists locally can still be refused, and the landing then needs the token again.
+  const confirmedSeated = isParticipant
+    ? ownSeat.hasPendingWrites !== true
+    : fetchedSeatStatus === 'seated';
   useEffect(() => {
     if (!confirmedSeated) return undefined;
     stripInviteTokenFromAddressBar();
@@ -67,10 +76,15 @@ export function Party() {
   let content;
   if (authLoading) {
     content = <Spinner label="Loading..." />;
-  } else if (!user || (error && !party) || (!party && !loading) || (party && !isParticipant && party.status === 'LOBBY')) {
+  } else if (
+    !user
+    || (error && !party)
+    || (!party && !loading)
+    || (party?.status === 'LOBBY' && (!isParticipant || landingBusy))
+  ) {
     // Same element in the same position for every not-yet-seated case, so the landing (and its
     // background seat write) is never remounted when auth or the party snapshot changes.
-    content = <PartyInviteLanding partyId={partyId} />;
+    content = <PartyInviteLanding partyId={partyId} onJoinBusyChange={setLandingBusy} />;
   } else if (loading) {
     content = <Spinner label="Loading party..." />;
   } else if (partyIsActiveOrEnded || gameStarted) {

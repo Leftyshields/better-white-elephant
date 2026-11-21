@@ -33,7 +33,7 @@ export function hostFirstNameFromParty(data) {
   return stored.split(/\s+/)[0];
 }
 
-export function PartyInviteLanding({ partyId }) {
+export function PartyInviteLanding({ partyId, onJoinBusyChange }) {
   const { user, loading: authLoading, ensureGuestSession } = useAuth();
   const [partyInfo, setPartyInfo] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -123,6 +123,7 @@ export function PartyInviteLanding({ partyId }) {
     try {
       await timed(joinWriteRef.current);
       setSeatWriteSlow(false);
+      setAlreadySeated(true);
       // Confirmed seat write: drop #t= from this history entry (G19). Timeouts and errors keep it.
       stripInviteTokenFromAddressBar();
       return true;
@@ -364,6 +365,7 @@ export function PartyInviteLanding({ partyId }) {
         terminalMessage={terminalMessage}
         seatWriteSlow={seatWriteSlow}
         onRetrySeat={retrySeatWrite}
+        onBusyChange={onJoinBusyChange}
       />
     </div>
   );

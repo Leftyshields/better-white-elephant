@@ -80,6 +80,7 @@ export function GuestJoinCard({
   terminalMessage,
   seatWriteSlow = false,
   onRetrySeat,
+  onBusyChange,
 }) {
   const draft = drafts.get(partyId) || {};
   const savedName = participant?.displayName || sanitizeUserChosenDisplayName(user?.displayName) || '';
@@ -103,9 +104,15 @@ export function GuestJoinCard({
   const [saveSlow, setSaveSlow] = useState(false);
   const [undoSlow, setUndoSlow] = useState(false);
   // "You're in!" only after the write is confirmed, not after Firestore's local pending snapshot.
-  const [readyAcked, setReadyAcked] = useState(
-    () => participant?.ready === true && participant?.hasPendingWrites !== true,
+  // A confirmed seat snapshot wins. Otherwise keep what the card that handed over (invite landing
+  // to lobby) already knew: its ready save may have been acked before the confirmed snapshot lands.
+  const [readyAcked, setReadyAcked] = useState(() =>
+    participant && participant.hasPendingWrites !== true
+      ? participant.ready === true
+      : draft.readyAcked === true,
   );
+  // Seat retries and ready saves still in flight; the invite landing stays up until this is 0.
+  const busyCount = useRef(0);
   const undoSeq = useRef(0);
   const editVersion = useRef(0);
   const timeoutAbortRef = useRef(null);
@@ -115,8 +122,8 @@ export function GuestJoinCard({
   const ids = { name: useId(), nameError: useId(), gift: useId(), lock: useId(), header: useId(), manual: useId(), lookup: useId(), saveSlow: useId(), undoSlow: useId() };
 
   useEffect(() => {
-    drafts.set(partyId, { name, giftUrl, preview, manual, manualTitle, manualPrice });
-  }, [partyId, name, giftUrl, preview, manual, manualTitle, manualPrice]);
+    drafts.set(partyId, { name, giftUrl, preview, manual, manualTitle, manualPrice, readyAcked });
+  }, [partyId, name, giftUrl, preview, manual, manualTitle, manualPrice, readyAcked]);
 
   useEffect(() => {
     if (gift?.id) giftDocIdRef.current = gift.id;
@@ -146,6 +153,8 @@ export function GuestJoinCard({
     if (participant?.ready === true && participant?.hasPendingWrites === false) {
       setReadyAcked(true);
       setUndoSlow(false);
+      // The save landed after all: no "Tap I'm ready" hint under "You're in!".
+      setSaveSlow(false);
     }
     if (participant?.ready === false && participant?.hasPendingWrites === false) {
       setReadyAcked(false);
@@ -158,6 +167,10 @@ export function GuestJoinCard({
   const timeoutOpts = () => ({ signal: timeoutAbortRef.current.signal });
   const bumpEdit = () => {
     editVersion.current += 1;
+  };
+  const changeBusy = (delta) => {
+    busyCount.current += delta;
+    onBusyChange?.(busyCount.current > 0);
   };
 
   const seatName = typedSeatName(name);
@@ -266,9 +279,24 @@ export function GuestJoinCard({
       : null;
     const seatAtStart = seatName;
     const nameAtStart = name;
+    // Busy until the retry gives up or the writes settle (late, too), so the page keeps this
+    // card mounted and the save is never dropped mid-flight.
+    changeBusy(1);
+    let busyHandedToWrites = false;
 
     const ackIfUnchanged = () => {
       if (startedVersion !== editVersion.current) return false;
+      // Written now, not in the drafts effect: the invite landing may hand over to the lobby in
+      // the same render, and the lobby's card must open on "You're in!" with an empty gift form.
+      drafts.set(partyId, {
+        ...drafts.get(partyId),
+        giftUrl: '',
+        preview: null,
+        manual: false,
+        manualTitle: '',
+        manualPrice: '',
+        readyAcked: true,
+      });
       setReadyAcked(true);
       setGiftUrl('');
       setPreview(null);
@@ -305,6 +333,8 @@ export function GuestJoinCard({
             .catch(() => {});
         }
       })();
+      busyHandedToWrites = true;
+      writes.finally(() => changeBusy(-1)).catch(() => {});
       writes.then(() => {
         // Late success after a timeout: never touch the form if the guest edited or started a retry.
         if (generation !== saveGeneration.current) return;
@@ -327,6 +357,7 @@ export function GuestJoinCard({
       console.error('Guest ready failed:', { code: error?.code, name: error?.name });
       setToast(COPY.joinFailedToast);
     } finally {
+      if (!busyHandedToWrites) changeBusy(-1);
       if (seq === saveSeq.current) {
         savingRef.current = false;
         setSaving(false);
@@ -340,12 +371,17 @@ export function GuestJoinCard({
     setSaving(true);
     setUndoSlow(false);
     const seq = ++undoSeq.current;
+    const generation = saveGeneration.current;
     try {
-      await withTimeout(
-        updateDoc(doc(db, 'parties', partyId, 'participants', user.uid), { ready: false, updatedAt: new Date() }),
-        REQUEST_TIMEOUT_MS,
-        timeoutOpts(),
-      );
+      const undoWrite = updateDoc(doc(db, 'parties', partyId, 'participants', user.uid), { ready: false, updatedAt: new Date() });
+      Promise.resolve(undoWrite).then(() => {
+        // Late success after a timeout: the server now says not ready, so leave "You're in!",
+        // unless the guest has tapped I'm ready again since.
+        if (generation !== saveGeneration.current) return;
+        setReadyAcked(false);
+        setUndoSlow(false);
+      }).catch(() => {});
+      await withTimeout(undoWrite, REQUEST_TIMEOUT_MS, timeoutOpts());
       if (seq !== undoSeq.current) return;
       setReadyAcked(false);
       setUndoSlow(false);
