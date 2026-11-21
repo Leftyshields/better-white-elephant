@@ -6,6 +6,7 @@ import { useState, useEffect, useRef } from 'react';
 import { GAME_USER_COPY } from '../utils/gameUserCopy.js';
 import { lookupNameState } from '../utils/seatDisplayName.js';
 import { NameLoadingSkeleton, PlayerName } from './PlayerName.jsx';
+import { HOST_TAKEOVER_COPY, fillCopy, fillCopyParts } from '../utils/hostTakeoverCopy.js';
 
 function nameStateFromProps(playerId, nameStates, userNames) {
   if (nameStates) {
@@ -35,12 +36,38 @@ function giftNameFor(giftId, gifts) {
 }
 
 /**
- * Plain one-line text for the newest PICK or STEAL, using the same words as the ticker rows.
+ * Feed rows: every PICK and STEAL, plus END_TURN only when the host made it for an away player
+ * (BUG-23). Ordinary skips stay out of the feed.
+ */
+export function isFeedActivity(activity) {
+  return activity.type === 'PICK' || activity.type === 'STEAL' || (activity.type === 'END_TURN' && !!activity.assistedBy);
+}
+
+/** Signed BUG-23 feed template for a host-assisted move, or null for an ordinary one. */
+function assistedFeedTemplate(activity) {
+  if (!activity.assistedBy) return null;
+  const action = activity.type === 'PICK' ? 'pick' : activity.type === 'STEAL' ? 'steal' : activity.assistedAction;
+  return HOST_TAKEOVER_COPY.feed[action] || HOST_TAKEOVER_COPY.feed.skip;
+}
+
+/**
+ * Plain one-line text for the newest feed move, using the same words as the ticker rows.
  * Used by the collapsed Live Feed row on phones. Returns null when there is nothing to show.
  */
 export function latestActivityLine(activities, gifts, userNames, nameStates = null) {
-  const latest = [...(activities || [])].reverse().find((a) => a.type === 'PICK' || a.type === 'STEAL');
+  const latest = [...(activities || [])].reverse().find(isFeedActivity);
   if (!latest) return null;
+  const template = assistedFeedTemplate(latest);
+  if (template) {
+    const values = {
+      hostName: playerNameFor(latest.assistedBy, nameStates, userNames),
+      name: playerNameFor(latest.playerId, nameStates, userNames),
+      victimName: latest.type === 'STEAL' ? playerNameFor(latest.previousOwnerId, nameStates, userNames) : '',
+      giftTitle: giftNameFor(latest.giftId, gifts),
+    };
+    if (values.hostName == null || values.name == null || values.victimName == null) return null;
+    return fillCopy(template, values);
+  }
   const player = playerNameFor(latest.playerId, nameStates, userNames);
   const from = playerNameFor(latest.previousOwnerId, nameStates, userNames);
   if (player == null || (latest.type === 'STEAL' && from == null)) return null;
@@ -50,8 +77,9 @@ export function latestActivityLine(activities, gifts, userNames, nameStates = nu
 }
 
 export function latestActivityIsLoading(activities, userNames, nameStates = null) {
-  const latest = [...(activities || [])].reverse().find((a) => a.type === 'PICK' || a.type === 'STEAL');
+  const latest = [...(activities || [])].reverse().find(isFeedActivity);
   if (!latest) return false;
+  if (latest.assistedBy && nameStateFromProps(latest.assistedBy, nameStates, userNames).status === 'loading') return true;
   if (nameStateFromProps(latest.playerId, nameStates, userNames).status === 'loading') return true;
   if (latest.type === 'STEAL' && nameStateFromProps(latest.previousOwnerId, nameStates, userNames).status === 'loading') {
     return true;
@@ -118,7 +146,30 @@ export function GameTicker({ activities, gifts, userNames, nameStates = null }) 
           const giftName = getGiftName(event.giftId);
           const eventKey = `${event.playerId}-${event.giftId}-${event.timestamp || index}`;
           const isAnimated = animatedItems.has(eventKey);
-          
+          const assistedTemplate = assistedFeedTemplate(event);
+
+          if (assistedTemplate) {
+            const parts = fillCopyParts(assistedTemplate, {
+              hostName: <span key="host" className="font-semibold text-white">{renderPlayerName(event.assistedBy)}</span>,
+              name: <span key="name" className="font-semibold text-white">{playerName}</span>,
+              victimName: <span key="victim" className="font-semibold text-white">{renderPlayerName(event.previousOwnerId)}</span>,
+              giftTitle: <span key="gift" className="font-semibold text-white">{giftName}</span>,
+            });
+            return (
+              <div
+                key={eventKey}
+                className={`bg-slate-800/40 border border-amber-500/20 rounded-lg p-2 hover:border-white/10 transition-all ${
+                  isAnimated ? 'animate-fade-in-slide-down' : ''
+                }`}
+                data-testid="feed-host-assist"
+              >
+                <div className="flex items-center gap-1 flex-wrap text-xs text-slate-300">
+                  {parts.map((part, i) => (typeof part === 'string' ? <span key={`t${i}`}>{part}</span> : part))}
+                </div>
+              </div>
+            );
+          }
+
           if (event.type === 'PICK') {
             return (
               <div

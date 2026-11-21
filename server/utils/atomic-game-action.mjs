@@ -29,6 +29,20 @@ export class GameStateConflictError extends Error {
   }
 }
 
+/**
+ * BUG-23: turnStartedAt marks when the active turn began (the host takeover clock and turn key).
+ * A new turn starts whenever the active player, the queue slot, or the steal victim changes; any
+ * other mutation keeps the old value. States saved before BUG-23 get one on their next turn.
+ */
+export function stampTurnStartedAt(previousState, newState, nowIso = new Date().toISOString()) {
+  const turnChanged =
+    previousState?.currentPlayerId !== newState.currentPlayerId ||
+    (previousState?.currentTurnIndex || 0) !== (newState.currentTurnIndex || 0) ||
+    (previousState?.currentVictim || null) !== (newState.currentVictim || null);
+  newState.turnStartedAt = turnChanged || !previousState?.turnStartedAt ? nowIso : previousState.turnStartedAt;
+  return newState;
+}
+
 export function isGameStateConflictError(error) {
   return error?.code === 'GAME_STATE_CONFLICT' || error instanceof GameStateConflictError;
 }
@@ -89,6 +103,7 @@ export async function runAtomicGameMutation(partyId, mutateFn, options = {}) {
       }
 
       newState.partyId = partyId;
+      stampTurnStartedAt(gameState, newState);
       assertGiftConservation(newState);
 
       const { cleanedState, redisJsonString } = prepareGameStateForSave(partyId, newState);

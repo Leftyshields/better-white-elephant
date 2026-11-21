@@ -20,6 +20,8 @@ import { incrementPartyReactionCount } from './utils/party-reaction-count.mjs';
 import { joinPartyMembershipRefusal } from './lib/join-party-refusal.mjs';
 import { clientSafeSocketGameErrorMessage } from './utils/socket-error-copy.js';
 import { isPartyHostCaller } from './lib/host-auth.js';
+import { createPresenceTracker } from './lib/presence.mjs';
+import { handleHostTakeTurn } from './handlers/host-take-turn.js';
 
 dotenv.config();
 
@@ -122,6 +124,13 @@ const io = new Server(httpServer, {
 
 const PORT = process.env.PORT || process.env.SERVER_PORT || 3001;
 
+// BUG-23: who is away in each party (5s grace; broadcast to the party room).
+const presence = createPresenceTracker({
+  onChange: (partyId, update) => {
+    io.to(`party:${partyId}`).emit('presence-updated', { ...update, serverNow: Date.now() });
+  },
+});
+
 // Middleware
 app.use(cors({
   origin: (origin, callback) => {
@@ -216,6 +225,9 @@ io.on('connection', (socket) => {
   // Handle disconnection
   socket.on('disconnect', (reason) => {
     console.log(`❌ Socket ${socket.id} disconnected: ${reason}`);
+    for (const joinedPartyId of socket.data.presenceParties || []) {
+      presence.leave(joinedPartyId, socket.userId, socket.id);
+    }
   });
 
   // Join party room
@@ -245,6 +257,12 @@ io.on('connection', (socket) => {
     
     // Confirm room join to client
     socket.emit('party-joined', { partyId, roomName, roomSize });
+
+    // BUG-23 presence: this socket counts for this user until it disconnects.
+    socket.data.presenceParties = socket.data.presenceParties || new Set();
+    socket.data.presenceParties.add(partyId);
+    presence.join(partyId, socket.userId, socket.id);
+    socket.emit('presence-snapshot', { away: presence.snapshot(partyId), serverNow: Date.now() });
 
     // Send current game state if game is active
     const redisKey = `game:${partyId}`;
@@ -401,6 +419,27 @@ io.on('connection', (socket) => {
         message: clientSafeSocketGameErrorMessage(error.message),
       });
     }
+  });
+
+  // BUG-23: the host takes one turn for an away or idle player (answered by ack with a code).
+  socket.on('host_take_turn_for_away', async (data, ack) => {
+    await handleHostTakeTurn({
+      data,
+      socket,
+      io,
+      presence,
+      finalizeEndedGame,
+      loadParty: async (id) => {
+        const partyDoc = await db.collection('parties').doc(id).get();
+        return partyDoc.exists ? partyDoc.data() : null;
+      },
+      scheduleBotMove: (savedPartyId, newState, delayMs) => {
+        setTimeout(() => {
+          checkAndMakeBotMove(savedPartyId, newState, io).catch(console.error);
+        }, delayMs);
+      },
+      reply: typeof ack === 'function' ? ack : undefined,
+    });
   });
 
   // Handle reaction events
