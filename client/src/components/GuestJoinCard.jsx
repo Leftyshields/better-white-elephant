@@ -223,7 +223,9 @@ export function GuestJoinCard({
     >
       <div className="space-y-1">
         <h1 className="text-xl sm:text-2xl font-bold text-white break-words">{COPY.welcomeTitle(partyTitle)}</h1>
-        <p className="text-sm text-slate-300">{COPY.welcomeBody(hostFirstName)}</p>
+        <p className="text-sm text-slate-300">
+          {isReady && !terminalMessage ? COPY.welcomeDone(hostFirstName) : COPY.welcomeBody(hostFirstName)}
+        </p>
       </div>
 
       {terminalMessage ? (

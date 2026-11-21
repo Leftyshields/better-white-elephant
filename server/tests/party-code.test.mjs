@@ -19,6 +19,7 @@ import {
   clientIpFromRequest,
   generatePartyCode,
   hashIpForRateLimit,
+  rateLimitIpBucket,
   isValidPartyCode,
   issuePartyCode,
   normalizePartyCode,
@@ -96,6 +97,44 @@ test('clientIpFromRequest uses the last X-Forwarded-For hop (forged leading hops
   const hashed = hashIpForRateLimit('203.0.113.9');
   assert.match(hashed, /^[0-9a-f]{40}$/);
   assert.equal(hashed.includes('203'), false);
+});
+
+test('IPv6: two addresses in the same /64 share one per-IP bucket', () => {
+  const a = '2001:db8:abcd:12::1';
+  const b = '2001:0db8:abcd:0012:ffff:eeee:dddd:cccc';
+  assert.equal(rateLimitIpBucket(a), '2001:db8:abcd:12::/64');
+  assert.equal(rateLimitIpBucket(b), '2001:db8:abcd:12::/64');
+  assert.equal(hashIpForRateLimit(a), hashIpForRateLimit(b));
+  // Brackets and zone ids don't change the bucket.
+  assert.equal(hashIpForRateLimit('[2001:db8:abcd:12::99]'), hashIpForRateLimit(a));
+  assert.equal(hashIpForRateLimit('fe80::1%eth0'), hashIpForRateLimit('fe80::2'));
+});
+
+test('IPv6: different /64s land in different buckets', () => {
+  assert.notEqual(hashIpForRateLimit('2001:db8:abcd:12::1'), hashIpForRateLimit('2001:db8:abcd:13::1'));
+  assert.notEqual(hashIpForRateLimit('2001:db8::1'), hashIpForRateLimit('2001:db9::1'));
+  assert.equal(rateLimitIpBucket('::1'), '0:0:0:0::/64');
+});
+
+test('IPv4 stays the full address; IPv4-mapped IPv6 equals plain IPv4', () => {
+  assert.equal(rateLimitIpBucket('203.0.113.9'), '203.0.113.9');
+  assert.notEqual(hashIpForRateLimit('203.0.113.9'), hashIpForRateLimit('203.0.113.10'));
+  for (const mapped of ['::ffff:203.0.113.9', '::FFFF:203.0.113.9', '0:0:0:0:0:ffff:203.0.113.9', '::ffff:cb00:7109']) {
+    assert.equal(rateLimitIpBucket(mapped), '203.0.113.9', mapped);
+    assert.equal(hashIpForRateLimit(mapped), hashIpForRateLimit('203.0.113.9'), mapped);
+  }
+});
+
+test('IP limit: rotating addresses inside one /64 does not reset the per-IP lockout', async () => {
+  const db = createFakeFirestore(seedParty());
+  for (let i = 0; i < PARTY_CODE_LIMITS.perIp; i += 1) {
+    const ipHash = hashIpForRateLimit(`2001:db8:1:2::${(i + 1).toString(16)}`);
+    assert.deepEqual(await join(db, { uid: `u${i}`, ipHash, rawCode: 'ZZZZZZZZ' }), { result: 'failed' });
+  }
+  const sameNet = hashIpForRateLimit('2001:db8:1:2:aaaa:bbbb:cccc:dddd');
+  assert.deepEqual(await join(db, { uid: 'fresh', ipHash: sameNet }), { result: 'failed' });
+  const otherNet = hashIpForRateLimit('2001:db8:1:3::1');
+  assert.equal((await join(db, { uid: 'fresh', ipHash: otherNet })).result, 'seated');
 });
 
 // ---- Issue / rotate ----

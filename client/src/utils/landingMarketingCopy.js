@@ -2,17 +2,15 @@
  * Canonical user-facing marketing copy for the landing page and shared SEO strings.
  */
 
-// TODO-COPY (party-code spec section 6 Coder note): SEO_DEFAULT_DESCRIPTION, heroSubhead and
-// SIGNED_IN_COPY.emptyBody should mention the party code. Waiting on Copywriter's signed lines.
 export const SEO_DEFAULT_DESCRIPTION =
-  'Host a free remote White Elephant or virtual Dirty Santa. Play live in your browser during Zoom, Teams, or Meet. Guests join from a link.';
+  'A free online White Elephant gift exchange, or Dirty Santa, played live in your browser on Zoom, Teams, or Meet. Guests join with a link or party code.';
 
 export const HOME_SEO_TITLE = 'Virtual White Elephant for Remote Teams';
 
 export const LANDING_COPY = {
   heroHeadline: 'Virtual White Elephant for remote teams, played live on your call.',
   heroSubhead:
-    'Host a free online White Elephant, or Dirty Santa, and play in the browser during Zoom, Teams, or Meet. Guests join from a link. The game handles turns, steals, and the rules.',
+    'Play an online White Elephant, or Dirty Santa, in your browser during Zoom, Teams, or Meet. Guests join with a link or party code. The game handles turns, steals, and the rules.',
   primaryCta: 'Host a free game',
   secondaryCta: 'See how it works',
   // [S:home.microline] (party-code spec Rev 3, Copywriter final)
@@ -55,7 +53,7 @@ export const SIGNED_IN_COPY = {
   heading: 'Your games',
   subheading: 'Parties you host or have joined.',
   emptyTitle: 'Host your first game',
-  emptyBody: 'Start a free virtual White Elephant. Guests join from a link.',
+  emptyBody: 'Have a party code from your host? Enter it above to join, or host your own game.',
   createModalTitle: 'Host a free game',
   partyPlaceholder: 'e.g., Team holiday exchange',
   createSubmit: 'Create game',

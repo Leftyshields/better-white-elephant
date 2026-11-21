@@ -4,13 +4,33 @@ import {
   HOME_SEO_TITLE,
   LANDING_COPY,
   SEO_DEFAULT_DESCRIPTION,
+  SIGNED_IN_COPY,
 } from '../../utils/landingMarketingCopy.js';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 import { formatPartyStatus, partyEntryButtonLabel } from '../../utils/partyUiCopy.js';
 
 describe('landingMarketingCopy', () => {
-  it('uses the canonical SEO description (137 characters)', () => {
-    expect(SEO_DEFAULT_DESCRIPTION).toHaveLength(137);
-    expect(SEO_DEFAULT_DESCRIPTION).toMatch(/Guests join from a link\.$/);
+  it('uses Copywriter\'s signed SEO description, hero subhead and empty state (party code)', () => {
+    expect(SEO_DEFAULT_DESCRIPTION).toBe(
+      'A free online White Elephant gift exchange, or Dirty Santa, played live in your browser on Zoom, Teams, or Meet. Guests join with a link or party code.',
+    );
+    expect(LANDING_COPY.heroSubhead).toBe(
+      'Play an online White Elephant, or Dirty Santa, in your browser during Zoom, Teams, or Meet. Guests join with a link or party code. The game handles turns, steals, and the rules.',
+    );
+    expect(SIGNED_IN_COPY.emptyBody).toBe(
+      'Have a party code from your host? Enter it above to join, or host your own game.',
+    );
+  });
+
+  it('keeps index.html meta descriptions in sync with SEO_DEFAULT_DESCRIPTION', () => {
+    const html = readFileSync(resolve(__dirname, '../../../index.html'), 'utf8');
+    const metas = html.match(/(name|property)="(description|og:description|twitter:description)" content="[^"]*"/g) || [];
+    expect(metas).toHaveLength(3);
+    for (const meta of metas) expect(meta).toContain(`content="${SEO_DEFAULT_DESCRIPTION}"`);
   });
 
   it('exposes hero and CTA strings from the copy review', () => {

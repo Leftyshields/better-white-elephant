@@ -12,12 +12,14 @@
  *   old, and the party is LOBBY. Rotate replaces token and code in one transaction.
  * - Resolve + seat is one transaction: lockout and breaker checks, lookup, LOBBY and 30-seat recheck,
  *   then the seat write. The client never receives the invite token on this path.
- * - Limits live in _rateLimits (Admin SDK only): 5 bad codes per uid and 10 per IP per 15 minutes,
+ * - Limits live in _rateLimits (Admin SDK only): 5 bad codes per uid and 10 per IP per 15 minutes
+ *   (IPv6 counted per /64, IPv4-mapped IPv6 as IPv4),
  *   plus a global breaker. Every failure maps to one generic error; only "full" differs, and only
  *   after a valid match.
  * - Logs carry counts and party ids only. Never the code, the token, a uid, or an IP.
  */
 import { createHash, randomBytes, randomInt } from 'node:crypto';
+import { isIPv4, isIPv6 } from 'node:net';
 
 export const PARTY_CODE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTVWXYZ';
 export const PARTY_CODE_LENGTH = 8;
@@ -87,9 +89,42 @@ export function clientIpFromRequest(req) {
   return req?.socket?.remoteAddress || 'unknown';
 }
 
-/** Rate-limit key for an IP. Stored only in Admin-only docs and never logged. */
+/** Eight 16-bit groups for a valid IPv6 string (zone and brackets stripped), else null. */
+function ipv6Groups(ip) {
+  if (!isIPv6(ip)) return null;
+  let text = ip;
+  const tail = text.match(/(\d{1,3}(?:\.\d{1,3}){3})$/);
+  if (tail) {
+    const o = tail[1].split('.').map(Number);
+    text = `${text.slice(0, -tail[1].length)}${((o[0] << 8) | o[1]).toString(16)}:${((o[2] << 8) | o[3]).toString(16)}`;
+  }
+  const [head, rest] = text.split('::');
+  const left = head ? head.split(':') : [];
+  const right = rest !== undefined && rest !== '' ? rest.split(':') : [];
+  const fill = rest === undefined ? [] : new Array(8 - left.length - right.length).fill('0');
+  const groups = [...left, ...fill, ...right].map((g) => parseInt(g, 16));
+  return groups.length === 8 ? groups : null;
+}
+
+/**
+ * Per-IP limit bucket. IPv4 stays the full address. IPv6 is bucketed by /64 (one customer
+ * network usually gets a whole /64, so rotating the low 64 bits must not reset the limit).
+ * IPv4-mapped IPv6 (::ffff:a.b.c.d) counts as the plain IPv4 address.
+ */
+export function rateLimitIpBucket(raw) {
+  const ip = String(raw ?? '').trim().replace(/^\[|\]$/g, '').replace(/%.*$/, '');
+  if (isIPv4(ip)) return ip;
+  const groups = ipv6Groups(ip);
+  if (!groups) return ip;
+  if (groups.slice(0, 5).every((g) => g === 0) && groups[5] === 0xffff) {
+    return [groups[6] >> 8, groups[6] & 0xff, groups[7] >> 8, groups[7] & 0xff].join('.');
+  }
+  return `${groups.slice(0, 4).map((g) => g.toString(16)).join(':')}::/64`;
+}
+
+/** Rate-limit key for an IP bucket. Stored only in Admin-only docs and never logged. */
 export function hashIpForRateLimit(ip) {
-  return createHash('sha256').update(`party-code-ip:${ip}`).digest('hex').slice(0, 40);
+  return createHash('sha256').update(`party-code-ip:${rateLimitIpBucket(ip)}`).digest('hex').slice(0, 40);
 }
 
 function codeRef(db, code) {

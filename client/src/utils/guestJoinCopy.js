@@ -23,11 +23,16 @@ export const GUEST_JOIN_COPY = {
       : 'Please go find a gift and share it here. Your host will wait.',
   readyCta: "I'm ready",
   readyDone: "You're in! Hang tight while everyone else gets ready.",
+  // [S:guest.welcome.done] Ready state: replaces welcomeBody under the same title (Nov 21).
+  welcomeDone: (hostFirstName) =>
+    hostFirstName
+      ? `${hostFirstName} here. Thanks for the gift. See you at the game.`
+      : 'Thanks for the gift. Your host will see you at the game.',
   readyUndo: 'Not ready yet',
   readyLockedName: "Add your name before you're ready.",
   readyLockedGift: "Add your gift before you're ready.",
   giftStoreName: "That's the store, not the gift. What's the gift called?",
-  giftManualHelper: "This store won't share its gift details with us. Add them below and you're all set.",
+  giftManualHelper: "This store won't share its gift details with us. Add them below.",
   // Existing shipped lobby strings reused on the card
   giftUrlLabel: 'Gift URL',
   giftUrlPlaceholder: 'https://example.com/gift',

@@ -140,6 +140,31 @@ describe('GuestJoinCard', () => {
     expect(readyButton()).toBeDisabled();
   });
 
+  it('ready state swaps the welcome body for guest.welcome.done (host name) and keeps the title', () => {
+    renderCard({ participant: { id: 'anon-1', ready: true, displayName: 'Sam' }, gift: { id: 'g1', title: 'Socks' } });
+    expect(screen.getByText(COPY.welcomeTitle('Winter Swap'))).toBeInTheDocument();
+    expect(screen.getByText('Dana here. Thanks for the gift. See you at the game.')).toBeInTheDocument();
+    expect(screen.queryByText(COPY.welcomeBody('Dana'))).toBeNull();
+  });
+
+  it('ready state uses the no-name guest.welcome.done when the host name is not shared', () => {
+    renderCard({ hostFirstName: null, participant: { id: 'anon-1', ready: true, displayName: 'Sam' }, gift: { id: 'g1', title: 'Socks' } });
+    expect(screen.getByText('Thanks for the gift. Your host will see you at the game.')).toBeInTheDocument();
+    expect(screen.queryByText(COPY.welcomeBody(null))).toBeNull();
+  });
+
+  it('before ready, the welcome body is unchanged', () => {
+    renderCard();
+    expect(screen.getByText(COPY.welcomeBody('Dana'))).toBeInTheDocument();
+    expect(screen.queryByText(/Thanks for the gift/)).toBeNull();
+  });
+
+  it('manual gift entry shows the signed helper', () => {
+    renderCard();
+    fireEvent.click(screen.getByRole('button', { name: COPY.giftManualToggle }));
+    expect(screen.getByText("This store won't share its gift details with us. Add them below.")).toBeInTheDocument();
+  });
+
   it('shows the ready state with one way back', () => {
     renderCard({ participant: { id: 'anon-1', ready: true, displayName: 'Sam' }, gift: { id: 'g1', title: 'Socks' } });
     expect(screen.getByText(COPY.readyDone)).toBeInTheDocument();
