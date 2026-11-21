@@ -3,11 +3,30 @@
  * Shows the last 15 game moves in real-time in a compact format
  */
 import { useState, useEffect, useRef } from 'react';
+import { GAME_USER_COPY } from '../utils/gameUserCopy.js';
+import { lookupNameState } from '../utils/seatDisplayName.js';
+import { NameLoadingSkeleton, PlayerName } from './PlayerName.jsx';
 
-function playerNameFor(playerId, userNames) {
-  if (!playerId) return 'Unknown';
-  if (userNames && userNames[playerId]) return userNames[playerId];
-  return `Player ${playerId.slice(0, 8)}`;
+function nameStateFromProps(playerId, nameStates, userNames) {
+  if (nameStates) {
+    return lookupNameState(nameStates, playerId, 'pending', GAME_USER_COPY.unnamedPlayer);
+  }
+  if (userNames && playerId && userNames[playerId] && typeof userNames[playerId] === 'object' && userNames[playerId].status) {
+    return userNames[playerId];
+  }
+  if (userNames && playerId && typeof userNames[playerId] === 'string' && userNames[playerId]) {
+    return { status: 'ready', name: userNames[playerId] };
+  }
+  if (!playerId) {
+    return { status: 'failed', name: GAME_USER_COPY.unnamedPlayer };
+  }
+  return { status: 'loading', name: null };
+}
+
+function playerNameFor(playerId, nameStates, userNames) {
+  const state = nameStateFromProps(playerId, nameStates, userNames);
+  if (state.status === 'loading') return null;
+  return state.name || GAME_USER_COPY.unnamedPlayer;
 }
 
 function giftNameFor(giftId, gifts) {
@@ -19,16 +38,28 @@ function giftNameFor(giftId, gifts) {
  * Plain one-line text for the newest PICK or STEAL, using the same words as the ticker rows.
  * Used by the collapsed Live Feed row on phones. Returns null when there is nothing to show.
  */
-export function latestActivityLine(activities, gifts, userNames) {
+export function latestActivityLine(activities, gifts, userNames, nameStates = null) {
   const latest = [...(activities || [])].reverse().find((a) => a.type === 'PICK' || a.type === 'STEAL');
   if (!latest) return null;
-  const player = playerNameFor(latest.playerId, userNames);
+  const player = playerNameFor(latest.playerId, nameStates, userNames);
+  const from = playerNameFor(latest.previousOwnerId, nameStates, userNames);
+  if (player == null || (latest.type === 'STEAL' && from == null)) return null;
   const gift = giftNameFor(latest.giftId, gifts);
   if (latest.type === 'PICK') return `${player} picked ${gift}`;
-  return `${player} stole ${gift} from ${playerNameFor(latest.previousOwnerId, userNames)}`;
+  return `${player} stole ${gift} from ${from}`;
 }
 
-export function GameTicker({ activities, gifts, userNames }) {
+export function latestActivityIsLoading(activities, userNames, nameStates = null) {
+  const latest = [...(activities || [])].reverse().find((a) => a.type === 'PICK' || a.type === 'STEAL');
+  if (!latest) return false;
+  if (nameStateFromProps(latest.playerId, nameStates, userNames).status === 'loading') return true;
+  if (latest.type === 'STEAL' && nameStateFromProps(latest.previousOwnerId, nameStates, userNames).status === 'loading') {
+    return true;
+  }
+  return false;
+}
+
+export function GameTicker({ activities, gifts, userNames, nameStates = null }) {
   const [animatedItems, setAnimatedItems] = useState(new Set());
   const prevActivitiesRef = useRef([]);
 
@@ -49,7 +80,9 @@ export function GameTicker({ activities, gifts, userNames }) {
     console.log('GameTicker: Rendering', { activitiesCount: activities.length, recentCount: recentActivities.length });
   }
 
-  const getPlayerName = (playerId) => playerNameFor(playerId, userNames);
+  const renderPlayerName = (playerId) => (
+    <PlayerName nameState={nameStateFromProps(playerId, nameStates, userNames)} id={playerId} />
+  );
   const getGiftName = (giftId) => giftNameFor(giftId, gifts);
   
   // Track new items for animation
@@ -81,7 +114,7 @@ export function GameTicker({ activities, gifts, userNames }) {
     <div className="w-full">
       <div className="space-y-1.5">
         {recentActivities.map((event, index) => {
-          const playerName = getPlayerName(event.playerId);
+          const playerName = renderPlayerName(event.playerId);
           const giftName = getGiftName(event.giftId);
           const eventKey = `${event.playerId}-${event.giftId}-${event.timestamp || index}`;
           const isAnimated = animatedItems.has(eventKey);
@@ -112,7 +145,7 @@ export function GameTicker({ activities, gifts, userNames }) {
               </div>
             );
           } else if (event.type === 'STEAL') {
-            const previousOwnerName = getPlayerName(event.previousOwnerId);
+            const previousOwnerName = renderPlayerName(event.previousOwnerId);
             const isFrozen = event.isFrozen;
             
             return (

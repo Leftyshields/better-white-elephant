@@ -4,6 +4,8 @@
 import { memo, useState, useEffect, useRef } from 'react';
 import { Button } from './ui/Button.jsx';
 import { GiftIcon, LockClosedIcon, FireIcon } from '@heroicons/react/24/outline';
+import { GAME_USER_COPY } from '../utils/gameUserCopy.js';
+import { NameLoadingSkeleton } from './PlayerName.jsx';
 
 export const GiftCard = memo(function GiftCard({
   gift,
@@ -21,6 +23,7 @@ export const GiftCard = memo(function GiftCard({
   stealBlockReason,
   pickBlockReason = null,
   ownerName,
+  ownerNameStatus,
   darkMode = false,
   compact = false,
   giftNumber,
@@ -28,6 +31,7 @@ export const GiftCard = memo(function GiftCard({
   isMyGift = false,
 }) {
   const isOwned = ownerId === userId;
+  const resolvedOwnerStatus = ownerNameStatus || (ownerName ? 'ready' : 'loading');
   const isCurrentPlayer = currentPlayerId === userId;
   // Recalculate isMyGift from gift prop to avoid stale prop values
   // This ensures the badge always shows correctly even if the passed prop is stale
@@ -278,11 +282,26 @@ export const GiftCard = memo(function GiftCard({
           {/* Owner Footer */}
           {ownerId && (
             <div className="bg-black/20 p-3 flex items-center gap-2 mt-auto rounded-lg">
-              <div className={`w-6 h-6 rounded-full bg-gradient-to-tr ${getAvatarGradient(ownerId)} flex items-center justify-center text-white text-xs font-bold`}>
-                {ownerName ? ownerName.charAt(0).toUpperCase() : '?'}
-              </div>
-              <span className="text-sm text-slate-300 flex-1">
-                {isOwned ? 'Held by you' : `Held by: ${ownerName || 'Player'}`}
+              {resolvedOwnerStatus === 'loading' && !isOwned ? (
+                <span className="w-6 h-6 rounded-full bg-slate-700/60 shrink-0" aria-hidden="true" />
+              ) : (
+                <div className={`w-6 h-6 rounded-full bg-gradient-to-tr ${getAvatarGradient(ownerId)} flex items-center justify-center text-white text-xs font-bold shrink-0`}>
+                  {ownerName ? ownerName.charAt(0).toUpperCase() : '?'}
+                </div>
+              )}
+              <span className="text-sm text-slate-300 flex-1 min-w-0 flex items-center gap-1">
+                {isOwned ? (
+                  'Held by you'
+                ) : (
+                  <>
+                    Held by:{' '}
+                    {resolvedOwnerStatus === 'loading' ? (
+                      <NameLoadingSkeleton />
+                    ) : (
+                      ownerName || GAME_USER_COPY.unnamedPlayer
+                    )}
+                  </>
+                )}
               </span>
             </div>
           )}
@@ -312,6 +331,8 @@ export const GiftCard = memo(function GiftCard({
     prevProps.pickBlockReason === nextProps.pickBlockReason &&
     prevProps.currentPlayerId === nextProps.currentPlayerId &&
     prevProps.userId === nextProps.userId &&
+    prevProps.ownerName === nextProps.ownerName &&
+    prevProps.ownerNameStatus === nextProps.ownerNameStatus &&
     prevProps.compact === nextProps.compact &&
     prevProps.giftNumber === nextProps.giftNumber &&
     prevProps.onEndTurn === nextProps.onEndTurn &&

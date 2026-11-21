@@ -6,6 +6,7 @@
 import { memo } from 'react';
 import { GiftCard } from './GiftCard.jsx';
 import { GAME_USER_COPY } from '../utils/gameUserCopy.js';
+import { lookupNameState } from '../utils/seatDisplayName.js';
 
 export const GiftGrid = memo(function GiftGrid({ 
   gifts, 
@@ -16,6 +17,7 @@ export const GiftGrid = memo(function GiftGrid({
   currentPlayerId,
   userId,
   userNames = {},
+  nameStates = null,
   revealingGiftId = null,
   canPick: canPickWrapped = false,
   isOwnGiftLocked = () => false,
@@ -74,10 +76,15 @@ export const GiftGrid = memo(function GiftGrid({
           <h2 className="text-xl font-semibold mb-4 text-white text-center">Unwrapped Gifts</h2>
           <div className="flex flex-wrap justify-center gap-6 w-full max-w-7xl mx-auto">
             {unwrappedGifts.map((gift) => {
-              const ownerName = gift.ownerId 
-                ? (userNames[gift.ownerId] || null)
+              const ownerState = gift.ownerId
+                ? (nameStates
+                    ? lookupNameState(nameStates, gift.ownerId, 'pending', GAME_USER_COPY.unnamedPlayer)
+                    : (userNames[gift.ownerId]
+                        ? { status: 'ready', name: userNames[gift.ownerId] }
+                        : { status: 'loading', name: null }))
                 : null;
-              
+              const ownerName = ownerState && ownerState.status !== 'loading' ? ownerState.name : null;
+              const ownerNameStatus = ownerState ? ownerState.status : undefined;
               
               return (
                 <GiftCard
@@ -86,6 +93,7 @@ export const GiftGrid = memo(function GiftGrid({
                   isWrapped={false}
                   ownerId={gift.ownerId}
                   ownerName={ownerName}
+                  ownerNameStatus={ownerNameStatus}
                   stealCount={gift.stealCount}
                   isFrozen={gift.isFrozen}
                   currentPlayerId={currentPlayerId}
@@ -114,6 +122,7 @@ export const GiftGrid = memo(function GiftGrid({
     prevProps.currentPlayerId === nextProps.currentPlayerId &&
     prevProps.userId === nextProps.userId &&
     prevProps.userNames === nextProps.userNames &&
+    prevProps.nameStates === nextProps.nameStates &&
     prevProps.revealingGiftId === nextProps.revealingGiftId
   );
 });
