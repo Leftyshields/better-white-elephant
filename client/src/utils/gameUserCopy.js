@@ -32,4 +32,6 @@ export const GAME_USER_COPY = {
   boomerangBannerOn: 'Boomerang is on: you can swap even if you already have a gift.',
   waitingForHostEnd: '🎉 All gifts are frozen! Waiting for the host to end the game.',
   afterGameHeading: "Here's what you won, and what you need to ship.",
+  nameLoadingLabel: 'Loading player name',
+  unnamedPlayer: 'Player',
 };
