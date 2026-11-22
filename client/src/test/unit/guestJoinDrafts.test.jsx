@@ -18,7 +18,7 @@ let batchOps = [];
 
 vi.mock('../../utils/firebase.js', () => ({ db: {} }));
 vi.mock('../../utils/analytics.js', () => ({ trackSubmitGift: vi.fn() }));
-vi.mock('../../utils/api.js', () => ({ scrapeGiftUrl: vi.fn() }));
+vi.mock('../../utils/api.js', () => ({ scrapeGiftUrl: vi.fn(), postPartyCode: vi.fn().mockResolvedValue({ ok: true, status: 200, body: { code: 'KX7P4MRB', token: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' } }) }));
 vi.mock('firebase/firestore', () => ({
   // doc(collection) mints the new gift id 'gift-new'; doc(db, ...path) is a path ref.
   doc: vi.fn((first, ...path) => (path.length ? { path: path.join('/') } : { path: 'gifts/gift-new', id: 'gift-new' })),

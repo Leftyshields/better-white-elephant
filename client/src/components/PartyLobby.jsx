@@ -40,7 +40,9 @@ import {
 import { GAME_USER_COPY } from '../utils/gameUserCopy.js';
 import { PlayerName } from './PlayerName.jsx';
 import { userSignedInWithGoogle } from '../utils/partyInviteCopy.js';
+import { usePartyShareInvite } from '../hooks/usePartyShareInvite.js';
 import { PartyShareModal } from './PartyShareModal.jsx';
+import { PartySetupInviteShare } from './PartySetupInviteShare.jsx';
 import { GuestJoinCard } from './GuestJoinCard.jsx';
 import { hostFirstNameFromParty } from './PartyInviteLanding.jsx';
 
@@ -75,6 +77,10 @@ export function PartyLobby({ partyId, onStartGame }) {
   const addPersonNameInputId = useId();
   const isAdmin = !!user && !!party && party.adminId === user.uid;
   const isGoogleHost = isAdmin && userSignedInWithGoogle(user);
+  const shareInvite = usePartyShareInvite({
+    partyId,
+    enabled: isAdmin && party?.status === 'LOBBY',
+  });
   const currentParticipant = participants.find((p) => p.id === user?.uid);
   const userGift = gifts.find((g) => g.submitterId === user?.uid);
   const potCount = lobbyGiftPotCount(participants);
@@ -911,6 +917,12 @@ export function PartyLobby({ partyId, onStartGame }) {
                         </p>
                       </div>
 
+                      <PartySetupInviteShare
+                        invite={shareInvite.invite}
+                        loadFailed={shareInvite.loadFailed}
+                        link={shareInvite.link}
+                      />
+
                       <div className="mb-4">
                         {!showAddPeople ? (
                           <Button
@@ -1701,6 +1713,7 @@ export function PartyLobby({ partyId, onStartGame }) {
         onClose={() => setShowShareModal(false)}
         partyId={partyId}
         isGoogleHost={isGoogleHost}
+        share={shareInvite}
       />
 
       {/* Email Invite Modal */}
