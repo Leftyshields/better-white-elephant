@@ -5,26 +5,59 @@ import { auth } from './firebase.js';
 import { SERVER_URL } from './config.js';
 
 /**
- * Make authenticated API request
+ * Make authenticated API request.
+ * A failed response throws an Error with `status` (the HTTP code). A non-JSON error body (for
+ * example a proxy's HTML 502 page) is still a normal error, not a parse crash.
+ * Pass `timeoutMs` to give up after that long: the request is aborted and the Error has
+ * `timedOut: true` and `status: 0`.
  */
 export async function apiRequest(endpoint, options = {}) {
-  const token = await auth.currentUser?.getIdToken();
-  
-  const response = await fetch(`${SERVER_URL}${endpoint}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-      ...options.headers,
-    },
+  const { timeoutMs, ...fetchOptions } = options;
+  const controller = timeoutMs ? new AbortController() : null;
+
+  const run = async () => {
+    const token = await auth.currentUser?.getIdToken();
+
+    const response = await fetch(`${SERVER_URL}${endpoint}`, {
+      ...fetchOptions,
+      ...(controller && { signal: controller.signal }),
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+        ...fetchOptions.headers,
+      },
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      let body = null;
+      try {
+        body = text ? JSON.parse(text) : null;
+      } catch {
+        body = null;
+      }
+      const error = new Error(body?.message || 'API request failed');
+      error.status = response.status;
+      throw error;
+    }
+
+    return response.json();
+  };
+
+  if (!controller) return run();
+
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(Object.assign(new Error('API request timed out'), { status: 0, timedOut: true }));
+    }, timeoutMs);
   });
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || 'API request failed');
+  try {
+    return await Promise.race([run(), timeout]);
+  } finally {
+    clearTimeout(timer);
   }
-
-  return response.json();
 }
 
 /**
@@ -40,12 +73,13 @@ export async function scrapeGiftUrl(url) {
 /**
  * Fetch winner shipping address for the assigned sender (gift submitter) after game end.
  */
-export async function fetchWinnerShippingAddress(partyId, giftId) {
+export async function fetchWinnerShippingAddress(partyId, giftId, { timeoutMs } = {}) {
   if (!partyId || !giftId) {
     throw new Error('partyId and giftId are required');
   }
   return apiRequest(`/api/game/winner-shipping-address/${encodeURIComponent(partyId)}/${encodeURIComponent(giftId)}`, {
     method: 'GET',
+    timeoutMs,
   });
 }
 
