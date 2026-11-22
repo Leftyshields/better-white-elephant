@@ -44,6 +44,7 @@ vi.mock('../../utils/analytics.js', () => ({
 vi.mock('../../utils/api.js', () => ({
   apiRequest: vi.fn().mockResolvedValue({ users: {} }),
   scrapeGiftUrl: vi.fn(),
+  postPartyCode: vi.fn().mockResolvedValue({ ok: true, status: 200, body: { code: 'KX7P4MRB', token: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' } }),
 }));
 
 vi.mock('../../utils/firebase.js', () => ({

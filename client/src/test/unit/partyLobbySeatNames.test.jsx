@@ -28,6 +28,7 @@ vi.mock('../../utils/analytics.js', () => ({
 vi.mock('../../utils/api.js', () => ({
   apiRequest: (...args) => apiRequestMock(...args),
   scrapeGiftUrl: vi.fn(),
+  postPartyCode: vi.fn().mockResolvedValue({ ok: true, status: 200, body: { code: 'KX7P4MRB', token: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' } }),
 }));
 vi.mock('../../utils/firebase.js', () => ({ db: {} }));
 vi.mock('firebase/firestore', () => {

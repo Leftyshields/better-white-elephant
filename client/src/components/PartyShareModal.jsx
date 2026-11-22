@@ -7,9 +7,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { Modal } from './ui/Modal.jsx';
 import { Button } from './ui/Button.jsx';
 import { postPartyCode } from '../utils/api.js';
-import { buildPartyShareLink } from '../utils/partyInvite.js';
 import { formatPartyCode } from '../utils/partyCode.js';
-import { copyText, selectVisibleText } from '../utils/copyText.js';
 import {
   HOST_INVITE_ROTATE_CONFIRM,
   HOST_INVITE_ROTATE_CTA,
@@ -20,6 +18,7 @@ import {
   HOST_SHARE_LOAD_FAILED,
   PARTY_INVITE_COPY as COPY,
 } from '../utils/partyInviteCopy.js';
+import { usePartyShareInvite, useShareClipboard } from '../hooks/usePartyShareInvite.js';
 
 const FOCUS_RING =
   'focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950';
@@ -27,18 +26,20 @@ const FOCUS_RING =
 const SHARE_LINK_FIELD_CLASSES =
   'w-full min-h-11 px-3 py-2 bg-slate-950/50 border border-slate-700 rounded-md shadow-sm text-white font-mono text-sm break-all whitespace-pre-wrap resize-none overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 focus-visible:border-purple-500';
 
-const COPIED_MS = 2000;
-
-export function PartyShareModal({ isOpen, onClose, partyId, isGoogleHost }) {
-  const [invite, setInvite] = useState(null); // { code, token }
-  const [loadFailed, setLoadFailed] = useState(false);
-  const [codeCopied, setCodeCopied] = useState(false);
-  const [linkCopied, setLinkCopied] = useState(false);
-  const [codeCopyFailed, setCodeCopyFailed] = useState(false);
-  const [linkCopyFailed, setLinkCopyFailed] = useState(false);
-  const codeTimerRef = useRef(null);
-  const linkTimerRef = useRef(null);
-  const codeTextRef = useRef(null);
+export function PartyShareModal({ isOpen, onClose, partyId, isGoogleHost, share = null }) {
+  const internalShare = usePartyShareInvite({ partyId, enabled: Boolean(isOpen && !share) });
+  const { invite, setInvite, loadFailed, link } = share ?? internalShare;
+  const {
+    codeCopied,
+    linkCopied,
+    codeCopyFailed,
+    linkCopyFailed,
+    codeTextRef,
+    linkFieldRef,
+    copyCode,
+    copyLink,
+    resetCopyState,
+  } = useShareClipboard();
   const [rotateConfirming, setRotateConfirming] = useState(false);
   const [rotateFailed, setRotateFailed] = useState(false);
   const [rotateDone, setRotateDone] = useState(false);
@@ -47,52 +48,12 @@ export function PartyShareModal({ isOpen, onClose, partyId, isGoogleHost }) {
   const rotateCtaRef = useRef(null);
   const cancelRef = useRef(null);
   const copyCodeRef = useRef(null);
-  const linkFieldRef = useRef(null);
   const focusCtaAfterCancelRef = useRef(false);
   const focusCopyAfterRotateRef = useRef(false);
   const titleId = useId();
   const introId = useId();
   const codeLabelId = useId();
   const helperId = useId();
-
-  useEffect(
-    () => () => {
-      clearTimeout(codeTimerRef.current);
-      clearTimeout(linkTimerRef.current);
-    },
-    []
-  );
-
-  const copyCode = async () => {
-    if (!invite) return;
-    clearTimeout(codeTimerRef.current);
-    const ok = await copyText(formatPartyCode(invite.code));
-    if (ok) {
-      setCodeCopyFailed(false);
-      setCodeCopied(true);
-      codeTimerRef.current = setTimeout(() => setCodeCopied(false), COPIED_MS);
-    } else {
-      setCodeCopied(false);
-      selectVisibleText(codeTextRef.current);
-      setCodeCopyFailed(true);
-    }
-  };
-
-  const link = invite ? buildPartyShareLink(window.location.origin, partyId, invite.token) : '';
-
-  useEffect(() => {
-    if (!isOpen || invite) return undefined;
-    let cancelled = false;
-    setLoadFailed(false);
-    postPartyCode('share', { partyId }).then((res) => {
-      if (cancelled) return;
-      if (res.ok && res.body?.code && res.body?.token) setInvite({ code: res.body.code, token: res.body.token });
-      else setLoadFailed(true);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [isOpen, invite, partyId]);
 
   useEffect(() => {
     if (rotateConfirming) cancelRef.current?.focus();
@@ -132,32 +93,13 @@ export function PartyShareModal({ isOpen, onClose, partyId, isGoogleHost }) {
     fit();
     window.addEventListener('resize', fit);
     return () => window.removeEventListener('resize', fit);
-  }, [isOpen, link]);
-
-  const copyLink = async () => {
-    if (!invite) return;
-    clearTimeout(linkTimerRef.current);
-    const ok = await copyText(link);
-    if (ok) {
-      setLinkCopyFailed(false);
-      setLinkCopied(true);
-      linkTimerRef.current = setTimeout(() => setLinkCopied(false), COPIED_MS);
-    } else {
-      setLinkCopied(false);
-      selectVisibleText(linkFieldRef.current);
-      setLinkCopyFailed(true);
-    }
-  };
+  }, [isOpen, link, linkFieldRef]);
 
   const close = () => {
-    setCodeCopied(false);
-    setLinkCopied(false);
-    setCodeCopyFailed(false);
-    setLinkCopyFailed(false);
+    resetCopyState();
     setRotateConfirming(false);
     setRotateFailed(false);
     setRotateDone(false);
-    setLoadFailed(false);
     onClose();
   };
 
@@ -169,10 +111,7 @@ export function PartyShareModal({ isOpen, onClose, partyId, isGoogleHost }) {
     const res = await postPartyCode('rotate', { partyId });
     if (res.ok && res.body?.code && res.body?.token) {
       setInvite({ code: res.body.code, token: res.body.token });
-      setCodeCopied(false);
-      setLinkCopied(false);
-      setCodeCopyFailed(false);
-      setLinkCopyFailed(false);
+      resetCopyState();
       setRotateConfirming(false);
       focusCopyAfterRotateRef.current = true;
       setRotateDone(true);
@@ -184,6 +123,8 @@ export function PartyShareModal({ isOpen, onClose, partyId, isGoogleHost }) {
     rotatingRef.current = false;
     setRotating(false);
   };
+
+  const formatted = invite ? formatPartyCode(invite.code) : '';
 
   return (
     <Modal
@@ -208,13 +149,13 @@ export function PartyShareModal({ isOpen, onClose, partyId, isGoogleHost }) {
               data-testid="share-party-code"
               className="sm:flex-1 font-mono text-[32px] leading-tight tracking-[0.1em] whitespace-nowrap text-white select-all min-h-11"
             >
-              {invite ? formatPartyCode(invite.code) : ''}
+              {formatted}
             </p>
             <Button
               ref={copyCodeRef}
               aria-label={COPY['host.share.code.copy_name']}
               disabled={!invite}
-              onClick={copyCode}
+              onClick={() => copyCode(formatted)}
               className="w-full sm:w-auto min-h-11 whitespace-nowrap"
             >
               {codeCopied ? COPY['host.share.code.copy_done'] : COPY['host.share.code.copy']}
@@ -246,7 +187,7 @@ export function PartyShareModal({ isOpen, onClose, partyId, isGoogleHost }) {
               aria-label={COPY['host.share.link.copy_name']}
               variant={linkCopied ? 'secondary' : 'primary'}
               disabled={!invite}
-              onClick={copyLink}
+              onClick={() => copyLink(link)}
               className="w-full min-h-11 sm:w-auto whitespace-nowrap"
             >
               {linkCopied ? COPY['host.share.link.copy_done'] : COPY['host.share.link.copy']}

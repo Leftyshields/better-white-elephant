@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   getJoinErrorMessage,
   HOST_SHARE_LOAD_FAILED,
+  SETUP_INVITE_INTRO,
   HOST_INVITE_ROTATE_CONFIRM,
   HOST_INVITE_ROTATE_CTA,
   HOST_INVITE_ROTATE_DONE,
@@ -82,6 +83,14 @@ describe('PARTY_INVITE_COPY Copywriter slots', () => {
       "Couldn't load your party code and link. Refresh to try again.",
     );
     expect(HOST_SHARE_LOAD_FAILED).toBe(PARTY_INVITE_COPY['host.share.load_failed']);
+  });
+
+
+  it('lands setupInviteIntro exactly', () => {
+    expect(PARTY_INVITE_COPY.setupInviteIntro).toBe(
+      'Share this code or link so guests can join.',
+    );
+    expect(SETUP_INVITE_INTRO).toBe(PARTY_INVITE_COPY.setupInviteIntro);
   });
 
   it('lands the Copywriter 8-character party-code strings exactly', () => {

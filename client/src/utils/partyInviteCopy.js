@@ -34,6 +34,8 @@ export const PARTY_INVITE_COPY = {
   // Copywriter final Nov 21: link status pairs with code.copy_status; fallback shows inline when copy fails.
   'host.share.link.copy_status': 'Invite link copied.',
   'host.share.copy_failed': "Couldn't copy. It's selected, so copy it yourself.",
+  // Copywriter final Nov 21: intro above the code in Setup step 2 (Add participants).
+  setupInviteIntro: 'Share this code or link so guests can join.',
   // Home "Join a party" (8-character codes, Copywriter final Nov 21).
   'home.join.title': 'Join a party',
   'home.join.helper': 'Enter the 8-character code from your host.',
@@ -60,6 +62,7 @@ export const HOST_INVITE_ROTATE_FAILED = PARTY_INVITE_COPY['host.invite.rotate_f
 export const HOST_INVITE_ROTATE_RETRY = PARTY_INVITE_COPY['host.invite.rotate_retry'];
 export const HOST_INVITE_ROTATE_DONE = PARTY_INVITE_COPY['host.invite.rotate_done'];
 export const HOST_SHARE_LOAD_FAILED = PARTY_INVITE_COPY['host.share.load_failed'];
+export const SETUP_INVITE_INTRO = PARTY_INVITE_COPY.setupInviteIntro;
 
 /** Firebase Auth provider id for Google hosts (matches server HOST_SIGN_IN_PROVIDER). */
 export const GOOGLE_SIGN_IN_PROVIDER = 'google.com';

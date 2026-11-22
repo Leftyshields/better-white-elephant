@@ -34,7 +34,7 @@ const authState = vi.hoisted(() => ({ currentUser: null }));
 vi.mock('../../hooks/useAuth.js', () => ({ useAuth: () => useAuthMock() }));
 vi.mock('../../hooks/useParty.js', () => ({ useParty: (...args) => usePartyMock(...args) }));
 vi.mock('../../utils/analytics.js', () => ({ trackParticipantJoin: vi.fn(), trackError: vi.fn(), trackSubmitGift: vi.fn() }));
-vi.mock('../../utils/api.js', () => ({ scrapeGiftUrl: vi.fn() }));
+vi.mock('../../utils/api.js', () => ({ scrapeGiftUrl: vi.fn(), postPartyCode: vi.fn().mockResolvedValue({ ok: true, status: 200, body: { code: 'KX7P4MRB', token: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' } }) }));
 vi.mock('../../utils/firebase.js', () => ({ db: { name: 'test-db' }, auth: authState }));
 vi.mock('firebase/firestore', () => ({
   // doc(collection) mints the new gift id 'gift-new'; doc(db, ...path) is a path ref.
