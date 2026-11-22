@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Profile } from '../../pages/Profile.jsx';
 
@@ -99,5 +99,37 @@ describe('Profile page label associations', () => {
     const displayName = screen.getByLabelText('Display Name');
     expect(displayName).toHaveAttribute('id', 'profile-display-name');
     expect(displayName.className).toMatch(/focus-visible:ring-2/);
+  });
+});
+describe('Profile page without the address section (A0)', () => {
+  beforeEach(() => {
+    getDoc.mockResolvedValue({
+      exists: () => true,
+      data: () => ({
+        displayName: 'User',
+        // Legacy profile fields from before A0 must not show or be written back.
+        shippingAddress: { name: 'Old', street: '9 Legacy Rd', city: 'Oldtown', state: 'OR', zip: '00000', country: 'US' },
+        shippingAddressSenderShareConsentAt: new Date('2026-01-01T00:00:00Z'),
+      }),
+    });
+  });
+
+  it('shows no shipping heading, fields or checkbox, and Save writes only name, email, updatedAt', async () => {
+    const { updateDoc } = await import('firebase/firestore');
+    render(
+      <MemoryRouter>
+        <Profile />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(screen.getByLabelText('Display Name')).toBeInTheDocument());
+    expect(screen.queryByText(/shipping address/i)).toBeNull();
+    expect(screen.queryByLabelText('Street Address')).toBeNull();
+    expect(screen.queryByRole('checkbox')).toBeNull();
+    expect(screen.queryByDisplayValue('9 Legacy Rd')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
+    await waitFor(() => expect(updateDoc).toHaveBeenCalled());
+    const written = updateDoc.mock.calls.at(-1)[1];
+    expect(Object.keys(written).sort()).toEqual(['displayName', 'email', 'updatedAt']);
   });
 });

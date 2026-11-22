@@ -11,18 +11,14 @@ import {
 const clientSrc = join(dirname(fileURLToPath(import.meta.url)), '../..');
 
 const rulesSource = readFileSync(join(clientSrc, 'components/RulesContent.jsx'), 'utf8');
-const profileSource = readFileSync(join(clientSrc, 'pages/Profile.jsx'), 'utf8');
 const privacySource = readFileSync(join(clientSrc, 'pages/Privacy.jsx'), 'utf8');
 const termsSource = readFileSync(join(clientSrc, 'pages/Terms.jsx'), 'utf8');
 
 const AUTO_PILOT_BODY =
-  'Before the game, you add a shipping address so the person mailing your gift can ship. It auto-deletes 30 days after the game ends.';
+  'When the game ends, each winner adds a shipping address right on the end screen for the person mailing the gift. It auto-deletes 30 days later.';
 
 const RULES_AFTER_GAME =
-  'Before the game, add a shipping address in your profile so the person mailing your gift can ship. It auto-deletes 30 days after the game ends.';
-
-const PROFILE_SHIPPING_INTRO =
-  'Add this before the game so the person mailing your gift can ship. It auto-deletes 30 days after the game ends.';
+  'After the game, add your shipping address on the end screen so the person mailing your gift can ship it. It auto-deletes 30 days after the game ends.';
 
 describe('Copywriter shipping / retention strings', () => {
   it('Auto-Pilot Logistics card body', () => {
@@ -32,10 +28,6 @@ describe('Copywriter shipping / retention strings', () => {
 
   it('Rules After the game paragraph', () => {
     expect(rulesSource).toContain(RULES_AFTER_GAME);
-  });
-
-  it('Profile shipping intro', () => {
-    expect(profileSource).toContain(PROFILE_SHIPPING_INTRO);
   });
 
   it('Privacy Fulfillment Information bullet', () => {
@@ -80,10 +72,15 @@ describe('Copywriter shipping / retention strings', () => {
   });
 
   it('does not retain removed email / sharing / 1-year claims', () => {
-    const combined = [rulesSource, profileSource, privacySource, AUTO_PILOT_BODY].join('\n');
+    const combined = [rulesSource, privacySource, AUTO_PILOT_BODY].join('\n');
     expect(combined).not.toMatch(/we email/i);
     expect(combined).not.toMatch(/only shared with the person assigned/i);
     expect(combined).not.toMatch(/fulfillment is confirmed/i);
     expect(combined).not.toMatch(/1 year after the game ends/i);
+  });
+  it('A0: no copy tells players to add an address in their profile or before the game', () => {
+    const combined = [rulesSource, privacySource, termsSource, AUTO_PILOT_BODY].join('\n');
+    expect(combined).not.toMatch(/in your profile/i);
+    expect(combined).not.toMatch(/before the game, (you )?add a shipping address/i);
   });
 });

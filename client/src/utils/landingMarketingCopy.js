@@ -41,7 +41,7 @@ export const FEATURE_CARDS = [
   {
     emoji: '✈️',
     title: 'Auto-Pilot Logistics',
-    body: 'Before the game, you add a shipping address so the person mailing your gift can ship. It auto-deletes 30 days after the game ends.',
+    body: 'When the game ends, each winner adds a shipping address right on the end screen for the person mailing the gift. It auto-deletes 30 days later.',
   },
 ];
 

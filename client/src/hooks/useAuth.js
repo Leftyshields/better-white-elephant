@@ -43,7 +43,6 @@ export function useAuth() {
           const userDocRef = doc(db, 'users', user.uid);
           const userDoc = await getDoc(userDocRef);
           
-          // Get current Firestore data to preserve shippingAddress if it exists
           const existingData = userDoc.exists() ? userDoc.data() : {};
           
           // Update or create user document with Auth data
@@ -54,8 +53,6 @@ export function useAuth() {
           await setDoc(userDocRef, {
             displayName: syncedDisplayName,
             email: user.email || existingData.email || '',
-            // Preserve existing shippingAddress if it exists
-            shippingAddress: existingData.shippingAddress || null,
             // Preserve createdAt if document exists, otherwise set it
             createdAt: existingData.createdAt || new Date(),
             updatedAt: new Date(),

@@ -497,8 +497,8 @@ describe('client path: PartyLobby.jsx / PartyManagement.jsx — pendingInvites',
   });
 });
 
-describe('client path: Profile.jsx / AddressModal.jsx — users (not parties)', () => {
-  it('owner updateDoc users shipping profile', async () => {
+describe('client path removed (A0): Profile/AddressModal no longer write an address to users', () => {
+  it('owner updateDoc users shippingAddress is denied', async () => {
     const db = authedDb(GUEST_ID);
     await assertSucceeds(
       setDoc(doc(db, 'users', GUEST_ID), {
@@ -507,7 +507,7 @@ describe('client path: Profile.jsx / AddressModal.jsx — users (not parties)', 
         updatedAt: new Date(),
       }),
     );
-    await assertSucceeds(
+    await assertFails(
       updateDoc(doc(db, 'users', GUEST_ID), {
         shippingAddress: {
           name: 'Guest',

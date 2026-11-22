@@ -98,8 +98,6 @@ export function PartyLobby({ partyId, onStartGame }) {
     }).catch((error) => console.error('Seat gift link fix failed:', { code: error?.code, name: error?.name }));
     // Runs once per distinct fix; the seat snapshot clears the key when it lands.
   }, [seatGiftFixKey, partyId, user?.uid]);
-  const [adminShippingAddress, setAdminShippingAddress] = useState(null);
-  const [loadingAdminAddress, setLoadingAdminAddress] = useState(false);
 
   // Seat names first (G2). /api/users/batch is a fallback for seats without a valid displayName
   // (and tells us which seats are bots). Until it settles a nameless seat shows the loading
@@ -161,34 +159,6 @@ export function PartyLobby({ partyId, onStartGame }) {
     rosterBatchStatus,
     GAME_USER_COPY.unnamedPlayer,
   );
-
-  // Fetch admin shipping address
-  useEffect(() => {
-    const fetchAdminAddress = async () => {
-      if (!isAdmin || !user?.uid) {
-        setAdminShippingAddress(null);
-        return;
-      }
-
-      setLoadingAdminAddress(true);
-      try {
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
-        if (userDoc.exists()) {
-          const userData = userDoc.data();
-          setAdminShippingAddress(userData.shippingAddress || null);
-        } else {
-          setAdminShippingAddress(null);
-        }
-      } catch (error) {
-        console.error('Error fetching admin address:', error);
-        setAdminShippingAddress(null);
-      } finally {
-        setLoadingAdminAddress(false);
-      }
-    };
-
-    fetchAdminAddress();
-  }, [isAdmin, user?.uid]);
 
   // Update local state when party config changes
   useEffect(() => {
@@ -396,12 +366,6 @@ export function PartyLobby({ partyId, onStartGame }) {
 
   const handleStartGame = async () => {
     if (!partyId) return;
-
-    // Validate admin has shipping address
-    if (!adminShippingAddress || !adminShippingAddress.street || !adminShippingAddress.city) {
-      alert('Please add your shipping address to your profile before starting the game. You can update it in your Profile page.');
-      return;
-    }
 
     // Validate admin has submitted a gift
     if (!userGift) {
@@ -1602,9 +1566,8 @@ export function PartyLobby({ partyId, onStartGame }) {
                 const displayedInvites = filterVisiblePendingInvites(pendingInvites, participants);
                 const totalParticipants = participants.length + displayedInvites.length;
                 
-                const hasShippingAddress = adminShippingAddress && adminShippingAddress.street && adminShippingAddress.city;
                 const hasGift = !!userGift;
-                const canStart = allReady && totalParticipants >= 2 && hasShippingAddress && hasGift;
+                const canStart = allReady && totalParticipants >= 2 && hasGift;
                 
                 return (
                   <div className="text-center space-y-4">
@@ -1621,14 +1584,6 @@ export function PartyLobby({ partyId, onStartGame }) {
                               <span className="text-slate-500">○</span>
                             )}
                             <span className={hasGift ? 'text-slate-300' : ''}>Submit your gift</span>
-                          </li>
-                          <li className="flex items-center gap-2">
-                            {hasShippingAddress ? (
-                              <span className="text-green-400">✓</span>
-                            ) : (
-                              <span className="text-slate-500">○</span>
-                            )}
-                            <span className={hasShippingAddress ? 'text-slate-300' : ''}>Add your shipping address</span>
                           </li>
                           <li className="flex items-center gap-2">
                             {totalParticipants >= 2 ? (

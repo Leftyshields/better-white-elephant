@@ -38,18 +38,11 @@ function buildMockDb(overrides = {}) {
     ...overrides.gifts,
   };
 
-  const users = {
-    [WINNER_ID]: {
-      shippingAddress: overrides.winnerAddress ?? winnerAddress,
-      shippingAddressSenderShareConsentAt: new Date(),
-    },
+  // Per-game address docs: parties/{PARTY_ID}/shipping/{uid} (A0).
+  const shippingDocs = {
+    [WINNER_ID]: { ...(overrides.winnerAddress ?? winnerAddress), savedAt: new Date() },
     ...(overrides.hackedUser
-      ? {
-          'victim-hacked': {
-            shippingAddress: overrides.victimAddress ?? victimAddress,
-            shippingAddressSenderShareConsentAt: new Date(),
-          },
-        }
+      ? { 'victim-hacked': { ...(overrides.victimAddress ?? victimAddress), savedAt: new Date() } }
       : {}),
   };
 
@@ -70,13 +63,14 @@ function buildMockDb(overrides = {}) {
                 return { exists: true, data: () => ({ adminId: HOST_ID }) };
               },
               collection(sub) {
+                const rows = sub === 'shipping' ? shippingDocs : participants;
                 return {
                   doc(uid) {
                     return {
                       async get() {
                         return {
-                          exists: Boolean(participants[uid]),
-                          data: () => participants[uid],
+                          exists: Boolean(rows[uid]),
+                          data: () => rows[uid],
                         };
                       },
                     };
@@ -93,18 +87,6 @@ function buildMockDb(overrides = {}) {
             return {
               async get() {
                 const row = gifts[id];
-                return { exists: Boolean(row), data: () => row };
-              },
-            };
-          },
-        };
-      }
-      if (name === 'users') {
-        return {
-          doc(id) {
-            return {
-              async get() {
-                const row = users[id];
                 return { exists: Boolean(row), data: () => row };
               },
             };

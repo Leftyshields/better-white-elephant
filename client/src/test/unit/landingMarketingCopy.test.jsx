@@ -53,10 +53,10 @@ describe('landingMarketingCopy', () => {
     expect(setup?.body).not.toMatch(/scraping/i);
   });
 
-  it('Auto-Pilot Logistics uses Copywriter 30-day auto-delete copy', () => {
+  it('Auto-Pilot Logistics uses the Copywriter A0 final (revised 7:10 PM PT Nov 21)', () => {
     const autopilot = FEATURE_CARDS.find((c) => c.title === 'Auto-Pilot Logistics');
     expect(autopilot?.body).toBe(
-      'Before the game, you add a shipping address so the person mailing your gift can ship. It auto-deletes 30 days after the game ends.',
+      'When the game ends, each winner adds a shipping address right on the end screen for the person mailing the gift. It auto-deletes 30 days later.',
     );
     const featureCopy = FEATURE_CARDS.map((c) => c.body).join(' ');
     expect(featureCopy).not.toMatch(/we email/i);

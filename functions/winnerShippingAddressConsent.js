@@ -1,6 +1,7 @@
 /**
- * Winner shipping address consent and normalization.
- * Keep in sync with server/utils/winner-shipping-address.js (hasSenderShareConsent, pickShippingAddress).
+ * Shipping address normalization for the per-game doc parties/{partyId}/shipping/{uid} (A0).
+ * The doc existing is the share; there is no separate consent stamp.
+ * Keep in sync with server/lib/party-shipping.js (pickStoredShipping).
  */
 const SHIPPING_ADDRESS_KEYS = ['name', 'street', 'city', 'state', 'zip', 'country'];
 
@@ -20,22 +21,4 @@ export function pickShippingAddress(raw) {
   }
   const hasStreet = picked.street && picked.city;
   return hasStreet ? picked : null;
-}
-
-export function hasSenderShareConsent(userData) {
-  const consentAt = userData?.shippingAddressSenderShareConsentAt;
-  if (!consentAt) {
-    return false;
-  }
-  if (consentAt instanceof Date) {
-    return !Number.isNaN(consentAt.getTime());
-  }
-  if (typeof consentAt === 'object' && typeof consentAt.toDate === 'function') {
-    return true;
-  }
-  if (typeof consentAt === 'string' || typeof consentAt === 'number') {
-    const d = new Date(consentAt);
-    return !Number.isNaN(d.getTime());
-  }
-  return false;
 }

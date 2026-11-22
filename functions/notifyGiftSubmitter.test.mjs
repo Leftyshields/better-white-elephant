@@ -1,19 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   logNotifyGiftSubmitterFailure,
-  notifyGiftSubmittersForWinnerAddress,
-  resolveGiftSubmitterNotifyUpdate,
+  notifyGiftSubmittersForPartyShipping,
 } from './notifyGiftSubmitterLogic.js';
-import {
-  GIFT_SUBMITTER_NOTIFY_NO_ADDRESS_SHARED_MESSAGE,
-  buildGiftSubmitterNoAddressOpening,
-} from './sendPartyInviteLogic.js';
-import {
-  hasSenderShareConsent,
-  pickShippingAddress,
-} from './winnerShippingAddressConsent.js';
-import { hasSenderShareConsent as serverHasConsent } from '../server/utils/winner-shipping-address.js';
+import { buildGiftSubmitterNoAddressOpening } from './sendPartyInviteLogic.js';
+import { pickShippingAddress } from './winnerShippingAddressConsent.js';
 
 const sampleAddress = {
   name: 'Winner Person',
@@ -24,9 +17,36 @@ const sampleAddress = {
   country: 'US',
 };
 
-function makeDbMock({ gifts = [], users = {} } = {}) {
+function makeDbMock({ gifts = [], users = {}, markers = new Map() } = {}) {
   return {
+    markers,
+    async runTransaction(fn) {
+      const writes = [];
+      const result = await fn({
+        async get(ref) {
+          return { exists: markers.has(ref.path) };
+        },
+        create(ref, data) {
+          if (markers.has(ref.path)) throw new Error('already exists');
+          writes.push([ref.path, data]);
+        },
+      });
+      for (const [path, data] of writes) markers.set(path, data);
+      return result;
+    },
     collection(name) {
+      if (name === 'parties') {
+        return {
+          doc(partyId) {
+            return {
+              collection(sub) {
+                assert.equal(sub, 'shippingNotified');
+                return { doc: (id) => ({ path: `parties/${partyId}/shippingNotified/${id}` }) };
+              },
+            };
+          },
+        };
+      }
       if (name === 'gifts') {
         return {
           where(field, op, value) {
@@ -71,171 +91,105 @@ function makeDbMock({ gifts = [], users = {} } = {}) {
   };
 }
 
-test('hasSenderShareConsent matches server util', () => {
-  const cases = [
-    [{}, false],
-    [{ shippingAddressSenderShareConsentAt: null }, false],
-    [{ shippingAddressSenderShareConsentAt: new Date('2026-01-01') }, true],
-    [{ shippingAddressSenderShareConsentAt: 'not-a-date' }, false],
-    [{ shippingAddressSenderShareConsentAt: '2026-01-01T00:00:00Z' }, true],
-    [{ shippingAddressSenderShareConsentAt: { toDate: () => new Date() } }, true],
-  ];
-  for (const [userData, expected] of cases) {
-    assert.equal(hasSenderShareConsent(userData), serverHasConsent(userData));
-    assert.equal(hasSenderShareConsent(userData), expected);
-  }
-});
-
-test('resolveGiftSubmitterNotifyUpdate fires when consent is added with existing address', () => {
-  const before = {
-    shippingAddress: sampleAddress,
-  };
-  const after = {
-    shippingAddress: sampleAddress,
-    shippingAddressSenderShareConsentAt: new Date('2026-02-01T00:00:00Z'),
-  };
-  const update = resolveGiftSubmitterNotifyUpdate(before, after);
-  assert.equal(update.shouldNotify, true);
-  assert.equal(update.emailMode, 'with_address');
-});
-
-test('resolveGiftSubmitterNotifyUpdate does not fire on unrelated profile edits', () => {
-  const consentAt = new Date('2026-01-01T00:00:00Z');
-  const before = {
-    displayName: 'A',
-    shippingAddress: sampleAddress,
-    shippingAddressSenderShareConsentAt: consentAt,
-  };
-  const after = {
-    displayName: 'B',
-    shippingAddress: sampleAddress,
-    shippingAddressSenderShareConsentAt: consentAt,
-  };
-  assert.equal(resolveGiftSubmitterNotifyUpdate(before, after).shouldNotify, false);
-});
-
-test('no consent sends no-address email to assigned sender only', async () => {
+function recorder(failFor) {
   const sends = [];
-  const db = makeDbMock({
-    gifts: [
-      { id: 'gift-1', winnerId: 'winner-1', submitterId: 'sender-1', partyId: 'party-1' },
-      { id: 'gift-2', winnerId: 'winner-1', submitterId: 'sender-2', partyId: 'party-1' },
-      { id: 'gift-3', winnerId: 'other-winner', submitterId: 'sender-3', partyId: 'party-1' },
-    ],
-    users: {
-      'sender-1': { email: 'sender-1@example.com' },
-      'sender-2': { email: 'sender-2@example.com' },
-    },
-  });
-
-  const result = await notifyGiftSubmittersForWinnerAddress(db, {
-    userId: 'winner-1',
-    winnerUser: {
-      displayName: 'Winner',
-      shippingAddress: sampleAddress,
-    },
-    shippingAddressRaw: sampleAddress,
-    emailMode: 'no_address_shared',
+  return {
+    sends,
     getResend: () => ({
       emails: {
         send: async (payload) => {
+          if (payload.to === failFor) {
+            const err = new Error(`boom ${failFor}`);
+            err.code = 'send_failed';
+            throw err;
+          }
           sends.push(payload);
         },
       },
     }),
     resolveFromEmail: () => 'noreply@example.com',
-  });
+  };
+}
 
-  assert.equal(result.sentCount, 2);
-  assert.equal(result.emailMode, 'no_address_shared');
-  const recipients = sends.map((s) => s.to).sort();
-  assert.deepEqual(recipients, ['sender-1@example.com', 'sender-2@example.com']);
-  assert.ok(
-    sends.every((s) =>
-      s.html.includes("They haven&#39;t shared a shipping address yet."),
-    ),
+const savedDoc = { ...sampleAddress, savedAt: new Date('2026-11-21T00:00:00Z') };
+
+test('trigger wiring: CREATE on parties/{partyId}/shipping/{userId} only; no users update trigger', () => {
+  const source = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
+  assert.match(
+    source,
+    /notifyGiftSubmitterOnShippingCreate = onDocumentCreated\([\s\S]*?'parties\/\{partyId\}\/shipping\/\{userId\}'/,
   );
-  assert.ok(sends.every((s) => s.subject === 'Your gift has a winner'));
-  assert.ok(sends.every((s) => s.html.includes('Winner ended up with your gift.')));
-  assert.ok(sends.every((s) => !s.html.includes('saved their shipping')));
-  assert.ok(sends.every((s) => !s.html.includes('123 Main St')));
+  assert.doesNotMatch(source, /onDocumentUpdated|onDocumentWritten|onDocumentDeleted/);
+  assert.doesNotMatch(source, /export const notifyGiftSubmitter = /);
 });
 
-test('with consent email includes address for assigned senders only', async () => {
-  const sends = [];
+test('pickShippingAddress keeps only the six address fields and needs street + city', () => {
+  assert.deepEqual(pickShippingAddress(savedDoc), sampleAddress);
+  assert.deepEqual(pickShippingAddress({ ...savedDoc, extra: 'x' }), sampleAddress);
+  assert.equal(pickShippingAddress({ ...savedDoc, street: '  ' }), null);
+  assert.equal(pickShippingAddress({ city: 'X' }), null);
+  assert.equal(pickShippingAddress(null), null);
+});
+
+test('create emails the address to assigned senders of gifts won in THIS party only', async () => {
+  const r = recorder();
   const db = makeDbMock({
     gifts: [
       { id: 'gift-a', winnerId: 'winner-1', submitterId: 'sender-a', partyId: 'party-1' },
-      { id: 'gift-b', winnerId: 'winner-1', submitterId: 'sender-b', partyId: 'party-1' },
+      { id: 'gift-b', winnerId: 'winner-1', submitterId: 'sender-b', partyId: 'party-2' },
       { id: 'gift-c', winnerId: 'other-winner', submitterId: 'sender-c', partyId: 'party-1' },
     ],
     users: {
+      'winner-1': { displayName: 'Winner' },
       'sender-a': { email: 'sender-a@example.com' },
       'sender-b': { email: 'sender-b@example.com' },
       'sender-c': { email: 'sender-c@example.com' },
     },
   });
-
-  const result = await notifyGiftSubmittersForWinnerAddress(db, {
+  const result = await notifyGiftSubmittersForPartyShipping(db, {
+    partyId: 'party-1',
     userId: 'winner-1',
-    winnerUser: {
-      displayName: 'Winner',
-      shippingAddressSenderShareConsentAt: new Date('2026-01-01T00:00:00Z'),
-    },
-    shippingAddressRaw: sampleAddress,
-    emailMode: 'with_address',
-    getResend: () => ({
-      emails: {
-        send: async (payload) => {
-          sends.push(payload);
-        },
-      },
-    }),
-    resolveFromEmail: () => 'noreply@example.com',
+    shippingDoc: savedDoc,
+    ...r,
   });
-
-  assert.equal(result.sentCount, 2);
-  const recipients = sends.map((s) => s.to).sort();
-  assert.deepEqual(recipients, ['sender-a@example.com', 'sender-b@example.com']);
-  assert.ok(sends.every((s) => s.html.includes('123 Main St')));
-  assert.ok(pickShippingAddress(sampleAddress));
+  assert.equal(result.sentCount, 1);
+  assert.deepEqual(r.sends.map((s) => s.to), ['sender-a@example.com']);
+  assert.ok(r.sends[0].html.includes('123 Main St'));
+  assert.ok(!r.sends[0].html.includes('savedAt'));
 });
 
-test('later consent triggers with_address path through resolver then send', async () => {
-  const before = {
-    shippingAddress: sampleAddress,
-  };
-  const after = {
-    shippingAddress: sampleAddress,
-    shippingAddressSenderShareConsentAt: new Date('2026-03-01T00:00:00Z'),
-  };
-  const update = resolveGiftSubmitterNotifyUpdate(before, after);
-  assert.equal(update.emailMode, 'with_address');
-
-  const sends = [];
+test('dedupe: one email per sender even if they gave two gifts this user holds; never to self', async () => {
+  const r = recorder();
   const db = makeDbMock({
-    gifts: [{ id: 'gift-1', winnerId: 'winner-1', submitterId: 'sender-1', partyId: 'party-1' }],
-    users: { 'sender-1': { email: 'sender@example.com' } },
+    gifts: [
+      { id: 'gift-a', winnerId: 'winner-1', submitterId: 'sender-a', partyId: 'party-1' },
+      { id: 'gift-a2', winnerId: 'winner-1', submitterId: 'sender-a', partyId: 'party-1' },
+      { id: 'gift-own', winnerId: 'winner-1', submitterId: 'winner-1', partyId: 'party-1' },
+    ],
+    users: { 'sender-a': { email: 'sender-a@example.com' }, 'winner-1': { email: 'w@example.com' } },
   });
-
-  const result = await notifyGiftSubmittersForWinnerAddress(db, {
-    userId: 'winner-1',
-    winnerUser: after,
-    shippingAddressRaw: after.shippingAddress,
-    emailMode: update.emailMode,
-    getResend: () => ({
-      emails: {
-        send: async (payload) => {
-          sends.push(payload);
-        },
-      },
-    }),
-    resolveFromEmail: () => 'noreply@example.com',
+  const result = await notifyGiftSubmittersForPartyShipping(db, {
+    partyId: 'party-1', userId: 'winner-1', shippingDoc: savedDoc, ...r,
   });
-
   assert.equal(result.sentCount, 1);
-  assert.ok(sends[0].html.includes('123 Main St'));
-  assert.doesNotMatch(sends[0].html, new RegExp(GIFT_SUBMITTER_NOTIFY_NO_ADDRESS_SHARED_MESSAGE));
+  assert.deepEqual(r.sends.map((s) => s.to), ['sender-a@example.com']);
+});
+
+test('no usable address or no gifts: nothing is sent', async () => {
+  const r = recorder();
+  const db = makeDbMock({
+    gifts: [{ id: 'gift-a', winnerId: 'winner-1', submitterId: 'sender-a', partyId: 'party-1' }],
+    users: { 'sender-a': { email: 'sender-a@example.com' } },
+  });
+  const bad = await notifyGiftSubmittersForPartyShipping(db, {
+    partyId: 'party-1', userId: 'winner-1', shippingDoc: { ...savedDoc, street: '' }, ...r,
+  });
+  assert.equal(bad.reason, 'no_address');
+  const none = await notifyGiftSubmittersForPartyShipping(db, {
+    partyId: 'party-9', userId: 'winner-1', shippingDoc: savedDoc, ...r,
+  });
+  assert.equal(none.reason, 'no_gifts');
+  assert.equal(r.sends.length, 0);
 });
 
 test('logNotifyGiftSubmitterFailure omits PII from logs', () => {
@@ -268,8 +222,8 @@ test('no-address opening falls back when winner name is empty', () => {
   assert.equal(buildGiftSubmitterNoAddressOpening('Pat', 'winner-1'), 'Pat ended up with your gift.');
 });
 
-test('one failed send does not stop the remaining senders', async () => {
-  const sends = [];
+test('one failed send does not stop the remaining senders; logs carry no PII', async () => {
+  const r = recorder('sender-1@example.com');
   const db = makeDbMock({
     gifts: [
       { id: 'gift-1', winnerId: 'winner-1', submitterId: 'sender-1', partyId: 'party-1' },
@@ -284,30 +238,86 @@ test('one failed send does not stop the remaining senders', async () => {
   const logged = [];
   console.error = (...args) => logged.push(args);
   try {
-    const result = await notifyGiftSubmittersForWinnerAddress(db, {
-      userId: 'winner-1',
-      winnerUser: { displayName: 'Winner' },
-      shippingAddressRaw: null,
-      emailMode: 'no_address_shared',
-      getResend: () => ({
-        emails: {
-          send: async (payload) => {
-            if (payload.to === 'sender-1@example.com') {
-              const err = new Error('boom sender-1@example.com');
-              err.code = 'send_failed';
-              throw err;
-            }
-            sends.push(payload);
-          },
-        },
-      }),
-      resolveFromEmail: () => 'noreply@example.com',
+    const result = await notifyGiftSubmittersForPartyShipping(db, {
+      partyId: 'party-1', userId: 'winner-1', shippingDoc: savedDoc, ...r,
     });
     assert.equal(result.sentCount, 1);
     assert.equal(result.failedCount, 1);
-    assert.deepEqual(sends.map((s) => s.to), ['sender-2@example.com']);
-    assert.ok(!JSON.stringify(logged).includes('@example.com'));
+    assert.deepEqual(r.sends.map((s) => s.to), ['sender-2@example.com']);
+    const text = JSON.stringify(logged);
+    assert.ok(!text.includes('@example.com'));
+    assert.ok(!text.includes('Main St'));
   } finally {
     console.error = originalError;
   }
+});
+
+function onePartyDb(markers) {
+  return makeDbMock({
+    markers,
+    gifts: [
+      { id: 'gift-a', winnerId: 'winner-1', submitterId: 'sender-a', partyId: 'party-1' },
+      { id: 'gift-b', winnerId: 'winner-1', submitterId: 'sender-b', partyId: 'party-1' },
+    ],
+    users: {
+      'winner-1': { displayName: 'Winner' },
+      'sender-a': { email: 'sender-a@example.com' },
+      'sender-b': { email: 'sender-b@example.com' },
+    },
+  });
+}
+
+test('first save sends once per sender and claims an ids-only marker per (winner, sender)', async () => {
+  const r = recorder();
+  const db = onePartyDb(new Map());
+  const result = await notifyGiftSubmittersForPartyShipping(db, {
+    partyId: 'party-1', userId: 'winner-1', shippingDoc: savedDoc, ...r,
+  });
+  assert.equal(result.sentCount, 2);
+  assert.deepEqual(r.sends.map((s) => s.to).sort(), ['sender-a@example.com', 'sender-b@example.com']);
+  assert.deepEqual([...db.markers.keys()].sort(), [
+    'parties/party-1/shippingNotified/winner-1_sender-a',
+    'parties/party-1/shippingNotified/winner-1_sender-b',
+  ]);
+  for (const data of db.markers.values()) assert.deepEqual(Object.keys(data), ['notifiedAt']);
+});
+
+test('clear then re-save (a new create) sends nothing to senders already emailed', async () => {
+  const markers = new Map();
+  const first = recorder();
+  await notifyGiftSubmittersForPartyShipping(onePartyDb(markers), {
+    partyId: 'party-1', userId: 'winner-1', shippingDoc: savedDoc, ...first,
+  });
+  assert.equal(first.sends.length, 2);
+  // The shipping doc is deleted (clear) and created again with a new address.
+  const again = recorder();
+  const result = await notifyGiftSubmittersForPartyShipping(onePartyDb(markers), {
+    partyId: 'party-1', userId: 'winner-1', shippingDoc: { ...savedDoc, street: '9 New Rd' }, ...again,
+  });
+  assert.equal(again.sends.length, 0);
+  assert.equal(result.sentCount, 0);
+  assert.equal(result.skippedCount, 2);
+});
+
+test('a replayed create event sends nothing', async () => {
+  const db = onePartyDb(new Map());
+  const r = recorder();
+  const params = { partyId: 'party-1', userId: 'winner-1', shippingDoc: savedDoc, ...r };
+  await notifyGiftSubmittersForPartyShipping(db, params);
+  await notifyGiftSubmittersForPartyShipping(db, params);
+  assert.equal(r.sends.length, 2);
+});
+
+test('markers are per party: the same pair in another party still gets its first email', async () => {
+  const markers = new Map([['parties/party-1/shippingNotified/winner-1_sender-a', { notifiedAt: new Date() }]]);
+  const r = recorder();
+  const db = makeDbMock({
+    markers,
+    gifts: [{ id: 'gift-z', winnerId: 'winner-1', submitterId: 'sender-a', partyId: 'party-2' }],
+    users: { 'sender-a': { email: 'sender-a@example.com' } },
+  });
+  const result = await notifyGiftSubmittersForPartyShipping(db, {
+    partyId: 'party-2', userId: 'winner-1', shippingDoc: savedDoc, ...r,
+  });
+  assert.equal(result.sentCount, 1);
 });

@@ -1,54 +1,65 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const clientSrc = join(dirname(fileURLToPath(import.meta.url)), '../..');
+const read = (path) => readFileSync(join(clientSrc, path), 'utf8');
 
-describe('winner shipping address client access', () => {
+describe('shipping address client access (A0 per-game address)', () => {
   it('GiftToSendCard does not read winner shippingAddress from Firestore', () => {
-    const source = readFileSync(join(clientSrc, 'components/GiftToSendCard.jsx'), 'utf8');
+    const source = read('components/GiftToSendCard.jsx');
     expect(source).not.toMatch(/firebase\/firestore/);
     expect(source).not.toMatch(/onSnapshot/);
     expect(source).toContain('fetchWinnerShippingAddress');
   });
 
   it('ShippingAddressViewModal uses sender-scoped API', () => {
-    const source = readFileSync(join(clientSrc, 'components/ShippingAddressViewModal.jsx'), 'utf8');
+    const source = read('components/ShippingAddressViewModal.jsx');
     expect(source).not.toMatch(/firebase\/firestore/);
     expect(source).toContain('fetchWinnerShippingAddress');
   });
 
-  it('address forms persist sender share consent field name', () => {
-    const addressModal = readFileSync(join(clientSrc, 'components/AddressModal.jsx'), 'utf8');
-    const profile = readFileSync(join(clientSrc, 'pages/Profile.jsx'), 'utf8');
-    expect(addressModal).toContain('shippingAddressSenderShareConsentAt');
-    expect(profile).toContain('shippingAddressSenderShareConsentAt');
-    expect(addressModal).toContain('SHIPPING_ADDRESS_SENDER_SHARE_CONSENT_LABEL');
-    expect(profile).toContain('SHIPPING_ADDRESS_SENDER_SHARE_CONSENT_LABEL');
+  it('the per-game form talks only to the server route, never Firestore', () => {
+    const source = read('components/ShippingAddressSection.jsx');
+    expect(source).not.toMatch(/firebase\/firestore/);
+    expect(source).toContain('saveMyPartyShipping');
+    expect(source).toContain('fetchMyPartyShipping');
   });
 
-  it('sender address UI uses shippingAddressCopy constants for user-facing strings', () => {
-    const giftToSend = readFileSync(join(clientSrc, 'components/GiftToSendCard.jsx'), 'utf8');
-    const viewModal = readFileSync(join(clientSrc, 'components/ShippingAddressViewModal.jsx'), 'utf8');
-    const addressModal = readFileSync(join(clientSrc, 'components/AddressModal.jsx'), 'utf8');
-    const profile = readFileSync(join(clientSrc, 'pages/Profile.jsx'), 'utf8');
-    const copyModule = readFileSync(join(clientSrc, 'utils/shippingAddressCopy.js'), 'utf8');
+  it('no client code reads or writes a profile address or the consent stamp any more', () => {
+    for (const path of ['pages/Profile.jsx', 'hooks/useAuth.js', 'components/PartyLobby.jsx', 'components/GameBoard.jsx']) {
+      const source = read(path);
+      expect(source, path).not.toContain('shippingAddressSenderShareConsentAt');
+      expect(source, path).not.toMatch(/shippingAddress\s*:/);
+      expect(source, path).not.toContain('userData.shippingAddress');
+    }
+    expect(existsSync(join(clientSrc, 'components/AddressModal.jsx'))).toBe(false);
+  });
 
-    expect(giftToSend).toContain('SHIPPING_ADDRESS_WINNER_NOT_SHARED_GIFT_TO_SEND');
-    expect(viewModal).toContain('SHIPPING_ADDRESS_WINNER_NOT_SHARED_VIEW_MODAL');
-    expect(addressModal).toContain('SHIPPING_ADDRESS_CONSENT_REQUIRED_ADDRESS_MODAL');
-    expect(profile).not.toContain('SHIPPING_ADDRESS_CONSENT_REQUIRED_PROFILE');
-    expect(profile).toContain('SHIPPING_ADDRESS_CONSENT_WITHDRAW_PENDING_PROFILE');
-
-    expect(giftToSend).not.toContain('missing address or consent');
-    expect(viewModal).not.toContain('missing address or consent');
+  it('no checkbox, agreement or notice line in the copy module (Brian, Nov 21)', () => {
+    const copyModule = read('utils/shippingAddressCopy.js');
     expect(copyModule).toContain("The winner hasn't shared a shipping address yet.");
-    expect(copyModule).toContain(
-      'You must agree to share your shipping address only with the person mailing your gift.',
-    );
+    expect(copyModule).toContain("heading: 'Shipping address'");
+    expect(copyModule).not.toMatch(/I agree|check the box|You must agree|Only .* sees your address/);
     expect(copyModule).not.toContain('[COPYWRITER PLACEHOLDER]');
     expect(copyModule).not.toContain('TODO(Copywriter)');
-    expect(copyModule).toContain('SHIPPING_ADDRESS_SAVED_NEEDS_CONSENT_PROFILE');
+  });
+
+  it('pins the Copywriter A0 finals (7:01 PM PT Nov 21)', async () => {
+    const copy = await import('../../utils/shippingAddressCopy.js');
+    expect(copy.SHIPPING_ADDRESS_FORM_COPY.loadFailed).toBe("We couldn't load your address.");
+    expect(copy.SHIPPING_ADDRESS_FORM_COPY.saveFailed).toBe("We couldn't save your address. Try again.");
+    expect(copy.SHIPPING_ADDRESS_FORM_COPY.deleteFailed).toBe("We couldn't delete your address. Try again.");
+    expect(copy.SHIPPING_ADDRESS_DELETE_CONFIRM).toBe(
+      "This removes your address from this game. The person mailing your gift won't be able to see it.",
+    );
+    expect(copy.SHIPPING_ADDRESS_DELETE_SUCCESS).toBe('Your shipping address was deleted.');
+  });
+
+  it('the giver view modal uses the signed not-shared string, not the old unsigned line', () => {
+    const viewModal = read('components/ShippingAddressViewModal.jsx');
+    expect(viewModal).not.toContain('Winner has not provided their shipping address yet.');
+    expect(viewModal).toContain('{SHIPPING_ADDRESS_WINNER_NOT_SHARED_VIEW_MODAL}');
   });
 });

@@ -242,53 +242,30 @@ service cloud.firestore {
       return email is string && email.size() <= 320;
     }
 
-    function validShippingAddress(addr) {
-      return addr == null
-        || (
-          addr is map
-          && addr.keys().hasOnly(['name', 'street', 'city', 'state', 'zip', 'country'])
-          && (!addr.keys().hasAny(['name']) || (addr.name is string && addr.name.size() <= 100))
-          && (!addr.keys().hasAny(['street']) || (addr.street is string && addr.street.size() <= 200))
-          && (!addr.keys().hasAny(['city']) || (addr.city is string && addr.city.size() <= 100))
-          && (!addr.keys().hasAny(['state']) || (addr.state is string && addr.state.size() <= 50))
-          && (!addr.keys().hasAny(['zip']) || (addr.zip is string && addr.zip.size() <= 20))
-          && (!addr.keys().hasAny(['country']) || (addr.country is string && addr.country.size() <= 60))
-        );
-    }
-
-    function validShippingConsentTimestamp() {
-      return !request.resource.data.keys().hasAny(['shippingAddressSenderShareConsentAt'])
-        || request.resource.data.shippingAddressSenderShareConsentAt is timestamp;
-    }
-
     function userProfileWritableKeys() {
       return [
-        'displayName', 'email', 'shippingAddress', 'shippingAddressSenderShareConsentAt',
-        'createdAt', 'updatedAt',
+        // A0: no shippingAddress or shippingAddressSenderShareConsentAt. Addresses are per game
+        // (parties/{partyId}/shipping/{uid}) and never written to the profile.
+        'displayName', 'email', 'createdAt', 'updatedAt',
       ];
     }
 
     function userCreateAllowed() {
       return request.resource.data.keys().hasOnly(userProfileWritableKeys())
         && validUserDisplayName(request.resource.data.displayName)
-        && validUserEmail(request.resource.data.email)
-        && validShippingAddress(request.resource.data.get('shippingAddress', null))
-        && validShippingConsentTimestamp();
+        && validUserEmail(request.resource.data.email);
     }
 
     function userUpdateAllowed() {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
       return changed.hasOnly(userProfileWritableKeys())
         && (!changed.hasAny(['displayName']) || validUserDisplayName(request.resource.data.displayName))
-        && (!changed.hasAny(['email']) || validUserEmail(request.resource.data.email))
-        && (!changed.hasAny(['shippingAddress'])
-            || validShippingAddress(request.resource.data.get('shippingAddress', null)))
-        && (!changed.hasAny(['shippingAddressSenderShareConsentAt']) || validShippingConsentTimestamp());
+        && (!changed.hasAny(['email']) || validUserEmail(request.resource.data.email));
     }
     
     // Users collection
     match /users/{userId} {
-      // Owner-only reads: email, shippingAddress, and profile fields are never public.
+      // Owner-only reads: email and profile fields are never public.
       allow get: if isOwner(userId);
       allow list: if isOwner(userId);
       
@@ -377,6 +354,17 @@ service cloud.firestore {
         allow delete: if false;
       }
       
+      // Per-game shipping address (A0). No client may read, list or write it, not even the owner:
+      // the game server saves and serves it (server/routes/party-shipping.js and the giver route).
+      match /shipping/{uid} {
+        allow read, write: if false;
+      }
+
+      // Email-once markers for the shipping notify trigger (A0). Functions (Admin SDK) only.
+      match /shippingNotified/{markerId} {
+        allow read, write: if false;
+      }
+
       // Pending invites subcollection
       match /pendingInvites/{inviteId} {
         // Only party admin can read/manage invites
