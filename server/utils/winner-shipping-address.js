@@ -120,17 +120,17 @@ export async function fetchWinnerShippingAddressForSender(
 
   const gameState = await loadState(partyId);
   if (!gameState || gameState.phase !== 'ENDED') {
-    return { status: 403, error: 'Game has not ended' };
+    return { status: 403, error: 'Game has not ended', code: 'GAME_NOT_ENDED' };
   }
 
   const fulfillment = await loadFulfillment(partyId);
   if (!fulfillment || !fulfillment[giftId]) {
-    return { status: 403, error: 'Gift fulfillment record not found' };
+    return { status: 403, error: 'Gift fulfillment record not found', code: 'FULFILLMENT_NOT_FOUND' };
   }
 
   const { submitterId, winnerId } = fulfillment[giftId];
   if (!submitterId || !winnerId) {
-    return { status: 403, error: 'Gift fulfillment record not found' };
+    return { status: 403, error: 'Gift fulfillment record not found', code: 'FULFILLMENT_NOT_FOUND' };
   }
 
   if (submitterId !== callerUid) {

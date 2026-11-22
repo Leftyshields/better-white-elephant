@@ -221,6 +221,7 @@ test('assigned sender is denied if the game has not ended', async () => {
   );
   assert.equal(result.status, 403);
   assert.match(result.error, /not ended/i);
+  assert.equal(result.code, 'GAME_NOT_ENDED');
 });
 
 test('assigned sender gets no address (200, not an error) if winner has no address', async () => {
@@ -326,6 +327,7 @@ test('denies when fulfillment snapshot is missing (made-up ended party)', async 
   );
   assert.equal(result.status, 403);
   assert.match(result.error, /fulfillment/i);
+  assert.equal(result.code, 'FULFILLMENT_NOT_FOUND');
 });
 
 test('denies when Firestore gift winnerId was repointed but fulfillment is authoritative', async () => {

@@ -16,6 +16,21 @@ export const ADDRESS_TIMEOUT_MS = 8000;
 export const ADDRESS_POLL_MS = 30000;
 /** ...for this long after the card opens. Coming back to the tab always checks again. */
 export const ADDRESS_POLL_WINDOW_MS = 10 * 60 * 1000;
+/** Brief backoff after a 403 that means the game is still finishing (about 10s total). */
+export const ADDRESS_RETRYABLE_BACKOFF_MS = [500, 1000, 2000, 4000];
+export const ADDRESS_RETRYABLE_BUDGET_MS = 10_000;
+const RETRYABLE_ADDRESS_ERROR_CODES = new Set(['GAME_NOT_ENDED', 'FULFILLMENT_NOT_FOUND']);
+const RETRYABLE_ADDRESS_ERROR_MESSAGES = new Set([
+  'Game has not ended',
+  'Gift fulfillment record not found',
+]);
+
+/** 403 "game not ended" / "fulfillment not found" is a short-lived race, not a real failure. */
+export function isRetryableAddressLoadError(error) {
+  if (error?.timedOut || error?.status !== 403) return false;
+  if (error.code && RETRYABLE_ADDRESS_ERROR_CODES.has(error.code)) return true;
+  return RETRYABLE_ADDRESS_ERROR_MESSAGES.has(error.message);
+}
 
 /**
  * Address states: 'loading' | 'loaded' | 'not-shared' | 'error'.
@@ -67,6 +82,7 @@ export function GiftToSendCard({ gift, winnerId, winnerName, winnerKnown = true,
     let cancelled = false;
     let inFlight = false;
     let pollTimer = null;
+    let retryIndex = 0;
     let current = 'loading';
     const openedAt = Date.now();
     const show = (next, nextAddress = null) => {
@@ -113,8 +129,22 @@ export function GiftToSendCard({ gift, winnerId, winnerName, winnerKnown = true,
         if (cancelled) return;
         // Status only: never log the response body or the address.
         console.warn('[GiftToSendCard] address load failed', error?.timedOut ? 'timeout' : error?.status ?? 'network');
-        if (background) schedulePoll();
-        else show('error');
+        if (background) {
+          schedulePoll();
+          return;
+        }
+        if (isRetryableAddressLoadError(error)) {
+          const delay = ADDRESS_RETRYABLE_BACKOFF_MS[
+            Math.min(retryIndex, ADDRESS_RETRYABLE_BACKOFF_MS.length - 1)
+          ];
+          retryIndex += 1;
+          if (Date.now() - openedAt + delay <= ADDRESS_RETRYABLE_BUDGET_MS) {
+            clearTimeout(pollTimer);
+            pollTimer = setTimeout(() => load({ background: false }), delay);
+            return;
+          }
+        }
+        show('error');
       } finally {
         inFlight = false;
       }
