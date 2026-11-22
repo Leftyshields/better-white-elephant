@@ -15,7 +15,7 @@ const privacySource = readFileSync(join(clientSrc, 'pages/Privacy.jsx'), 'utf8')
 const termsSource = readFileSync(join(clientSrc, 'pages/Terms.jsx'), 'utf8');
 
 const AUTO_PILOT_BODY =
-  'When the game ends, each winner adds a shipping address right on the end screen. Only the person mailing the gift sees it, and it auto-deletes 30 days later.';
+  'When the game ends, each winner adds a shipping address right on the end screen for the person mailing the gift. It auto-deletes 30 days later.';
 
 const RULES_AFTER_GAME =
   'After the game, add your shipping address on the end screen so the person mailing your gift can ship it. It auto-deletes 30 days after the game ends.';

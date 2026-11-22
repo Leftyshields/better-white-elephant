@@ -53,17 +53,15 @@ describe('landingMarketingCopy', () => {
     expect(setup?.body).not.toMatch(/scraping/i);
   });
 
-  it('Auto-Pilot Logistics uses the Copywriter A0 final (7:01 PM PT Nov 21)', () => {
+  it('Auto-Pilot Logistics uses the Copywriter A0 final (revised 7:10 PM PT Nov 21)', () => {
     const autopilot = FEATURE_CARDS.find((c) => c.title === 'Auto-Pilot Logistics');
     expect(autopilot?.body).toBe(
-      'When the game ends, each winner adds a shipping address right on the end screen. Only the person mailing the gift sees it, and it auto-deletes 30 days later.',
+      'When the game ends, each winner adds a shipping address right on the end screen for the person mailing the gift. It auto-deletes 30 days later.',
     );
     const featureCopy = FEATURE_CARDS.map((c) => c.body).join(' ');
     expect(featureCopy).not.toMatch(/we email/i);
     expect(featureCopy).not.toMatch(/nobody else sees it/i);
-    // PR 63 banned 'only the person' here; the A0 final (Copywriter 7:01 PM PT Nov 21) brings it back
-    // on purpose, matching the per-game address that only the giver can read.
-    expect(featureCopy.match(/only the person/gi) ?? []).toHaveLength(1);
+    expect(featureCopy).not.toMatch(/only the person/i);
     expect(featureCopy).not.toMatch(/goes privately/i);
   });
 });
