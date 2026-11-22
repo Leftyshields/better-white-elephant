@@ -17,6 +17,7 @@ vi.mock('firebase/firestore', () => ({
     return { path: segments.join('/'), id: segments[segments.length - 1] };
   },
   increment: (n) => ({ increment: n }),
+  serverTimestamp: () => ({ serverTimestamp: true }),
   getDoc: (...args) => getDocMock(...args),
   setDoc: (...args) => setDocMock(...args),
   writeBatch: () => ({
@@ -34,6 +35,7 @@ const {
   joinPartyWithInviteToken,
   readInviteTokenFromHash,
   removeParticipantSeat,
+  wasRemovedFromParty,
 } = await import('../../utils/partyInvite.js');
 
 const TOKEN = '0123456789abcdef0123456789abcdef';
@@ -104,14 +106,38 @@ describe('write batches', () => {
     ]);
   });
 
-  it('remove participant frees the seat on counted parties only', async () => {
+  it('remove participant frees the seat on counted parties only, and marks the removal (G28)', async () => {
+    const marker = { type: 'set', path: 'parties/p1/removedSeats/guest-1', data: { removedAt: { serverTimestamp: true } } };
     await removeParticipantSeat({}, { id: 'p1', participantCount: 4 }, 'guest-1');
     expect(ops).toEqual([
       { type: 'delete', path: 'parties/p1/participants/guest-1' },
+      marker,
       { type: 'update', path: 'parties/p1', data: { participantCount: { increment: -1 } } },
     ]);
     ops.length = 0;
     await removeParticipantSeat({}, { id: 'legacy' }, 'guest-1');
-    expect(ops).toEqual([{ type: 'delete', path: 'parties/legacy/participants/guest-1' }]);
+    expect(ops).toEqual([
+      { type: 'delete', path: 'parties/legacy/participants/guest-1' },
+      { ...marker, path: 'parties/legacy/removedSeats/guest-1' },
+    ]);
+  });
+});
+
+describe('G28 wasRemovedFromParty', () => {
+  it('is true only when the own removal marker exists', async () => {
+    getDocMock.mockResolvedValueOnce({ exists: () => true });
+    await expect(wasRemovedFromParty({}, 'p1', 'guest-1')).resolves.toBe(true);
+    expect(getDocMock.mock.calls[0][0].path).toBe('parties/p1/removedSeats/guest-1');
+    getDocMock.mockResolvedValueOnce({ exists: () => false });
+    await expect(wasRemovedFromParty({}, 'p1', 'guest-1')).resolves.toBe(false);
+  });
+
+  it('treats a denied, failed or slow read as not removed (keeps today\'s message)', async () => {
+    getDocMock.mockRejectedValueOnce(Object.assign(new Error('denied'), { code: 'permission-denied' }));
+    await expect(wasRemovedFromParty({}, 'p1', 'guest-1')).resolves.toBe(false);
+    getDocMock.mockRejectedValueOnce(Object.assign(new Error('slow'), { name: 'TimeoutError' }));
+    await expect(wasRemovedFromParty({}, 'p1', 'guest-1')).resolves.toBe(false);
+    await expect(wasRemovedFromParty({}, 'p1', '')).resolves.toBe(false);
+    expect(getDocMock).toHaveBeenCalledTimes(2);
   });
 });

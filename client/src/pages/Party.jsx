@@ -12,7 +12,7 @@ import { useParty } from '../hooks/useParty.js';
 import { useOwnSeatStatus } from '../hooks/useOwnSeatStatus.js';
 import { SEO } from '../components/SEO.jsx';
 import { INVITE_SEO } from '../utils/landingMarketingCopy.js';
-import { hostFirstNameFromParty } from '../components/PartyInviteLanding.jsx';
+import { hostNameForLateCard } from '../components/PartyInviteLanding.jsx';
 import { lateVisitorState } from '../utils/lateInvite.js';
 import { stripInviteTokenFromAddressBar } from '../utils/partyInvite.js';
 
@@ -98,7 +98,7 @@ export function Party() {
             <LateInviteCard
               state={late}
               partyTitle={party.title || 'White Elephant Party'}
-              hostFirstName={hostFirstNameFromParty(party)}
+              hostFirstName={hostNameForLateCard(party)}
               showSignIn={shouldShowLateSignIn(user)}
             />
           </LateInvitePage>

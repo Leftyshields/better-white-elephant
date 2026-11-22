@@ -75,7 +75,7 @@ export function PartyManagement({ party, participants, pendingInvites = [] }) {
   }, [participants, party?.id]);
 
   // Seat name first (guests' typed names show before Ready), then the profile name, with G21's (N).
-  const rosterLabels = rosterDisplayNames(participants, userNames);
+  const rosterLabels = rosterDisplayNames(participants, userNames, { hostId: party?.adminId });
 
   const handleUpdateTitle = async () => {
     try {

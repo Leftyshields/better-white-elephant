@@ -315,7 +315,8 @@ service cloud.firestore {
                        existsAfter(inviteTokenPath(partyId)) &&
                        hostDisplayNameOkOnWrite() &&
                        !request.resource.data.keys().hasAny([
-                         'gameState', 'gameStateUpdatedAt', 'endedAt', 'gameHistory'
+                         'gameState', 'gameStateUpdatedAt', 'endedAt', 'gameHistory',
+                         'hostRosterLabel'
                        ]);
       
       // Party admin: allowlisted lobby fields only; cannot set ACTIVE/ENDED or touch gameState.
@@ -327,6 +328,19 @@ service cloud.firestore {
       allow delete: if isPartyAdmin(partyId) && 
                       (resource.data.status == 'ENDED' || resource.data.status == 'CANCELLED');
       
+      // G28 removal marker: the host writes it in the same batch that deletes that guest's seat, so
+      // it exists only for a real removal. Only that guest can read it (no list), so it tells
+      // nobody else anything. No client deletes; a later re-invite seats the guest again.
+      match /removedSeats/{userId} {
+        allow get: if isAuthenticated() && request.auth.uid == userId;
+        allow create, update: if isPartyAdmin(partyId) &&
+                                userId != request.auth.uid &&
+                                exists(participantPath(partyId, userId)) &&
+                                !existsAfter(participantPath(partyId, userId)) &&
+                                request.resource.data.keys().hasOnly(['removedAt']) &&
+                                request.resource.data.removedAt == request.time;
+      }
+
       // Participants subcollection
       match /participants/{participantId} {
         // Participants can read all participants in their party

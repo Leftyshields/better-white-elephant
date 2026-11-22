@@ -9,9 +9,9 @@ import { doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '../hooks/useAuth.js';
 import { Button } from './ui/Button.jsx';
 import { auth, db } from '../utils/firebase.js';
-import { joinPartyWithInviteToken, readInviteTokenFromHash, stripInviteTokenFromAddressBar } from '../utils/partyInvite.js';
+import { joinPartyWithInviteToken, readInviteTokenFromHash, stripInviteTokenFromAddressBar, wasRemovedFromParty } from '../utils/partyInvite.js';
 import { REQUEST_TIMEOUT_MS, isCancelledError, isTimeoutError, withTimeout } from '../utils/withTimeout.js';
-import { getJoinErrorMessage } from '../utils/partyInviteCopy.js';
+import { JOIN_REMOVED_MESSAGE, getJoinErrorMessage } from '../utils/partyInviteCopy.js';
 import { seatNameFields } from '../utils/seatDisplayName.js';
 import { trackParticipantJoin, trackError } from '../utils/analytics.js';
 import { GuestJoinCard } from './GuestJoinCard.jsx';
@@ -31,6 +31,21 @@ export function hostFirstNameFromParty(data) {
   if (!stored || !data?.adminId || isSyntheticPlayerDisplayName(stored, data.adminId)) return null;
   if (!isValidPublicHostDisplayName(stored)) return null;
   return stored.split(/\s+/)[0];
+}
+
+/**
+ * G28: host name for the late-invite card ("..., hosted by {name}."). Late visitors can't read
+ * the seat list, so the game server writes the host's roster label (the same "Brian" or
+ * "Brian S." the players see) on the party at start. Games started before that use the first name.
+ */
+export function hostNameForLateCard(data) {
+  const label = typeof data?.hostRosterLabel === 'string' ? data.hostRosterLabel.trim() : '';
+  // A seat first name is one word (seatNameFields), optionally followed by " X." for a shared first name.
+  const match = /^(\S+)(?: [A-Z]\.)?$/.exec(label);
+  if (match && data?.adminId && isValidPublicHostDisplayName(match[1]) && !isSyntheticPlayerDisplayName(match[1], data?.adminId)) {
+    return label;
+  }
+  return hostFirstNameFromParty(data);
 }
 
 export function PartyInviteLanding({ partyId, onJoinBusyChange }) {
@@ -71,6 +86,7 @@ export function PartyInviteLanding({ partyId, onJoinBusyChange }) {
         setPartyInfo({
           title: data.title || 'White Elephant Party',
           hostFirstName: hostFirstNameFromParty(data),
+          lateHostName: hostNameForLateCard(data),
           status: data.status,
           participantCount: data.participantCount,
         });
@@ -237,11 +253,19 @@ export function PartyInviteLanding({ partyId, onJoinBusyChange }) {
           setSeatCheckDone(true);
           return;
         }
-        setSeatCheckDone(true);
         if (!inviteToken) {
-          setTerminalMessage(getJoinErrorMessage({ party: partyInfo, error: null, hasToken: false }));
+          // G28: no seat and no link. Say "removed" only when the server has this user's removal
+          // marker; anything else (no marker, a failed or slow read) keeps today's message.
+          const removed = await wasRemovedFromParty(db, partyId, sessionUser.uid, (ref) => timed(getDoc(ref)));
+          setSeatCheckDone(true);
+          setTerminalMessage(
+            removed
+              ? JOIN_REMOVED_MESSAGE
+              : getJoinErrorMessage({ party: partyInfo, error: null, hasToken: false }),
+          );
           return;
         }
+        setSeatCheckDone(true);
         const fresh = await timed(getDoc(doc(db, 'parties', partyId)));
         partyState = fresh.exists() ? fresh.data() : null;
         await writeSeat(sessionUser);
@@ -264,6 +288,7 @@ export function PartyInviteLanding({ partyId, onJoinBusyChange }) {
             latestParty = {
               title: data.title || partyInfo.title,
               hostFirstName: hostFirstNameFromParty(data),
+              lateHostName: hostNameForLateCard(data),
               status: data.status,
               participantCount: data.participantCount,
             };
@@ -345,7 +370,7 @@ export function PartyInviteLanding({ partyId, onJoinBusyChange }) {
         <LateInviteCard
           state={lateState}
           partyTitle={partyInfo.title}
-          hostFirstName={partyInfo.hostFirstName}
+          hostFirstName={partyInfo.lateHostName ?? partyInfo.hostFirstName}
           showSignIn={shouldShowLateSignIn(user)}
         />
       </LateInvitePage>

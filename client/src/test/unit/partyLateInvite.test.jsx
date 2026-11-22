@@ -24,7 +24,8 @@ vi.mock('../../components/PartyLobby.jsx', () => ({
 }));
 vi.mock('../../components/PartyInviteLanding.jsx', () => ({
   PartyInviteLanding: () => <div data-testid="invite-landing">Landing</div>,
-  hostFirstNameFromParty: (data) => {
+  hostNameForLateCard: (data) => {
+    if (typeof data?.hostRosterLabel === 'string') return data.hostRosterLabel;
     const stored = typeof data?.hostDisplayName === 'string' ? data.hostDisplayName.trim() : '';
     return stored ? stored.split(/\s+/)[0] : null;
   },
@@ -69,6 +70,22 @@ describe('Party late-invite routing (regression: no GameRoom for a late visitor)
     expect(screen.queryByRole('button', { name: 'Refresh' })).toBeNull();
     expect(screen.queryByRole('button', { name: LATE_INVITE_COPY.lateSignInLink })).toBeNull();
     expect(useOwnSeatStatusMock).toHaveBeenCalledWith('p1', 'user-1');
+  });
+
+  it('G28: names the host with the roster label the players saw, not just the first name', () => {
+    useAuthMock.mockReturnValue({ user: googleUser, loading: false, signInWithGoogle: vi.fn() });
+    usePartyMock.mockReturnValue({
+      party: { ...activeParty, hostDisplayName: 'Dana Reyes', hostRosterLabel: 'Dana R.' },
+      participants: [],
+      loading: false,
+      error: null,
+    });
+    useOwnSeatStatusMock.mockReturnValue('not-seated');
+
+    renderParty();
+
+    expect(screen.getByText(formatLatePartyLine('Office Swap', 'Dana R.'))).toBeInTheDocument();
+    expect(screen.queryByText(formatLatePartyLine('Office Swap', 'Dana'))).toBeNull();
   });
 
   it('shows the over late card for a signed-in visitor on an ENDED party', () => {

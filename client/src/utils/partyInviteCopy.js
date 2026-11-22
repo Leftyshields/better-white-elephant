@@ -46,6 +46,10 @@ export const PARTY_INVITE_COPY = {
   'home.join.error.generic': "That code didn't get you in. Check it with your host, or try again later.",
   'home.join.error.full': 'This party is full. Every spot is taken.',
   'home.join.hint.excluded': "Codes don't use 0, O, 1, I, L, or U.",
+  // G28 removed guest (Copywriter final, Nov 21 3:14 PM PT; sor/g28/removed-guest-strings.md).
+  // Shown only when the server confirms the removal; real dead links keep join.error.link_invalid.
+  inviteRemovedTitle: 'Your host removed you from this party.',
+  inviteRemovedBody: 'If that was a mistake, ask your host to invite you again.',
 };
 
 export const JOIN_ERROR_LINK_INVALID = PARTY_INVITE_COPY['join.error.link_invalid'];
@@ -53,6 +57,11 @@ export const JOIN_ERROR_PARTY_FULL = PARTY_INVITE_COPY['join.error.party_full'];
 export const JOIN_ERROR_STARTED = PARTY_INVITE_COPY['join.error.started'];
 export const JOIN_ERROR_CANCELLED = PARTY_INVITE_COPY['join.error.cancelled'];
 export const JOIN_ERROR_GENERIC = PARTY_INVITE_COPY['join.error.generic'];
+/** G28: a two-line terminal message for GuestJoinCard (title replaces the welcome header). */
+export const JOIN_REMOVED_MESSAGE = Object.freeze({
+  title: PARTY_INVITE_COPY.inviteRemovedTitle,
+  body: PARTY_INVITE_COPY.inviteRemovedBody,
+});
 export const HOST_INVITE_ROTATE_CTA = PARTY_INVITE_COPY['host.invite.rotate_cta'];
 export const HOST_INVITE_ROTATE_HELPER = PARTY_INVITE_COPY['host.invite.rotate_helper'];
 export const HOST_INVITE_ROTATE_CONFIRM = PARTY_INVITE_COPY['host.invite.rotate_confirm'];
