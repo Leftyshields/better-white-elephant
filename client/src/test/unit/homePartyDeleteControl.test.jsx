@@ -231,7 +231,7 @@ describe('HOME_DELETE_PARTY_COPY', () => {
     expect(homeDeletePartyTitle('   ')).toBe('Delete this party?');
     expect(HOME_DELETE_PARTY_COPY).toEqual({
       untitledTitle: 'Delete this party?',
-      body: "You can't undo this.",
+      body: "It's gone for your guests too. You can't undo this.",
       cancel: 'Cancel',
       confirm: 'Delete party',
       success: 'Party deleted.',
