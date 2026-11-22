@@ -457,7 +457,7 @@ export function GameRoom({ partyId }) {
   // Finished state - show ended screen
   if (state.status === 'FINISHED' || party?.status === 'ENDED') {
     const getWinnerName = (ownerId) => {
-      if (!ownerId) return 'No Winner';
+      if (!ownerId) return null;
       if (ownerId === user?.uid) return 'You';
       const resolved = lookupNameState(
         nameStates,
@@ -503,6 +503,13 @@ export function GameRoom({ partyId }) {
     const myPrize = winnerGiftMap.get(user?.uid); // Gift where winnerId === user?.uid
     const myObligation = allGifts.find((gift) => gift.submitterId === user?.uid); // Gift where submitterId === user?.uid
     const isSelfWin = myPrize?.id === myObligation?.id; // Check if user won their own gift
+    // G5: who won the gift I send. Known once the gift carries winnerId or the game state is here;
+    // until then the card waits instead of claiming nobody won it.
+    const obligationOwnerFromState = myObligation && Array.isArray(state.gameState?.unwrappedGifts)
+      ? new Map(state.gameState.unwrappedGifts).get(myObligation.id)?.ownerId
+      : null;
+    const obligationWinnerId = myObligation?.winnerId || obligationOwnerFromState || null;
+    const obligationWinnerKnown = !!obligationWinnerId || !!state.gameState;
 
     return (
       <>
@@ -589,13 +596,9 @@ export function GameRoom({ partyId }) {
                 <GiftToSendCard
                   key={myObligation.id}
                   gift={myObligation}
-                  winnerId={myObligation.winnerId || (state.gameState?.unwrappedGifts 
-                    ? new Map(Array.isArray(state.gameState.unwrappedGifts) ? state.gameState.unwrappedGifts : []).get(myObligation.id)?.ownerId
-                    : null)}
-                  winnerName={getWinnerName(myObligation.winnerId || (state.gameState?.unwrappedGifts 
-                    ? new Map(Array.isArray(state.gameState.unwrappedGifts) ? state.gameState.unwrappedGifts : []).get(myObligation.id)?.ownerId
-                    : null))}
-                  nameStates={nameStates}
+                  winnerId={obligationWinnerId}
+                  winnerName={getWinnerName(obligationWinnerId)}
+                  winnerKnown={obligationWinnerKnown}
                   isSelfWin={isSelfWin}
                 />
               </div>
