@@ -415,6 +415,7 @@ export function GameBoard({ partyId, onEndTurn }) {
                   winnerId={myObligation.winnerId}
                   winnerName={getWinnerName(myObligation.winnerId)}
                   userNames={userNames}
+                  winnerKnown={gameState?.phase === 'ENDED'}
                   isSelfWin={isSelfWin}
                 />
               </div>
@@ -953,6 +954,7 @@ export function GameBoard({ partyId, onEndTurn }) {
                 winnerId={myObligation.winnerId || unwrappedMap.get(myObligation.id)?.ownerId}
                 winnerName={getWinnerName(myObligation.winnerId || unwrappedMap.get(myObligation.id)?.ownerId)}
                 userNames={userNames}
+                winnerKnown={gameState?.phase === 'ENDED'}
                 isSelfWin={isSelfWin}
               />
             </div>

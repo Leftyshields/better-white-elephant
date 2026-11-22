@@ -417,7 +417,10 @@ router.get('/winner-shipping-address/:partyId/:giftId', async (req, res) => {
     });
 
     if (result.status !== 200) {
-      return res.status(result.status).json({ error: result.error });
+      return res.status(result.status).json({
+        error: result.error,
+        ...(result.code ? { code: result.code } : {}),
+      });
     }
 
     return res.json({ shippingAddress: result.shippingAddress });

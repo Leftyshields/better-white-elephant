@@ -36,8 +36,9 @@ export async function apiRequest(endpoint, options = {}) {
       } catch {
         body = null;
       }
-      const error = new Error(body?.message || 'API request failed');
+      const error = new Error(body?.message || body?.error || 'API request failed');
       error.status = response.status;
+      if (body?.code) error.code = body.code;
       throw error;
     }
 
