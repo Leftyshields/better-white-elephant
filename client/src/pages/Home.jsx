@@ -702,6 +702,17 @@ export function Home() {
           </div>
         )}
 
+        {/* Phone-only create button: the header's create button is hidden below md. */}
+        {myParties.length > 0 && !user.isAnonymous && userSignedInWithGoogle(user) && (
+          <button
+            type="button"
+            onClick={() => setShowCreatePartyModal(true)}
+            className="md:hidden w-full min-h-11 mb-6 px-4 py-3 text-lg font-semibold bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg hover:from-indigo-600 hover:to-purple-700 transition-all shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
+          >
+            {LANDING_COPY.primaryCta}
+          </button>
+        )}
+
         {myParties.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {myParties.map((party) => {
