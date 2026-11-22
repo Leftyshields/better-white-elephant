@@ -171,19 +171,30 @@ export function shouldDeleteShippingDoc(party, cutoff) {
 }
 
 /**
- * Delete ops for every expired per-game shipping doc. Reads each parent party once.
- * @param {Array<{ ref: { parent: { parent: { id: string, get: () => Promise<{ exists: boolean, data: () => object }> } | null } } }>} shippingDocs
+ * The parent party ref when a collection-group doc lives at parties/{partyId}/<sub>/{docId}
+ * (top-level `parties` collection), else null. Docs anywhere else are never touched.
+ */
+export function partyRefForPartySubdoc(doc) {
+  const partyRef = doc?.ref?.parent?.parent;
+  const partiesCollection = partyRef?.parent;
+  if (!partyRef || !partiesCollection) return null;
+  if (partiesCollection.id !== 'parties' || partiesCollection.parent) return null;
+  return partyRef;
+}
+
+/**
+ * Delete ops for every expired per-game doc from a collectionGroup('shipping') or
+ * collectionGroup('shippingNotified') read. Only docs under parties/{partyId} are considered;
+ * same rules as shipping (shouldDeleteShippingDoc). Reads each parent party once.
+ * @param {Array<{ ref: object }>} shippingDocs
  * @param {FirebaseFirestore.Timestamp|Date|number} cutoff
  */
 export async function collectExpiredShippingDeletes(shippingDocs, cutoff) {
   const parties = new Map();
   const operations = [];
   for (const shippingDoc of shippingDocs) {
-    const partyRef = shippingDoc.ref.parent?.parent;
-    if (!partyRef) {
-      operations.push({ type: 'delete', ref: shippingDoc.ref });
-      continue;
-    }
+    const partyRef = partyRefForPartySubdoc(shippingDoc);
+    if (!partyRef) continue;
     if (!parties.has(partyRef.id)) {
       const snap = await partyRef.get();
       parties.set(partyRef.id, snap.exists ? snap.data() : null);

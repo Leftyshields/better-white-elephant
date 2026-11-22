@@ -16,10 +16,35 @@ export function logNotifyGiftSubmitterFailure(error) {
   });
 }
 
+/** Marker id for one (winner, sender) email in a party. Ids only, no address data. */
+export function shippingNotifiedMarkerId(winnerUid, submitterId) {
+  return `${winnerUid}_${submitterId}`;
+}
+
+/**
+ * Claims parties/{partyId}/shippingNotified/{winnerUid}_{submitterId} in a transaction.
+ * @returns {Promise<boolean>} true if this call created the marker (send), false if it existed (skip)
+ */
+export async function claimShippingNotifiedMarker(db, partyId, winnerUid, submitterId) {
+  const ref = db
+    .collection('parties')
+    .doc(partyId)
+    .collection('shippingNotified')
+    .doc(shippingNotifiedMarkerId(winnerUid, submitterId));
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (snap.exists) return false;
+    tx.create(ref, { notifiedAt: new Date() });
+    return true;
+  });
+}
+
 /**
  * A0: runs when parties/{partyId}/shipping/{userId} is CREATED (saving is the share). Emails each
- * assigned sender of a gift this user won in THIS party, once per sender. Edits and deletes do not
- * send. Logs ids and counts only.
+ * assigned sender of a gift this user won in THIS party, once per sender per party, ever: a
+ * shippingNotified marker is claimed in a transaction before each send, so clear-then-resave and
+ * replayed trigger events send nothing. A failed send keeps its marker (no retry email; the giver
+ * still sees the address in the app). Edits and deletes do not send. Logs ids and counts only.
  *
  * @param {import('firebase-admin/firestore').Firestore} db
  * @param {{
@@ -62,10 +87,15 @@ export async function notifyGiftSubmittersForPartyShipping(db, params) {
 
   let sentCount = 0;
   let failedCount = 0;
+  let skippedCount = 0;
   for (const submitterId of submitterIds) {
     const submitterDoc = await db.collection('users').doc(submitterId).get();
     const submitter = submitterDoc.data();
     if (!submitter?.email) {
+      continue;
+    }
+    if (!(await claimShippingNotifiedMarker(db, partyId, userId, submitterId))) {
+      skippedCount += 1;
       continue;
     }
     try {
@@ -82,5 +112,5 @@ export async function notifyGiftSubmittersForPartyShipping(db, params) {
     }
   }
 
-  return { sentCount, failedCount };
+  return { sentCount, failedCount, skippedCount };
 }

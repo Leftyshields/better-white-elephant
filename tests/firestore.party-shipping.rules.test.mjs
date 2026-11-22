@@ -2,6 +2,7 @@
  * A0 per-game shipping address: parties/{partyId}/shipping/{uid} is closed to every client.
  * The owner, the giver, the host, other players and outsiders can't get, list, create, update or
  * delete it. Only the game server (Admin SDK) touches it.
+ * The shippingNotified email markers next to it are closed the same way (Functions only).
  * Run with: npm run test:firestore-rules
  */
 import { readFileSync } from 'node:fs';
@@ -29,6 +30,7 @@ const WINNER = 'a0-winner';
 const GIVER = 'a0-giver';
 const OTHER = 'a0-other';
 const STRANGER = 'a0-stranger';
+const MARKER = `${WINNER}_${GIVER}`;
 const ADDRESS = { name: 'Win Ner', street: '1 Main St', city: 'Town', state: 'OR', zip: '97201', country: 'US' };
 
 let testEnv;
@@ -63,6 +65,7 @@ beforeEach(async () => {
       await setDoc(doc(db, 'parties', PARTY, 'participants', uid), { status: 'GOING' });
     }
     await setDoc(doc(db, 'parties', PARTY, 'shipping', WINNER), { ...ADDRESS, savedAt: new Date() });
+    await setDoc(doc(db, 'parties', PARTY, 'shippingNotified', MARKER), { notifiedAt: new Date() });
   });
 });
 
@@ -107,6 +110,24 @@ describe('parties/{partyId}/shipping/{uid}: deny all client writes', () => {
         label,
       );
       await assertFails(deleteDoc(doc(db, 'parties', PARTY, 'shipping', WINNER)), label);
+    }
+  });
+});
+
+describe('parties/{partyId}/shippingNotified/{markerId}: deny all client access', () => {
+  it('nobody can get, list or collection-group query the markers', async () => {
+    for (const [label, db] of callers()) {
+      await assertFails(getDoc(doc(db, 'parties', PARTY, 'shippingNotified', MARKER)), label);
+      await assertFails(getDocs(collection(db, 'parties', PARTY, 'shippingNotified')), label);
+      await assertFails(getDocs(collectionGroup(db, 'shippingNotified')), label);
+    }
+  });
+
+  it('nobody can create, update or delete a marker (so no one can suppress or re-arm an email)', async () => {
+    for (const [label, db] of callers()) {
+      await assertFails(setDoc(doc(db, 'parties', PARTY, 'shippingNotified', `${OTHER}_${GIVER}`), { notifiedAt: new Date() }), label);
+      await assertFails(updateDoc(doc(db, 'parties', PARTY, 'shippingNotified', MARKER), { notifiedAt: new Date() }), label);
+      await assertFails(deleteDoc(doc(db, 'parties', PARTY, 'shippingNotified', MARKER)), label);
     }
   });
 });

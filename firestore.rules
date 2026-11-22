@@ -360,6 +360,11 @@ service cloud.firestore {
         allow read, write: if false;
       }
 
+      // Email-once markers for the shipping notify trigger (A0). Functions (Admin SDK) only.
+      match /shippingNotified/{markerId} {
+        allow read, write: if false;
+      }
+
       // Pending invites subcollection
       match /pendingInvites/{inviteId} {
         // Only party admin can read/manage invites

@@ -364,6 +364,10 @@ async function queuePartySubtreeDeletes(partyId, partyRef, operations) {
   shippingSnapshot.docs.forEach((doc) => {
     operations.push({ type: 'delete', ref: doc.ref });
   });
+  const shippingNotifiedSnapshot = await partyRef.collection('shippingNotified').get();
+  shippingNotifiedSnapshot.docs.forEach((doc) => {
+    operations.push({ type: 'delete', ref: doc.ref });
+  });
 }
 
 /**
@@ -477,17 +481,21 @@ export const dataRetentionCleanup = onSchedule(
         stats.deletedShippingAddresses = dedupedAddressOperations.length;
       }
 
-      // 2b. Per-game shipping docs (A0): 30 days after ENDED, or when the party is gone. Fails
-      // closed (see shouldDeleteShippingDoc). Counts only in logs.
+      // 2b. Per-game shipping docs and their email markers (A0): 30 days after ENDED, or when the
+      // party is gone. Fails closed (see shouldDeleteShippingDoc). Only docs under parties/{id}.
+      // Counts only in logs.
       const partyShippingDocs = await getAllDocumentsFromQuery(db.collectionGroup('shipping'));
+      const shippingNotifiedDocs = await getAllDocumentsFromQuery(
+        db.collectionGroup('shippingNotified'),
+      );
       const shippingDeletes = await collectExpiredShippingDeletes(
-        partyShippingDocs,
+        [...partyShippingDocs, ...shippingNotifiedDocs],
         thirtyDaysAgoTimestamp,
       );
       if (shippingDeletes.length > 0) {
         await commitOperationsInBatches(db, shippingDeletes);
         stats.deletedPartyShippingDocs = shippingDeletes.length;
-        console.log(`✅ Deleted ${shippingDeletes.length} expired per-game shipping addresses`);
+        console.log(`✅ Deleted ${shippingDeletes.length} expired per-game shipping docs and markers`);
       }
 
       // 3. Delete gift documents 30 days after game ends (full doc, not url-only)

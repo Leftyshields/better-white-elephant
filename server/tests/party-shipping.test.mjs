@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { createFakeFirestore } from './helpers/fake-firestore.mjs';
 import {
   SHIPPING_RATE_LIMITS,
+  allowShippingRequest,
   parseShippingBody,
   partyInShippingWindow,
 } from '../lib/party-shipping.js';
@@ -36,16 +37,25 @@ function seed({ status = 'ENDED', endedAt = new Date(Date.now() - DAY), seats } 
   return rows;
 }
 
+// node-redis v4 shape. No expire(): the limiter must not depend on a separate EXPIRE call.
 function fakeRedis({ fail = false } = {}) {
   const counts = new Map();
+  const ttls = new Map();
   return {
     counts,
+    ttls,
+    async set(key, value, options = {}) {
+      if (fail) throw new Error('redis down');
+      if (options.NX && counts.has(key)) return null;
+      counts.set(key, Number(value));
+      if (options.EX) ttls.set(key, options.EX);
+      return 'OK';
+    },
     async incr(key) {
       if (fail) throw new Error('redis down');
       counts.set(key, (counts.get(key) ?? 0) + 1);
       return counts.get(key);
     },
-    async expire() {},
   };
 }
 
@@ -188,6 +198,19 @@ test('rate limit: writes over the per-minute cap get 429 and stop writing', asyn
   // Reads have their own bucket, and another player is unaffected.
   assert.equal((await call({ db, redis, uid: WINNER })).status, 200);
   assert.equal((await call({ db, redis, uid: OTHER, method: 'POST', body: { address: ADDRESS } })).status, 200);
+});
+
+test('rate limit: the window key always gets its TTL atomically with creation (no lone EXPIRE)', async () => {
+  const redis = fakeRedis();
+  assert.equal(await allowShippingRequest(redis, WINNER, 'write'), true);
+  const key = `rl:shipping:write:${WINNER}`;
+  assert.equal(redis.ttls.get(key), 60);
+  assert.equal(redis.counts.get(key), 1);
+  // Later calls in the window don't reset the counter.
+  assert.equal(await allowShippingRequest(redis, WINNER, 'write'), true);
+  assert.equal(redis.counts.get(key), 2);
+  // Every key the limiter touched has a TTL.
+  for (const k of redis.counts.keys()) assert.ok(redis.ttls.has(k), k);
 });
 
 test('rate limit fails closed: Redis error is 503 and nothing is written', async () => {

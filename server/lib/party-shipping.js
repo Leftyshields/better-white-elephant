@@ -92,15 +92,15 @@ export function partyInShippingWindow(party, nowMs) {
 }
 
 /**
- * Fixed-window counter per uid and action. Fails closed: if Redis errors, the request is refused.
+ * Fixed-window counter per uid and action. The window key is created with its TTL in one atomic
+ * SET NX EX, then INCR (which keeps the TTL), so the counter can never be left without an expiry
+ * and lock a uid out. Fails closed: if Redis errors, the request is refused.
  * @returns {Promise<boolean>} true if allowed
  */
 export async function allowShippingRequest(redis, uid, action) {
   const key = `rl:shipping:${action}:${uid}`;
+  await redis.set(key, '0', { NX: true, EX: RATE_WINDOW_SECONDS });
   const count = await redis.incr(key);
-  if (count === 1) {
-    await redis.expire(key, RATE_WINDOW_SECONDS);
-  }
   return count <= SHIPPING_RATE_LIMITS[action];
 }
 

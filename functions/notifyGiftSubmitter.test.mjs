@@ -17,9 +17,36 @@ const sampleAddress = {
   country: 'US',
 };
 
-function makeDbMock({ gifts = [], users = {} } = {}) {
+function makeDbMock({ gifts = [], users = {}, markers = new Map() } = {}) {
   return {
+    markers,
+    async runTransaction(fn) {
+      const writes = [];
+      const result = await fn({
+        async get(ref) {
+          return { exists: markers.has(ref.path) };
+        },
+        create(ref, data) {
+          if (markers.has(ref.path)) throw new Error('already exists');
+          writes.push([ref.path, data]);
+        },
+      });
+      for (const [path, data] of writes) markers.set(path, data);
+      return result;
+    },
     collection(name) {
+      if (name === 'parties') {
+        return {
+          doc(partyId) {
+            return {
+              collection(sub) {
+                assert.equal(sub, 'shippingNotified');
+                return { doc: (id) => ({ path: `parties/${partyId}/shippingNotified/${id}` }) };
+              },
+            };
+          },
+        };
+      }
       if (name === 'gifts') {
         return {
           where(field, op, value) {
@@ -223,4 +250,74 @@ test('one failed send does not stop the remaining senders; logs carry no PII', a
   } finally {
     console.error = originalError;
   }
+});
+
+function onePartyDb(markers) {
+  return makeDbMock({
+    markers,
+    gifts: [
+      { id: 'gift-a', winnerId: 'winner-1', submitterId: 'sender-a', partyId: 'party-1' },
+      { id: 'gift-b', winnerId: 'winner-1', submitterId: 'sender-b', partyId: 'party-1' },
+    ],
+    users: {
+      'winner-1': { displayName: 'Winner' },
+      'sender-a': { email: 'sender-a@example.com' },
+      'sender-b': { email: 'sender-b@example.com' },
+    },
+  });
+}
+
+test('first save sends once per sender and claims an ids-only marker per (winner, sender)', async () => {
+  const r = recorder();
+  const db = onePartyDb(new Map());
+  const result = await notifyGiftSubmittersForPartyShipping(db, {
+    partyId: 'party-1', userId: 'winner-1', shippingDoc: savedDoc, ...r,
+  });
+  assert.equal(result.sentCount, 2);
+  assert.deepEqual(r.sends.map((s) => s.to).sort(), ['sender-a@example.com', 'sender-b@example.com']);
+  assert.deepEqual([...db.markers.keys()].sort(), [
+    'parties/party-1/shippingNotified/winner-1_sender-a',
+    'parties/party-1/shippingNotified/winner-1_sender-b',
+  ]);
+  for (const data of db.markers.values()) assert.deepEqual(Object.keys(data), ['notifiedAt']);
+});
+
+test('clear then re-save (a new create) sends nothing to senders already emailed', async () => {
+  const markers = new Map();
+  const first = recorder();
+  await notifyGiftSubmittersForPartyShipping(onePartyDb(markers), {
+    partyId: 'party-1', userId: 'winner-1', shippingDoc: savedDoc, ...first,
+  });
+  assert.equal(first.sends.length, 2);
+  // The shipping doc is deleted (clear) and created again with a new address.
+  const again = recorder();
+  const result = await notifyGiftSubmittersForPartyShipping(onePartyDb(markers), {
+    partyId: 'party-1', userId: 'winner-1', shippingDoc: { ...savedDoc, street: '9 New Rd' }, ...again,
+  });
+  assert.equal(again.sends.length, 0);
+  assert.equal(result.sentCount, 0);
+  assert.equal(result.skippedCount, 2);
+});
+
+test('a replayed create event sends nothing', async () => {
+  const db = onePartyDb(new Map());
+  const r = recorder();
+  const params = { partyId: 'party-1', userId: 'winner-1', shippingDoc: savedDoc, ...r };
+  await notifyGiftSubmittersForPartyShipping(db, params);
+  await notifyGiftSubmittersForPartyShipping(db, params);
+  assert.equal(r.sends.length, 2);
+});
+
+test('markers are per party: the same pair in another party still gets its first email', async () => {
+  const markers = new Map([['parties/party-1/shippingNotified/winner-1_sender-a', { notifiedAt: new Date() }]]);
+  const r = recorder();
+  const db = makeDbMock({
+    markers,
+    gifts: [{ id: 'gift-z', winnerId: 'winner-1', submitterId: 'sender-a', partyId: 'party-2' }],
+    users: { 'sender-a': { email: 'sender-a@example.com' } },
+  });
+  const result = await notifyGiftSubmittersForPartyShipping(db, {
+    partyId: 'party-2', userId: 'winner-1', shippingDoc: savedDoc, ...r,
+  });
+  assert.equal(result.sentCount, 1);
 });

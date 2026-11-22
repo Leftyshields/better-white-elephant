@@ -317,14 +317,16 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const NOW_MS = Date.UTC(2026, 10, 21);
 const CUTOFF_MS = NOW_MS - 30 * DAY_MS;
 
-function fakeShippingDoc(partyId, uid, partyData) {
-  const path = `parties/${partyId}/shipping/${uid}`;
+function fakeShippingDoc(partyId, uid, partyData, { sub = 'shipping', root = 'parties', rootParent = null } = {}) {
+  const path = `${root}/${partyId}/${sub}/${uid}`;
   return {
     ref: {
       path,
       parent: {
+        id: sub,
         parent: {
           id: partyId,
+          parent: { id: root, parent: rootParent },
           async get() {
             return { exists: partyData !== null, data: () => partyData };
           },
@@ -385,11 +387,43 @@ test('collectExpiredShippingDeletes: deletes only expired docs, reads each party
   assert.equal(reads, 4);
 });
 
+test('collectExpiredShippingDeletes: shippingNotified markers follow the same rules', async () => {
+  const docs = [
+    fakeShippingDoc('old', 'w_s', { status: 'ENDED', endedAt: CUTOFF_MS - DAY_MS }, { sub: 'shippingNotified' }),
+    fakeShippingDoc('recent', 'w_s', { status: 'ENDED', endedAt: NOW_MS - DAY_MS }, { sub: 'shippingNotified' }),
+    fakeShippingDoc('gone', 'w_s', null, { sub: 'shippingNotified' }),
+    fakeShippingDoc('cancelled', 'w_s', { status: 'CANCELLED', updatedAt: NOW_MS }, { sub: 'shippingNotified' }),
+    fakeShippingDoc('abandoned', 'w_s', { status: 'ACTIVE', updatedAt: CUTOFF_MS - 1 }, { sub: 'shippingNotified' }),
+    fakeShippingDoc('live', 'w_s', { status: 'LOBBY', updatedAt: NOW_MS }, { sub: 'shippingNotified' }),
+  ];
+  const ops = await collectExpiredShippingDeletes(docs, CUTOFF_MS);
+  assert.deepEqual(ops.map((op) => op.ref.path), [
+    'parties/old/shippingNotified/w_s',
+    'parties/gone/shippingNotified/w_s',
+    'parties/cancelled/shippingNotified/w_s',
+    'parties/abandoned/shippingNotified/w_s',
+  ]);
+});
+
+test('collectExpiredShippingDeletes: never deletes a same-named subcollection outside parties/{id}', async () => {
+  const docs = [
+    fakeShippingDoc('u1', 'x', null, { root: 'users' }),
+    fakeShippingDoc('u1', 'x', null, { root: 'users', sub: 'shippingNotified' }),
+    fakeShippingDoc('p1', 'x', null, { rootParent: { id: 'nested', parent: null } }),
+    { ref: { path: 'shipping/x', parent: { id: 'shipping', parent: null } } },
+    fakeShippingDoc('p2', 'x', null),
+  ];
+  const ops = await collectExpiredShippingDeletes(docs, CUTOFF_MS);
+  assert.deepEqual(ops.map((op) => op.ref.path), ['parties/p2/shipping/x']);
+});
+
 test('dataRetentionCleanup wires the shipping pass and party delete removes the shipping subcollection', () => {
   const source = readFileSync(join(functionsDir, 'index.js'), 'utf8');
-  assert.match(source, /collectExpiredShippingDeletes\(\s*partyShippingDocs/);
+  assert.match(source, /collectExpiredShippingDeletes\(\s*\[\.\.\.partyShippingDocs, \.\.\.shippingNotifiedDocs\]/);
   assert.match(source, /db\.collectionGroup\('shipping'\)/);
   const subtree = source.slice(source.indexOf('async function queuePartySubtreeDeletes'));
   assert.match(subtree.slice(0, subtree.indexOf('\n}\n')), /collection\('shipping'\)/);
+  assert.match(subtree.slice(0, subtree.indexOf('\n}\n')), /collection\('shippingNotified'\)/);
+  assert.match(source, /db\.collectionGroup\('shippingNotified'\)/);
   assert.doesNotMatch(source, /console\.log\([^)]*shippingDoc\.data/);
 });
