@@ -37,3 +37,17 @@ export function hostCanDeletePartyFromHome(party) {
   }
   return party.status === 'ENDED' || party.status === 'CANCELLED';
 }
+
+export function homeDeletePartyTitle(partyTitle) {
+  const title = typeof partyTitle === 'string' ? partyTitle.trim() : '';
+  return title ? `Delete ${title}?` : 'Delete this party?';
+}
+
+export const HOME_DELETE_PARTY_COPY = {
+  untitledTitle: 'Delete this party?',
+  body: "It's gone for your guests too. You can't undo this.",
+  cancel: 'Cancel',
+  confirm: 'Delete party',
+  success: 'Party deleted.',
+  error: "Couldn't delete the party. Try again.",
+};
