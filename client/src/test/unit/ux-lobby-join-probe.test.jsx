@@ -23,7 +23,7 @@ vi.mock('../../pages/GameRoom.jsx', () => ({ GameRoom: () => { renders.push('gam
 vi.mock('../../components/PartyLobby.jsx', () => ({ PartyLobby: () => { renders.push('lobby'); return null; } }));
 vi.mock('../../components/PartyInviteLanding.jsx', () => ({
   PartyInviteLanding: () => { renders.push('landing'); return null; },
-  hostFirstNameFromParty: () => 'Dana',
+  hostNameForLateCard: () => 'Dana',
 }));
 vi.mock('../../components/LateInviteCard.jsx', () => ({
   LateInviteCard: function LC({ state }) { React.useLayoutEffect(() => { renders.push('LATE-CARD-COMMITTED:' + state); }, []); return null; },

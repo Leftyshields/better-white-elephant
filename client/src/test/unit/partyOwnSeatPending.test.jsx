@@ -39,7 +39,8 @@ vi.mock('../../components/PartyLobby.jsx', () => ({
 }));
 vi.mock('../../components/PartyInviteLanding.jsx', () => ({
   PartyInviteLanding: () => <div data-testid="invite-landing">Landing</div>,
-  hostFirstNameFromParty: (data) => {
+  hostNameForLateCard: (data) => {
+    if (typeof data?.hostRosterLabel === 'string') return data.hostRosterLabel;
     const stored = typeof data?.hostDisplayName === 'string' ? data.hostDisplayName.trim() : '';
     return stored ? stored.split(/\s+/)[0] : null;
   },

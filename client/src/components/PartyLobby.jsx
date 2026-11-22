@@ -154,6 +154,7 @@ export function PartyLobby({ partyId, onStartGame }) {
     userNames,
     rosterBatchStatus,
     GAME_USER_COPY.unnamedPlayer,
+    party?.adminId,
   );
 
   // Fetch admin shipping address

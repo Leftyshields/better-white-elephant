@@ -5,7 +5,7 @@
  * client/src/test/unit/partyInviteBatches.test.jsx pins the client side to the same shapes.
  */
 import { randomBytes } from 'node:crypto';
-import { collection, doc, increment, setDoc, writeBatch } from 'firebase/firestore';
+import { collection, doc, increment, serverTimestamp, setDoc, writeBatch } from 'firebase/firestore';
 
 export function generateInviteToken() {
   return randomBytes(16).toString('hex');
@@ -38,6 +38,7 @@ export async function joinPartyWithInviteToken(db, partyId, uid, token, particip
 export async function removeParticipantSeat(db, party, participantId) {
   const batch = writeBatch(db);
   batch.delete(doc(db, 'parties', party.id, 'participants', participantId));
+  batch.set(doc(db, 'parties', party.id, 'removedSeats', participantId), { removedAt: serverTimestamp() });
   if (typeof party.participantCount === 'number') {
     batch.update(doc(db, 'parties', party.id), { participantCount: increment(-1) });
   }

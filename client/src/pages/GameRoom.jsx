@@ -31,7 +31,7 @@ import {
 } from '../utils/seatDisplayName.js';
 import { PlayerName } from '../components/PlayerName.jsx';
 import { LateInviteCard, LateInvitePage, shouldShowLateSignIn } from '../components/LateInviteCard.jsx';
-import { hostFirstNameFromParty } from '../components/PartyInviteLanding.jsx';
+import { hostNameForLateCard } from '../components/PartyInviteLanding.jsx';
 import { lateVisitorState } from '../utils/lateInvite.js';
 import { useAwayPlayers } from '../hooks/useAwayPlayers.js';
 import { gameActions } from '../reducers/gameReducer.js';
@@ -318,15 +318,18 @@ export function GameRoom({ partyId }) {
     // participantIdsKey is the sorted participant id list; names come from live seats.
   }, [partyId, participantIdsKey, rosterParticipants, needingNames]);
 
-  const names = rosterDisplayNames(rosterParticipants, batchNames);
+  // G28: the host is numbered first, so a name collision never makes the host "(2)".
+  const hostId = party?.adminId ?? null;
+  const names = rosterDisplayNames(rosterParticipants, batchNames, { hostId });
   const nameStates = useMemo(
     () => gameRoomNameStates(
       rosterParticipants,
       batchNames,
       effectiveBatchStatus,
       GAME_USER_COPY.unnamedPlayer,
+      hostId,
     ),
-    [rosterParticipants, batchNames, effectiveBatchStatus],
+    [rosterParticipants, batchNames, effectiveBatchStatus, hostId],
   );
 
   // Calculate rounds remaining
@@ -409,7 +412,7 @@ export function GameRoom({ partyId }) {
         <LateInviteCard
           state={late}
           partyTitle={party?.title || 'White Elephant Party'}
-          hostFirstName={hostFirstNameFromParty(party)}
+          hostFirstName={hostNameForLateCard(party)}
           showSignIn={shouldShowLateSignIn(user)}
         />
       </LateInvitePage>

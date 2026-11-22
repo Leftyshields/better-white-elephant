@@ -10,7 +10,9 @@
 import {
   collection,
   doc,
+  getDoc,
   increment,
+  serverTimestamp,
   writeBatch,
 } from 'firebase/firestore';
 
@@ -72,13 +74,34 @@ export async function joinPartyWithInviteToken(db, partyId, uid, token, particip
 }
 
 /** Host removes a participant and frees the seat in the same batch (legacy parties have no counter). */
+/** G28: parties/{partyId}/removedSeats/{uid}. Only that uid can read it (firestore.rules). */
+export function removedSeatRef(db, partyId, uid) {
+  return doc(db, 'parties', partyId, 'removedSeats', uid);
+}
+
 export async function removeParticipantSeat(db, party, participantId) {
   const batch = writeBatch(db);
   batch.delete(doc(db, 'parties', party.id, 'participants', participantId));
+  // G28: in the same batch, so the removed guest is told "removed" only when the removal happened.
+  batch.set(removedSeatRef(db, party.id, participantId), { removedAt: serverTimestamp() });
   if (typeof party.participantCount === 'number') {
     batch.update(doc(db, 'parties', party.id), { participantCount: increment(-1) });
   }
   await batch.commit();
+}
+
+/**
+ * G28: true only when the server has this user's removal marker. Any read failure is "not known",
+ * so the caller keeps today's message instead of guessing.
+ */
+export async function wasRemovedFromParty(db, partyId, uid, getDocFn = getDoc) {
+  if (!partyId || !uid) return false;
+  try {
+    const marker = await getDocFn(removedSeatRef(db, partyId, uid));
+    return marker.exists();
+  } catch {
+    return false;
+  }
 }
 
 /**

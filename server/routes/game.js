@@ -13,6 +13,7 @@ import { saveShippingFulfillmentSnapshot } from '../utils/shipping-fulfillment-s
 import { fetchWinnerShippingAddressForSender } from '../utils/winner-shipping-address.js';
 import { validateGameStartGiftAssignment } from '../utils/game-start-validation.js';
 import { isPartyHostCaller } from '../lib/host-auth.js';
+import { hostRosterLabel } from '../shared/roster-names.mjs';
 
 const router = express.Router();
 
@@ -158,9 +159,23 @@ router.post('/start', async (req, res) => {
     // Save to both Redis and Firestore
     await saveGameState(partyId, gameState);
 
+    // G28: the host's roster label ("Brian" or "Brian S.", never "(N)") for the late-invite card,
+    // whose visitors can't read the seat list. Server-only field (firestore.rules); cleared when the
+    // label can't be told for sure, so the card falls back to the host's first name.
+    const hostLabel = hostRosterLabel(
+      participantsSnapshot.docs.map((d) => ({
+        id: d.id,
+        displayName: d.get('displayName'),
+        lastInitial: d.get('lastInitial'),
+        joinedAt: d.get('joinedAt'),
+      })),
+      party.adminId,
+    );
+
     // Update party status
     await db.collection('parties').doc(partyId).update({
       status: 'ACTIVE',
+      hostRosterLabel: hostLabel ?? admin.firestore.FieldValue.delete(),
       updatedAt: new Date(),
     });
 

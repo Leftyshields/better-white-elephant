@@ -569,6 +569,11 @@ export function GuestJoinCard({
     { id: 'gift', label: COPY.stepGift, done: giftDone },
   ];
 
+  // A terminal message is a string, or { title, body } (G28 removed guest): the title replaces
+  // the welcome header, since "welcome" would be false for someone the host removed.
+  const terminalTitle = terminalMessage && typeof terminalMessage === 'object' ? terminalMessage.title : null;
+  const terminalBody = terminalMessage && typeof terminalMessage === 'object' ? terminalMessage.body : terminalMessage;
+
   return (
     <section
       data-testid="guest-join-card"
@@ -576,15 +581,19 @@ export function GuestJoinCard({
       className="w-full max-w-md mx-auto bg-slate-900/80 backdrop-blur-xl border border-white/10 shadow-2xl rounded-2xl p-4 sm:p-6 space-y-5"
     >
       <div className="space-y-1">
-        <h1 className="text-xl sm:text-2xl font-bold text-white break-words">{COPY.welcomeTitle(partyTitle)}</h1>
-        <p className="text-sm text-slate-300">
-          {isReady && !terminalMessage ? COPY.welcomeDone(hostFirstName) : COPY.welcomeBody(hostFirstName)}
-        </p>
+        <h1 className="text-xl sm:text-2xl font-bold text-white break-words">
+          {terminalTitle || COPY.welcomeTitle(partyTitle)}
+        </h1>
+        {!terminalTitle && (
+          <p className="text-sm text-slate-300">
+            {isReady && !terminalMessage ? COPY.welcomeDone(hostFirstName) : COPY.welcomeBody(hostFirstName)}
+          </p>
+        )}
       </div>
 
       {terminalMessage ? (
         <div className="space-y-4">
-          <p className="text-base text-slate-200">{terminalMessage}</p>
+          <p className="text-base text-slate-200">{terminalBody}</p>
           <a
             href="/"
             className={`inline-flex items-center justify-center w-full min-h-11 px-4 py-2 rounded-md font-medium bg-slate-800 text-white hover:bg-slate-700 ${FOCUS_RING}`}
