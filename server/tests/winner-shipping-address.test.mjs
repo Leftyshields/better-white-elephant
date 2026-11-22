@@ -223,7 +223,7 @@ test('assigned sender is denied if the game has not ended', async () => {
   assert.match(result.error, /not ended/i);
 });
 
-test('assigned sender is denied if winner has no address', async () => {
+test('assigned sender gets no address (200, not an error) if winner has no address', async () => {
   const db = makeFirestoreMock({
     users: {
       [WINNER_ID]: {
@@ -238,10 +238,12 @@ test('assigned sender is denied if winner has no address', async () => {
     { callerUid: SENDER_ID, partyId: PARTY_ID, giftId: GIFT_ID },
     defaultDeps(),
   );
-  assert.equal(result.status, 404);
+  assert.equal(result.status, 200);
+  assert.equal(result.shippingAddress, null);
+  assert.equal(result.error, undefined);
 });
 
-test('assigned sender is denied if winner has address but no consent', async () => {
+test('assigned sender gets no address (200, same as no address) if winner has address but no consent', async () => {
   const db = makeFirestoreMock({
     users: {
       [WINNER_ID]: {
@@ -256,11 +258,32 @@ test('assigned sender is denied if winner has address but no consent', async () 
     { callerUid: SENDER_ID, partyId: PARTY_ID, giftId: GIFT_ID },
     defaultDeps(),
   );
-  assert.equal(result.status, 403);
-  assert.match(result.error, /consent/i);
+  // Consent gate intact: the address is withheld, and the answer can't be told apart from "no address".
+  assert.deepEqual(result, { status: 200, shippingAddress: null });
 });
 
-test('denies when shipping address street is whitespace-only after trim', async () => {
+test('assigned sender gets no address (200) if winner has no profile document', async () => {
+  const db = makeFirestoreMock({ users: { [WINNER_ID]: undefined } });
+  const result = await fetchWinnerShippingAddressForSender(
+    db,
+    { callerUid: SENDER_ID, partyId: PARTY_ID, giftId: GIFT_ID },
+    defaultDeps(),
+  );
+  assert.deepEqual(result, { status: 200, shippingAddress: null });
+});
+
+test('non-sender is still denied (403) when the winner has no address', async () => {
+  const db = makeFirestoreMock({ users: { [WINNER_ID]: undefined } });
+  const result = await fetchWinnerShippingAddressForSender(
+    db,
+    { callerUid: OTHER_MEMBER_ID, partyId: PARTY_ID, giftId: GIFT_ID },
+    defaultDeps(),
+  );
+  assert.equal(result.status, 403);
+  assert.equal(result.shippingAddress, undefined);
+});
+
+test('whitespace-only street counts as no address (200, no address)', async () => {
   const db = makeFirestoreMock({
     users: {
       [WINNER_ID]: {
@@ -279,8 +302,7 @@ test('denies when shipping address street is whitespace-only after trim', async 
     { callerUid: SENDER_ID, partyId: PARTY_ID, giftId: GIFT_ID },
     defaultDeps(),
   );
-  assert.equal(result.status, 404);
-  assert.match(result.error, /address/i);
+  assert.deepEqual(result, { status: 200, shippingAddress: null });
 });
 
 test('response does not include email or other profile fields', async () => {

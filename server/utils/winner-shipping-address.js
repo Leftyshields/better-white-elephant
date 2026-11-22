@@ -160,19 +160,15 @@ export async function fetchWinnerShippingAddressForSender(
     return { status: 403, error: 'No shipping address needed for your own gift' };
   }
 
+  // Every access gate above has passed: this caller is the assigned sender of an ended game.
+  // "No address yet" and "no consent yet" both answer 200 with no address (not an error), so the
+  // sender's card can tell "not shared yet" from a real failure. The two cases look the same, so
+  // the sender can't learn whether the winner saved an address without consenting to share it.
   const winnerDoc = await db.collection('users').doc(winnerId).get();
-  if (!winnerDoc.exists) {
-    return { status: 404, error: 'Winner has not added a shipping address yet' };
-  }
-
-  const winnerData = winnerDoc.data();
+  const winnerData = winnerDoc.exists ? winnerDoc.data() : null;
   const shippingAddress = pickShippingAddress(winnerData?.shippingAddress);
-  if (!shippingAddress) {
-    return { status: 404, error: 'Winner has not added a shipping address yet' };
-  }
-
-  if (!hasSenderShareConsent(winnerData)) {
-    return { status: 403, error: 'Winner has not consented to share their address' };
+  if (!shippingAddress || !hasSenderShareConsent(winnerData)) {
+    return { status: 200, shippingAddress: null };
   }
 
   return { status: 200, shippingAddress };

@@ -8,12 +8,26 @@ import { CheckIcon } from '@heroicons/react/24/solid';
 import { CheckBadgeIcon } from '@heroicons/react/24/solid';
 import { fetchWinnerShippingAddress } from '../utils/api.js';
 import { SHIPPING_ADDRESS_WINNER_NOT_SHARED_GIFT_TO_SEND } from '../utils/shippingAddressCopy.js';
+import { GIFT_TO_SEND_COPY } from '../utils/giftToSendCopy.js';
 
-export function GiftToSendCard({ gift, winnerId, winnerName, userNames, isSelfWin = false }) {
+/** Give up on a load after this long and show the error with Try again (never an endless spinner). */
+export const ADDRESS_TIMEOUT_MS = 8000;
+/** While the winner hasn't shared yet, check again this often... */
+export const ADDRESS_POLL_MS = 30000;
+/** ...for this long after the card opens. Coming back to the tab always checks again. */
+export const ADDRESS_POLL_WINDOW_MS = 10 * 60 * 1000;
+
+/**
+ * Address states: 'loading' | 'loaded' | 'not-shared' | 'error'.
+ * winnerKnown: false while the end screen doesn't know the winner yet (game state still loading),
+ * so "no winner" is only said once it's actually true.
+ */
+export function GiftToSendCard({ gift, winnerId, winnerName, winnerKnown = true, isSelfWin = false }) {
   const [address, setAddress] = useState(null);
-  const [loadingAddress, setLoadingAddress] = useState(true);
-  const [addressUnavailable, setAddressUnavailable] = useState(false);
+  const [addressState, setAddressState] = useState('loading');
+  const [attempt, setAttempt] = useState(0);
   const [copied, setCopied] = useState(false);
+  const noWinner = !isSelfWin && winnerKnown && !winnerId;
 
   const formatAddressForCopy = (addr) => {
     if (!addr) return '';
@@ -44,40 +58,80 @@ export function GiftToSendCard({ gift, winnerId, winnerName, userNames, isSelfWi
     }
   };
 
+  const partyId = gift?.partyId;
+  const giftId = gift?.id;
+
   useEffect(() => {
-    if (!winnerId || isSelfWin || !gift?.partyId || !gift?.id) {
-      setAddress(null);
-      setAddressUnavailable(false);
-      setLoadingAddress(false);
-      return;
-    }
+    if (isSelfWin || noWinner || !partyId || !giftId) return undefined;
 
     let cancelled = false;
-    setLoadingAddress(true);
-    setAddressUnavailable(false);
+    let inFlight = false;
+    let pollTimer = null;
+    let current = 'loading';
+    const openedAt = Date.now();
+    const show = (next, nextAddress = null) => {
+      current = next;
+      setAddress(nextAddress);
+      setAddressState(next);
+    };
+    show('loading');
 
-    fetchWinnerShippingAddress(gift.partyId, gift.id)
-      .then((data) => {
+    // The winner isn't known yet: wait for the game state, but not forever.
+    if (!winnerKnown) {
+      const waitTimer = setTimeout(() => {
+        if (!cancelled) show('error');
+      }, ADDRESS_TIMEOUT_MS);
+      return () => {
+        cancelled = true;
+        clearTimeout(waitTimer);
+      };
+    }
+
+    const schedulePoll = () => {
+      clearTimeout(pollTimer);
+      if (Date.now() - openedAt + ADDRESS_POLL_MS <= ADDRESS_POLL_WINDOW_MS) {
+        pollTimer = setTimeout(() => load({ background: true }), ADDRESS_POLL_MS);
+      }
+    };
+
+    // background: a quiet recheck while "not shared yet" shows. It never shows the skeleton, and a
+    // failed recheck leaves the last real answer on screen and tries again later.
+    async function load({ background }) {
+      if (inFlight) return;
+      inFlight = true;
+      clearTimeout(pollTimer);
+      try {
+        const data = await fetchWinnerShippingAddress(partyId, giftId, { timeoutMs: ADDRESS_TIMEOUT_MS });
         if (cancelled) return;
-        setAddress(data.shippingAddress || null);
-        setAddressUnavailable(!data.shippingAddress);
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        console.error('Error fetching address:', error);
-        setAddress(null);
-        setAddressUnavailable(true);
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoadingAddress(false);
+        if (data?.shippingAddress) {
+          show('loaded', data.shippingAddress);
+          return;
         }
-      });
+        show('not-shared');
+        schedulePoll();
+      } catch (error) {
+        if (cancelled) return;
+        // Status only: never log the response body or the address.
+        console.warn('[GiftToSendCard] address load failed', error?.timedOut ? 'timeout' : error?.status ?? 'network');
+        if (background) schedulePoll();
+        else show('error');
+      } finally {
+        inFlight = false;
+      }
+    }
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible' && current === 'not-shared') load({ background: true });
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    load({ background: false });
 
     return () => {
       cancelled = true;
+      clearTimeout(pollTimer);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [winnerId, isSelfWin, gift?.partyId, gift?.id]);
+  }, [isSelfWin, noWinner, winnerKnown, winnerId, partyId, giftId, attempt]);
 
   return (
     <div className="bg-slate-900/50 border border-slate-700 rounded-2xl p-6 hover:border-slate-600 transition-all relative">
@@ -112,7 +166,7 @@ export function GiftToSendCard({ gift, winnerId, winnerName, userNames, isSelfWi
           )}
           
           {/* Winner Info */}
-          {!isSelfWin && (
+          {!isSelfWin && !noWinner && winnerKnown && (
             <div className="mb-4">
               <p className="text-sm text-slate-300 mb-1">Winner:</p>
               <p className="text-lg font-semibold text-white">{winnerName}</p>
@@ -126,27 +180,34 @@ export function GiftToSendCard({ gift, winnerId, winnerName, userNames, isSelfWi
               <p className="text-emerald-400 font-bold text-lg mb-2">You won your own gift.</p>
               <p className="text-slate-400">No shipping needed. You keep it.</p>
             </div>
+          ) : noWinner ? (
+            <p className="text-sm text-slate-300 mt-4" data-testid="gift-to-send-no-winner">
+              {GIFT_TO_SEND_COPY.noWinnerForYourGift}
+            </p>
           ) : (
             /* Shipping Address */
             <div className="bg-black/30 border-2 border-dashed border-white/20 rounded-lg p-4 mt-4 relative">
               <p className="text-sm font-semibold text-slate-300 mb-2">📬 Shipping Address:</p>
-              {loadingAddress ? (
-                <p className="text-slate-500 text-sm font-mono">Loading address...</p>
-              ) : address ? (
+              {addressState === 'loading' ? (
+                <div aria-busy="true" data-testid="gift-to-send-address-loading" className="space-y-2 py-1">
+                  <span className="sr-only">{GIFT_TO_SEND_COPY.addressLoading}</span>
+                  <div aria-hidden="true" className="h-3 rounded bg-slate-700/60 w-3/5" />
+                  <div aria-hidden="true" className="h-3 rounded bg-slate-700/60 w-4/5" />
+                  <div aria-hidden="true" className="h-3 rounded bg-slate-700/60 w-1/2" />
+                </div>
+              ) : addressState === 'loaded' && address ? (
                 <>
-                  {address && (
-                    <button
-                      onClick={handleCopyAddress}
-                      className="absolute top-2 right-2 bg-white/10 hover:bg-white/20 border border-white/20 rounded p-1.5 transition-all"
-                      title={copied ? "Address Copied!" : "Copy address"}
-                    >
-                      {copied ? (
-                        <CheckIcon className="w-4 h-4 text-green-400" />
-                      ) : (
-                        <ClipboardDocumentIcon className="w-4 h-4 text-slate-400" />
-                      )}
-                    </button>
-                  )}
+                  <button
+                    onClick={handleCopyAddress}
+                    className="absolute top-2 right-2 bg-white/10 hover:bg-white/20 border border-white/20 rounded p-1.5 transition-all"
+                    title={copied ? "Address Copied!" : "Copy address"}
+                  >
+                    {copied ? (
+                      <CheckIcon className="w-4 h-4 text-green-400" />
+                    ) : (
+                      <ClipboardDocumentIcon className="w-4 h-4 text-slate-400" />
+                    )}
+                  </button>
                   <div className="text-sm font-mono text-slate-300 space-y-1 pr-8">
                     <p className="font-medium">{address.name || 'N/A'}</p>
                     {address.street && <p>{address.street}</p>}
@@ -158,12 +219,25 @@ export function GiftToSendCard({ gift, winnerId, winnerName, userNames, isSelfWi
                     {address.country && <p>{address.country}</p>}
                   </div>
                 </>
+              ) : addressState === 'error' ? (
+                <div data-testid="gift-to-send-address-error">
+                  <p className="text-sm text-orange-300">{GIFT_TO_SEND_COPY.addressLoadFailed}</p>
+                  <button
+                    type="button"
+                    onClick={() => setAttempt((n) => n + 1)}
+                    aria-label={GIFT_TO_SEND_COPY.addressRetryAria}
+                    className="mt-3 min-h-11 px-4 rounded-lg border border-white/30 bg-white/10 hover:bg-white/20 text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                  >
+                    {GIFT_TO_SEND_COPY.addressRetry}
+                  </button>
+                </div>
               ) : (
-                <p className="text-sm text-orange-400 italic font-mono">
-                  {addressUnavailable
-                    ? SHIPPING_ADDRESS_WINNER_NOT_SHARED_GIFT_TO_SEND
-                    : "The winner hasn't added a shipping address yet."}
-                </p>
+                <div data-testid="gift-to-send-address-not-shared">
+                  <p className="text-sm text-orange-400 italic font-mono">
+                    {SHIPPING_ADDRESS_WINNER_NOT_SHARED_GIFT_TO_SEND}
+                  </p>
+                  <p className="text-sm text-slate-300 mt-1">{GIFT_TO_SEND_COPY.addressWillUpdate}</p>
+                </div>
               )}
             </div>
           )}
