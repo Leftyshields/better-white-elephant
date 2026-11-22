@@ -17,6 +17,18 @@ export function Modal({ isOpen, onClose, title, titleId, children, className = '
     };
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose?.();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   return (
@@ -25,6 +37,9 @@ export function Modal({ isOpen, onClose, title, titleId, children, className = '
       onClick={onClose}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
         className={`bg-slate-900/95 backdrop-blur-md border border-white/20 rounded-xl shadow-2xl max-w-md w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col ${className}`}
         onClick={(e) => e.stopPropagation()}
       >

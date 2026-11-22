@@ -45,9 +45,26 @@ import {
 import {
   formatPartyStatus,
   hostCanDeletePartyFromHome,
+  homeDeletePartyTitle,
+  HOME_DELETE_PARTY_COPY,
   partyEntryButtonLabel,
   PARTIES_LOAD_ERROR,
 } from '../utils/partyUiCopy.js';
+import { REQUEST_TIMEOUT_MS, withTimeout } from '../utils/withTimeout.js';
+
+function sortPartiesByCreatedAt(parties) {
+  return [...parties].sort((a, b) => {
+    try {
+      const aTime = a.createdAt?.toDate?.() || (a.createdAt ? new Date(a.createdAt) : new Date(0));
+      const bTime = b.createdAt?.toDate?.() || (b.createdAt ? new Date(b.createdAt) : new Date(0));
+      const aTimestamp = aTime instanceof Date ? aTime.getTime() : 0;
+      const bTimestamp = bTime instanceof Date ? bTime.getTime() : 0;
+      return bTimestamp - aTimestamp;
+    } catch (e) {
+      return 0;
+    }
+  });
+}
 
 export function Home() {
   const { user } = useAuth();
@@ -65,6 +82,11 @@ export function Home() {
   const [myParties, setMyParties] = useState([]);
   const [loadingParties, setLoadingParties] = useState(false);
   const [partiesError, setPartiesError] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deletePending, setDeletePending] = useState(false);
+  const [deleteStatus, setDeleteStatus] = useState(null);
+  const partyMapRef = useRef(new Map());
+  const pendingDeleteIdsRef = useRef(new Set());
   const { showModal: showCreatePartyModal, setShowModal: setShowCreatePartyModal } = usePartyModal();
   const [participantCounts, setParticipantCounts] = useState({});
   const [isMobile, setIsMobile] = useState(false);
@@ -143,32 +165,27 @@ export function Home() {
   // Subscribe to parties where user is admin OR participant
   useEffect(() => {
     if (!user) {
+      partyMapRef.current.clear();
+      pendingDeleteIdsRef.current.clear();
       setMyParties([]);
       setLoadingParties(false);
+      setDeleteTarget(null);
+      setDeletePending(false);
+      setDeleteStatus(null);
       return;
     }
 
     setLoadingParties(true);
     setPartiesError(null);
 
-    const partyMap = new Map();
+    const partyMap = partyMapRef.current;
+    partyMap.clear();
     const partyUnsubscribes = new Map(); // Track individual party listeners
 
-    // Function to update parties state
     const updateParties = () => {
-      const allParties = Array.from(partyMap.values());
-      // Sort manually by createdAt if it exists
-      allParties.sort((a, b) => {
-        try {
-          const aTime = a.createdAt?.toDate?.() || (a.createdAt ? new Date(a.createdAt) : new Date(0));
-          const bTime = b.createdAt?.toDate?.() || (b.createdAt ? new Date(b.createdAt) : new Date(0));
-          const aTimestamp = aTime instanceof Date ? aTime.getTime() : 0;
-          const bTimestamp = bTime instanceof Date ? bTime.getTime() : 0;
-          return bTimestamp - aTimestamp; // Descending
-        } catch (e) {
-          return 0;
-        }
-      });
+      const allParties = sortPartiesByCreatedAt(
+        Array.from(partyMap.values()).filter((party) => !pendingDeleteIdsRef.current.has(party.id)),
+      );
       setMyParties(allParties);
       setLoadingParties(false);
       setPartiesError(null);
@@ -183,13 +200,22 @@ export function Home() {
     const unsubscribeAdmin = onSnapshot(
       adminQuery,
       (snapshot) => {
-        snapshot.docs.forEach((doc) => {
-          partyMap.set(doc.id, {
-            id: doc.id,
-            ...doc.data(),
+        const seen = new Set();
+        snapshot.docs.forEach((docSnap) => {
+          seen.add(docSnap.id);
+          partyMap.set(docSnap.id, {
+            id: docSnap.id,
+            ...docSnap.data(),
             isAdmin: true,
           });
         });
+        // Drop parties that left the query; previously the map only grew, so a
+        // deleted card stayed on Home until a full reload.
+        for (const id of [...partyMap.keys()]) {
+          if (!seen.has(id)) {
+            partyMap.delete(id);
+          }
+        }
         updateParties();
       },
       (error) => {
@@ -241,33 +267,50 @@ export function Home() {
     };
   }, [user, myParties]);
 
-  const handleDeleteParty = async (partyId, e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    if (!confirm('Are you sure you want to delete this party? This action cannot be undone.')) {
-      return;
-    }
+  const closeDeleteConfirm = () => {
+    if (deletePending) return;
+    setDeleteTarget(null);
+  };
+
+  const openDeleteConfirm = (party, event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (deletePending) return;
+    setDeleteStatus(null);
+    setDeleteTarget(party);
+  };
+
+  const confirmDeleteParty = async () => {
+    if (!deleteTarget || deletePending) return;
+    const party = deleteTarget;
+    const partyId = party.id;
+    setDeletePending(true);
+    pendingDeleteIdsRef.current.add(partyId);
+    partyMapRef.current.delete(partyId);
+    setDeleteTarget(null);
+    setMyParties((prev) => prev.filter((item) => item.id !== partyId));
 
     try {
-      // Get party data before deletion to track abandonment
-      const partyDoc = await getDoc(doc(db, 'parties', partyId));
-      const partyData = partyDoc.data();
-      
-      await deleteDoc(doc(db, 'parties', partyId));
-      
-      // Track game abandonment if party was in progress
-      if (partyData?.status === 'ACTIVE' || partyData?.status === 'LOBBY') {
-        const participantCount = partyData?.participantCount || 0;
-        const phase = partyData?.status === 'ACTIVE' ? 'in_progress' : 'lobby';
-        trackGameAbandoned(partyId, phase, participantCount);
-      }
-      
-      // Party will be removed from the list automatically via the real-time listener
+      await withTimeout((async () => {
+        const partyDoc = await getDoc(doc(db, 'parties', partyId));
+        await deleteDoc(doc(db, 'parties', partyId));
+        const partyData = partyDoc.data();
+        if (partyData?.status === 'ACTIVE' || partyData?.status === 'LOBBY') {
+          const participantCount = partyData?.participantCount || 0;
+          const phase = partyData?.status === 'ACTIVE' ? 'in_progress' : 'lobby';
+          trackGameAbandoned(partyId, phase, participantCount);
+        }
+      })(), REQUEST_TIMEOUT_MS);
+      setDeleteStatus('success');
     } catch (error) {
+      pendingDeleteIdsRef.current.delete(partyId);
+      partyMapRef.current.set(partyId, party);
+      setMyParties((prev) => sortPartiesByCreatedAt([...prev.filter((item) => item.id !== partyId), party]));
       console.error('Error deleting party:', error);
       trackError('delete_party_failed', error.message, 'Home');
-      alert('Failed to delete party: ' + error.message);
+      setDeleteStatus('error');
+    } finally {
+      setDeletePending(false);
     }
   };
 
@@ -675,6 +718,16 @@ export function Home() {
           <div>
             <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">{SIGNED_IN_COPY.heading}</h2>
             <p className="text-slate-400">{SIGNED_IN_COPY.subheading}</p>
+            {deleteStatus === 'success' && (
+              <p role="status" data-testid="home-delete-party-status" className="mt-3 text-sm text-emerald-300">
+                {HOME_DELETE_PARTY_COPY.success}
+              </p>
+            )}
+            {deleteStatus === 'error' && (
+              <p role="status" data-testid="home-delete-party-status" className="mt-3 text-sm text-orange-300">
+                {HOME_DELETE_PARTY_COPY.error}
+              </p>
+            )}
           </div>
         </div>
 
@@ -781,12 +834,8 @@ export function Home() {
                                 <Menu.Item>
                                   {({ active }) => (
                                     <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (confirm('Are you sure you want to delete this party? This action cannot be undone.')) {
-                                          handleDeleteParty(party.id, e);
-                                        }
-                                      }}
+                                      type="button"
+                                      onClick={(e) => openDeleteConfirm(party, e)}
                                       className={`${
                                         active ? 'bg-red-500/20' : ''
                                       } block w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-red-500/20 transition-colors`}
@@ -818,6 +867,33 @@ export function Home() {
         )}
 
         {/* Create Party Modal */}
+      <Modal
+        isOpen={Boolean(deleteTarget)}
+        onClose={closeDeleteConfirm}
+        title={deleteTarget ? homeDeletePartyTitle(deleteTarget.title) : HOME_DELETE_PARTY_COPY.untitledTitle}
+        titleId="home-delete-party-title"
+      >
+        <p className="text-sm text-slate-300 mb-6">{HOME_DELETE_PARTY_COPY.body}</p>
+        <div className="flex gap-3 justify-end">
+          <Button
+            type="button"
+            autoFocus
+            onClick={closeDeleteConfirm}
+            className="text-slate-400 hover:text-white bg-transparent border border-slate-700 hover:border-slate-600"
+          >
+            {HOME_DELETE_PARTY_COPY.cancel}
+          </Button>
+          <Button
+            type="button"
+            variant="danger"
+            disabled={deletePending}
+            onClick={confirmDeleteParty}
+          >
+            {HOME_DELETE_PARTY_COPY.confirm}
+          </Button>
+        </div>
+      </Modal>
+
         <Modal
           isOpen={showCreatePartyModal}
           onClose={() => {

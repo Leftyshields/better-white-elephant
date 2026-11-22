@@ -1,10 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor, within, fireEvent } from '@testing-library/react';
+import { deleteDoc, getDoc } from 'firebase/firestore';
 import { HelmetProvider } from 'react-helmet-async';
 import { MemoryRouter } from 'react-router-dom';
 import { PartyModalProvider } from '../../contexts/PartyModalContext.jsx';
 import { Home } from '../../pages/Home.jsx';
-import { hostCanDeletePartyFromHome } from '../../utils/partyUiCopy.js';
+import {
+  hostCanDeletePartyFromHome,
+  homeDeletePartyTitle,
+  HOME_DELETE_PARTY_COPY,
+} from '../../utils/partyUiCopy.js';
 
 const mockUser = { uid: 'host-uid', email: 'host@example.com' };
 
@@ -92,6 +97,16 @@ function renderSignedInHome() {
   );
 }
 
+async function openDeleteFor(title) {
+  const card = screen.getByText(title).closest('.group');
+  fireEvent.click(within(card).getByTitle('Party options'));
+  const item = await screen.findByRole('menuitem', { name: 'Delete Party' });
+  fireEvent.click(item);
+  await waitFor(() => {
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+}
+
 describe('hostCanDeletePartyFromHome', () => {
   it('allows delete only for admin hosts with ENDED or CANCELLED status', () => {
     expect(hostCanDeletePartyFromHome({ isAdmin: true, status: 'LOBBY' })).toBe(false);
@@ -106,7 +121,14 @@ describe('Home party delete control', () => {
   beforeEach(() => {
     onSnapshot.mockReset();
     stubAdminPartiesSnapshot();
+    deleteDoc.mockReset();
+    getDoc.mockReset();
+    deleteDoc.mockResolvedValue(undefined);
+    getDoc.mockResolvedValue({ data: () => ({ status: 'ENDED', participantCount: 2 }) });
     vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   it('shows Delete only for ENDED and CANCELLED parties, not LOBBY or ACTIVE', async () => {
@@ -126,5 +148,94 @@ describe('Home party delete control', () => {
 
     expect(within(endedCard).getByTitle('Party options')).toBeInTheDocument();
     expect(within(cancelledCard).getByTitle('Party options')).toBeInTheDocument();
+  });
+
+  it('opens one in-app confirm and calls delete once; the card is gone without a reload', async () => {
+    renderSignedInHome();
+    await waitFor(() => {
+      expect(screen.getByText('Party Ended Test')).toBeInTheDocument();
+    });
+
+    await openDeleteFor('Party Ended Test');
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
+    expect(screen.getByRole('heading', { name: 'Delete Party Ended Test?' })).toBeInTheDocument();
+    expect(screen.getByText(HOME_DELETE_PARTY_COPY.body)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: HOME_DELETE_PARTY_COPY.cancel })).toHaveFocus();
+    expect(window.confirm).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: HOME_DELETE_PARTY_COPY.confirm }));
+
+    await waitFor(() => {
+      expect(deleteDoc).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.queryByText('Party Ended Test')).toBeNull();
+    expect(screen.getByText('Party Cancelled Test')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent(HOME_DELETE_PARTY_COPY.success);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(window.alert).not.toHaveBeenCalled();
+  });
+
+  it('restores the card and shows the inline error if delete fails', async () => {
+    deleteDoc.mockRejectedValue(new Error('permission-denied'));
+    renderSignedInHome();
+    await waitFor(() => {
+      expect(screen.getByText('Party Ended Test')).toBeInTheDocument();
+    });
+
+    await openDeleteFor('Party Ended Test');
+    fireEvent.click(screen.getByRole('button', { name: HOME_DELETE_PARTY_COPY.confirm }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent(HOME_DELETE_PARTY_COPY.error);
+    });
+    expect(screen.getByText('Party Ended Test')).toBeInTheDocument();
+    expect(deleteDoc).toHaveBeenCalledTimes(1);
+    expect(window.alert).not.toHaveBeenCalled();
+  });
+
+  it('Escape closes the dialog and does not call delete', async () => {
+    renderSignedInHome();
+    await waitFor(() => {
+      expect(screen.getByText('Party Ended Test')).toBeInTheDocument();
+    });
+
+    await openDeleteFor('Party Ended Test');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+    expect(deleteDoc).not.toHaveBeenCalled();
+    expect(screen.getByText('Party Ended Test')).toBeInTheDocument();
+  });
+
+  it('Cancel closes the dialog and does not call delete', async () => {
+    renderSignedInHome();
+    await waitFor(() => {
+      expect(screen.getByText('Party Ended Test')).toBeInTheDocument();
+    });
+
+    await openDeleteFor('Party Ended Test');
+    fireEvent.click(screen.getByRole('button', { name: HOME_DELETE_PARTY_COPY.cancel }));
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+    expect(deleteDoc).not.toHaveBeenCalled();
+    expect(screen.getByText('Party Ended Test')).toBeInTheDocument();
+  });
+});
+
+describe('HOME_DELETE_PARTY_COPY', () => {
+  it('uses the signed strings verbatim', () => {
+    expect(homeDeletePartyTitle('Office Party')).toBe('Delete Office Party?');
+    expect(homeDeletePartyTitle('')).toBe('Delete this party?');
+    expect(homeDeletePartyTitle('   ')).toBe('Delete this party?');
+    expect(HOME_DELETE_PARTY_COPY).toEqual({
+      untitledTitle: 'Delete this party?',
+      body: "You can't undo this.",
+      cancel: 'Cancel',
+      confirm: 'Delete party',
+      success: 'Party deleted.',
+      error: "Couldn't delete the party. Try again.",
+    });
   });
 });
