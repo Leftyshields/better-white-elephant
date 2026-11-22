@@ -150,3 +150,47 @@ export function shouldDeleteGiftForRetention(gift, cutoff, party) {
   }
   return false;
 }
+
+/**
+ * A0 per-game shipping doc (parties/{partyId}/shipping/{uid}): delete when the party is gone,
+ * ENDED on or before the 30-day cutoff, abandoned, or in any other state (CANCELLED, unknown).
+ * Fails closed: an ENDED party with no readable end time is deleted, not kept.
+ * @param {object|null} party - party data, null if the party doc is missing
+ * @param {FirebaseFirestore.Timestamp|Date|number} cutoff - 30 days ago
+ */
+export function shouldDeleteShippingDoc(party, cutoff) {
+  if (!party) return true;
+  if (party.status === 'ENDED') {
+    const endedMs = toMillis(getPartyEndTime(party));
+    return endedMs == null || endedMs <= toMillis(cutoff);
+  }
+  if (party.status === 'LOBBY' || party.status === 'ACTIVE') {
+    return isAbandonedPartyPastRetention(party, cutoff);
+  }
+  return true;
+}
+
+/**
+ * Delete ops for every expired per-game shipping doc. Reads each parent party once.
+ * @param {Array<{ ref: { parent: { parent: { id: string, get: () => Promise<{ exists: boolean, data: () => object }> } | null } } }>} shippingDocs
+ * @param {FirebaseFirestore.Timestamp|Date|number} cutoff
+ */
+export async function collectExpiredShippingDeletes(shippingDocs, cutoff) {
+  const parties = new Map();
+  const operations = [];
+  for (const shippingDoc of shippingDocs) {
+    const partyRef = shippingDoc.ref.parent?.parent;
+    if (!partyRef) {
+      operations.push({ type: 'delete', ref: shippingDoc.ref });
+      continue;
+    }
+    if (!parties.has(partyRef.id)) {
+      const snap = await partyRef.get();
+      parties.set(partyRef.id, snap.exists ? snap.data() : null);
+    }
+    if (shouldDeleteShippingDoc(parties.get(partyRef.id), cutoff)) {
+      operations.push({ type: 'delete', ref: shippingDoc.ref });
+    }
+  }
+  return operations;
+}

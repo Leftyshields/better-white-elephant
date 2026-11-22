@@ -60,8 +60,6 @@ function makeFirestoreMock(overrides = {}) {
     [WINNER_ID]: {
       displayName: 'Winner',
       email: 'winner@example.com',
-      shippingAddress: sampleAddress,
-      shippingAddressSenderShareConsentAt: new Date('2026-01-01T00:00:00Z'),
     },
     [SENDER_ID]: {
       displayName: 'Sender',
@@ -69,6 +67,11 @@ function makeFirestoreMock(overrides = {}) {
     },
     ...overrides.users,
   };
+
+  // Per-game address docs: parties/{PARTY_ID}/shipping/{uid} (A0).
+  const shipping = Object.hasOwn(overrides, 'shipping')
+    ? overrides.shipping
+    : { [WINNER_ID]: { ...sampleAddress, savedAt: new Date('2026-01-01T00:00:00Z') } };
 
   const participants = {
     [PARTY_ID]: {
@@ -100,6 +103,19 @@ function makeFirestoreMock(overrides = {}) {
                 return docSnapshot(id, row, Boolean(row));
               },
               collection(sub) {
+                if (sub === 'shipping') {
+                  const partyShipping = id === PARTY_ID ? shipping : {};
+                  return {
+                    doc(uid) {
+                      return {
+                        async get() {
+                          const row = partyShipping[uid];
+                          return docSnapshot(uid, row, Boolean(row));
+                        },
+                      };
+                    },
+                  };
+                }
                 if (sub !== 'participants') {
                   throw new Error('unexpected sub');
                 }
@@ -160,7 +176,7 @@ test('unauthenticated request is denied', async () => {
   assert.equal(result.status, 401);
 });
 
-test('assigned sender succeeds when game ended, address and consent present', async () => {
+test('assigned sender succeeds when game ended and the winner saved a per-game address', async () => {
   const db = makeFirestoreMock();
   const result = await fetchWinnerShippingAddressForSender(
     db,
@@ -224,33 +240,25 @@ test('assigned sender is denied if the game has not ended', async () => {
   assert.equal(result.code, 'GAME_NOT_ENDED');
 });
 
-test('assigned sender gets no address (200, not an error) if winner has no address', async () => {
-  const db = makeFirestoreMock({
-    users: {
-      [WINNER_ID]: {
-        displayName: 'Winner',
-        email: 'winner@example.com',
-        shippingAddressSenderShareConsentAt: new Date(),
-      },
-    },
-  });
+test('assigned sender gets no address (200, not an error) if winner has no per-game address', async () => {
+  const db = makeFirestoreMock({ shipping: {} });
   const result = await fetchWinnerShippingAddressForSender(
     db,
     { callerUid: SENDER_ID, partyId: PARTY_ID, giftId: GIFT_ID },
     defaultDeps(),
   );
-  assert.equal(result.status, 200);
-  assert.equal(result.shippingAddress, null);
-  assert.equal(result.error, undefined);
+  assert.deepEqual(result, { status: 200, shippingAddress: null });
 });
 
-test('assigned sender gets no address (200, same as no address) if winner has address but no consent', async () => {
+test('A0: an old profile address is never served (only the per-game doc counts)', async () => {
   const db = makeFirestoreMock({
+    shipping: {},
     users: {
       [WINNER_ID]: {
         displayName: 'Winner',
         email: 'winner@example.com',
         shippingAddress: sampleAddress,
+        shippingAddressSenderShareConsentAt: new Date('2026-01-01T00:00:00Z'),
       },
     },
   });
@@ -259,22 +267,29 @@ test('assigned sender gets no address (200, same as no address) if winner has ad
     { callerUid: SENDER_ID, partyId: PARTY_ID, giftId: GIFT_ID },
     defaultDeps(),
   );
-  // Consent gate intact: the address is withheld, and the answer can't be told apart from "no address".
   assert.deepEqual(result, { status: 200, shippingAddress: null });
 });
 
-test('assigned sender gets no address (200) if winner has no profile document', async () => {
-  const db = makeFirestoreMock({ users: { [WINNER_ID]: undefined } });
+test('A0: the winner address doc from another party is not served', async () => {
+  // The mock only holds shipping docs for PARTY_ID; a different party resolves no doc.
+  const db = makeFirestoreMock({
+    parties: { 'party-2': { adminId: HOST_ID, status: 'ENDED' } },
+    gifts: { 'gift-2': { partyId: 'party-2', submitterId: SENDER_ID, winnerId: WINNER_ID } },
+    participantsExtra: { 'party-2': { [SENDER_ID]: { status: 'GOING' }, [WINNER_ID]: { status: 'GOING' } } },
+  });
   const result = await fetchWinnerShippingAddressForSender(
     db,
-    { callerUid: SENDER_ID, partyId: PARTY_ID, giftId: GIFT_ID },
-    defaultDeps(),
+    { callerUid: SENDER_ID, partyId: 'party-2', giftId: 'gift-2' },
+    defaultDeps({
+      gameState: { phase: 'ENDED', finalOwnership: { 'gift-2': WINNER_ID } },
+      fulfillment: { 'gift-2': { submitterId: SENDER_ID, winnerId: WINNER_ID } },
+    }),
   );
   assert.deepEqual(result, { status: 200, shippingAddress: null });
 });
 
 test('non-sender is still denied (403) when the winner has no address', async () => {
-  const db = makeFirestoreMock({ users: { [WINNER_ID]: undefined } });
+  const db = makeFirestoreMock({ shipping: {} });
   const result = await fetchWinnerShippingAddressForSender(
     db,
     { callerUid: OTHER_MEMBER_ID, partyId: PARTY_ID, giftId: GIFT_ID },
@@ -286,17 +301,7 @@ test('non-sender is still denied (403) when the winner has no address', async ()
 
 test('whitespace-only street counts as no address (200, no address)', async () => {
   const db = makeFirestoreMock({
-    users: {
-      [WINNER_ID]: {
-        displayName: 'Winner',
-        email: 'winner@example.com',
-        shippingAddress: {
-          ...sampleAddress,
-          street: '   ',
-        },
-        shippingAddressSenderShareConsentAt: new Date('2026-01-01T00:00:00Z'),
-      },
-    },
+    shipping: { [WINNER_ID]: { ...sampleAddress, street: '   ', savedAt: new Date() } },
   });
   const result = await fetchWinnerShippingAddressForSender(
     db,
@@ -341,11 +346,9 @@ test('denies when Firestore gift winnerId was repointed but fulfillment is autho
         url: 'https://example.com',
       },
     },
-    users: {
-      'hacked-winner': {
-        shippingAddress: sampleAddress,
-        shippingAddressSenderShareConsentAt: new Date(),
-      },
+    shipping: {
+      [WINNER_ID]: { ...sampleAddress, savedAt: new Date() },
+      'hacked-winner': { ...sampleAddress, name: 'Hacked', savedAt: new Date() },
     },
     participants: {
       [PARTY_ID]: {

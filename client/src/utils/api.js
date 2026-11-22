@@ -87,6 +87,24 @@ export async function fetchWinnerShippingAddress(partyId, giftId, { timeoutMs } 
 
 
 /**
+ * Per-game shipping address (A0): the signed-in player's own address for this party.
+ * Resolves { shippingAddress } (null when none).
+ */
+export async function fetchMyPartyShipping(partyId) {
+  return apiRequest(`/api/party-shipping/${encodeURIComponent(partyId)}`, { method: 'GET' });
+}
+
+/**
+ * Save all six fields, or pass all six empty to delete. Resolves { shippingAddress } (null after delete).
+ */
+export async function saveMyPartyShipping(partyId, address) {
+  return apiRequest(`/api/party-shipping/${encodeURIComponent(partyId)}`, {
+    method: 'POST',
+    body: JSON.stringify({ address }),
+  });
+}
+
+/**
  * Party code routes (item 10). Returns { ok, status, body } instead of throwing, so the caller
  * can tell "full" (409 after a valid match) from the one generic failure.
  */

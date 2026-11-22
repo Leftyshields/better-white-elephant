@@ -13,7 +13,6 @@ export const userConverter = {
     displayName: user.displayName || '',
     email: user.email || '',
     avatarUrl: user.avatarUrl || null,
-    shippingAddress: user.shippingAddress || null,
     createdAt: user.createdAt || new Date(),
     updatedAt: new Date(),
   }),
@@ -24,7 +23,6 @@ export const userConverter = {
       displayName: data.displayName || '',
       email: data.email || '',
       avatarUrl: data.avatarUrl || null,
-      shippingAddress: data.shippingAddress || null,
       createdAt: data.createdAt?.toDate() || null,
       updatedAt: data.updatedAt?.toDate() || null,
     };

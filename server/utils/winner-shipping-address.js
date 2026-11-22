@@ -1,43 +1,8 @@
 /**
  * Sender-scoped access to a winner's shipping address after game end.
+ * Reads the per-game doc parties/{partyId}/shipping/{winnerId} (A0). The doc existing is the share.
  */
-const SHIPPING_ADDRESS_KEYS = ['name', 'street', 'city', 'state', 'zip', 'country'];
-
-function pickShippingAddress(raw) {
-  if (!raw || typeof raw !== 'object') {
-    return null;
-  }
-  const picked = {};
-  for (const key of SHIPPING_ADDRESS_KEYS) {
-    if (raw[key] == null) {
-      continue;
-    }
-    const trimmed = String(raw[key]).trim();
-    if (trimmed) {
-      picked[key] = trimmed;
-    }
-  }
-  const hasStreet = picked.street && picked.city;
-  return hasStreet ? picked : null;
-}
-
-export function hasSenderShareConsent(userData) {
-  const consentAt = userData?.shippingAddressSenderShareConsentAt;
-  if (!consentAt) {
-    return false;
-  }
-  if (consentAt instanceof Date) {
-    return !Number.isNaN(consentAt.getTime());
-  }
-  if (typeof consentAt === 'object' && typeof consentAt.toDate === 'function') {
-    return true;
-  }
-  if (typeof consentAt === 'string' || typeof consentAt === 'number') {
-    const d = new Date(consentAt);
-    return !Number.isNaN(d.getTime());
-  }
-  return false;
-}
+import { pickStoredShipping, shippingDocRef } from '../lib/party-shipping.js';
 
 function resolveWinnerFromGameState(gameState, giftId) {
   if (!gameState || !giftId) {
@@ -161,15 +126,9 @@ export async function fetchWinnerShippingAddressForSender(
   }
 
   // Every access gate above has passed: this caller is the assigned sender of an ended game.
-  // "No address yet" and "no consent yet" both answer 200 with no address (not an error), so the
-  // sender's card can tell "not shared yet" from a real failure. The two cases look the same, so
-  // the sender can't learn whether the winner saved an address without consenting to share it.
-  const winnerDoc = await db.collection('users').doc(winnerId).get();
-  const winnerData = winnerDoc.exists ? winnerDoc.data() : null;
-  const shippingAddress = pickShippingAddress(winnerData?.shippingAddress);
-  if (!shippingAddress || !hasSenderShareConsent(winnerData)) {
-    return { status: 200, shippingAddress: null };
-  }
-
+  // "No address yet" answers 200 with no address (not an error), so the sender's card can tell
+  // "not added yet" from a real failure.
+  const shippingDoc = await shippingDocRef(db, partyId, winnerId).get();
+  const shippingAddress = shippingDoc.exists ? pickStoredShipping(shippingDoc.data()) : null;
   return { status: 200, shippingAddress };
 }

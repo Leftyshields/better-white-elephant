@@ -111,13 +111,13 @@ beforeEach(async () => {
 });
 
 describe('users collection — owner access', () => {
-  it('owner can read and write their own profile including shippingAddress', async () => {
+  it('owner can read their own profile and update the display name (legacy address field untouched)', async () => {
     const db = authedDb(OWNER_ID);
     await assertSucceeds(getDoc(doc(db, 'users', OWNER_ID)));
 
     await assertSucceeds(
       updateDoc(doc(db, 'users', OWNER_ID), {
-        shippingAddress: { ...ownerProfile.shippingAddress, street: '789 Updated Ln' },
+        displayName: 'Owner Renamed',
         updatedAt: new Date(),
       }),
     );
@@ -195,54 +195,44 @@ describe('users collection — client write validation', () => {
     );
   });
 
-  it('rejects shippingAddress with an extra nested key', async () => {
+  it('A0: rejects any shippingAddress write on the profile (update, even a valid address)', async () => {
     const db = authedDb(OWNER_ID);
     await assertFails(
       updateDoc(doc(db, 'users', OWNER_ID), {
-        shippingAddress: {
-          ...ownerProfile.shippingAddress,
-          line1: 'hidden',
-        },
+        shippingAddress: { ...ownerProfile.shippingAddress, street: '789 Updated Ln' },
         updatedAt: new Date(),
       }),
     );
   });
 
-  it('rejects oversize shippingAddress.name', async () => {
+  it('A0: rejects shippingAddressSenderShareConsentAt writes on the profile', async () => {
     const db = authedDb(OWNER_ID);
     await assertFails(
       updateDoc(doc(db, 'users', OWNER_ID), {
-        shippingAddress: {
-          ...ownerProfile.shippingAddress,
-          name: 'x'.repeat(101),
-        },
-        updatedAt: new Date(),
-      }),
-    );
-  });
-
-  it('allows valid profile update matching Profile.jsx / AddressModal.jsx', async () => {
-    const db = authedDb(OTHER_ID);
-    await assertSucceeds(
-      setDoc(doc(db, 'users', OTHER_ID), {
-        displayName: 'Other Player',
-        email: 'other@example.com',
-        updatedAt: new Date(),
-      }),
-    );
-    await assertSucceeds(
-      updateDoc(doc(db, 'users', OTHER_ID), {
-        shippingAddress: {
-          name: 'Other',
-          street: '1 Main St',
-          city: 'Town',
-          state: 'ST',
-          zip: '12345',
-          country: 'US',
-        },
         shippingAddressSenderShareConsentAt: new Date(),
         updatedAt: new Date(),
       }),
+    );
+  });
+
+  it('A0: rejects creating a profile that carries shippingAddress or the consent stamp', async () => {
+    const db = authedDb('fresh-user');
+    const base = { displayName: 'Fresh', email: 'fresh@example.com', updatedAt: new Date() };
+    await assertFails(setDoc(doc(db, 'users', 'fresh-user'), { ...base, shippingAddress: null }));
+    await assertFails(
+      setDoc(doc(db, 'users', 'fresh-user'), { ...base, shippingAddressSenderShareConsentAt: new Date() }),
+    );
+    await assertSucceeds(setDoc(doc(db, 'users', 'fresh-user'), base));
+  });
+
+  it('A0: useAuth sign-in sync (merge, no address keys) still works for a user with a legacy address', async () => {
+    const db = authedDb(OWNER_ID);
+    await assertSucceeds(
+      setDoc(
+        doc(db, 'users', OWNER_ID),
+        { displayName: 'Owner Player', email: 'owner@example.com', createdAt: new Date(), updatedAt: new Date() },
+        { merge: true },
+      ),
     );
   });
 });

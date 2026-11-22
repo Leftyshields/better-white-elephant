@@ -11,9 +11,9 @@ import { useAuth } from '../hooks/useAuth.js';
 import { useGameSounds } from '../hooks/useGameSounds.js';
 import { GiftCard } from './GiftCard.jsx';
 import { Button } from './ui/Button.jsx';
-import { AddressModal } from './AddressModal.jsx';
 import { ShippingAddressViewModal } from './ShippingAddressViewModal.jsx';
 import { GiftToSendCard } from './GiftToSendCard.jsx';
+import { ShippingAddressSection } from './ShippingAddressSection.jsx';
 import { GameAuditTrail } from './GameAuditTrail.jsx';
 import { GamePlayByPlay } from './GamePlayByPlay.jsx';
 import { ReactionBar } from './ReactionBar.jsx';
@@ -39,9 +39,7 @@ export function GameBoard({ partyId, onEndTurn }) {
   const [revealingGiftId, setRevealingGiftId] = useState(null);
   const prevIsMyTurnRef = useRef(false);
   const activePlayerRef = useRef(null);
-  const [showAddressModal, setShowAddressModal] = useState(false);
   const [prizeImageError, setPrizeImageError] = useState(false);
-  const [selectedGift, setSelectedGift] = useState(null);
   const [showAddressViewModal, setShowAddressViewModal] = useState(false);
   const [selectedWinnerAddress, setSelectedWinnerAddress] = useState(null);
   const [winnerAddresses, setWinnerAddresses] = useState({});
@@ -397,6 +395,13 @@ export function GameBoard({ partyId, onEndTurn }) {
             </div>
           )}
 
+          {/* Per-game shipping address (A0): winner of someone else's gift */}
+          {myPrize && myPrize.submitterId !== user?.uid && !isSelfWin && (
+            <div className="mb-12">
+              <ShippingAddressSection partyId={partyId} />
+            </div>
+          )}
+
           {/* What You Need to Send Section */}
           {myObligation && (
             <div className="mb-12">
@@ -588,16 +593,6 @@ export function GameBoard({ partyId, onEndTurn }) {
         {/* Reaction Bar - Fixed at bottom for sending reactions */}
         {socket && connected && <ReactionBar onReaction={emitReaction} />}
         
-        {selectedGift && (
-          <AddressModal
-            isOpen={showAddressModal}
-            onClose={() => {
-              setShowAddressModal(false);
-              setSelectedGift(null);
-            }}
-            giftTitle={selectedGift.title || 'Your Gift'}
-          />
-        )}
       </>
     );
   }
@@ -936,6 +931,13 @@ export function GameBoard({ partyId, onEndTurn }) {
           </div>
         )}
 
+        {/* Per-game shipping address (A0): winner of someone else's gift */}
+        {myPrize && myPrize.submitterId !== user?.uid && !isSelfWin && (
+          <div className="mb-12">
+            <ShippingAddressSection partyId={partyId} />
+          </div>
+        )}
+
         {/* What You Need to Send Section */}
         {myObligation && (
           <div className="mb-12">
@@ -1115,17 +1117,6 @@ export function GameBoard({ partyId, onEndTurn }) {
           Back to Dashboard
         </button>
         
-        {/* Shipping Address Modal (for winners) */}
-        {selectedGift && (
-          <AddressModal
-            isOpen={showAddressModal}
-            onClose={() => {
-              setShowAddressModal(false);
-              setSelectedGift(null);
-            }}
-            giftTitle={selectedGift.title || 'Your Gift'}
-          />
-        )}
         
         {/* Shipping Address View Modal (for submitters) */}
         {selectedWinnerAddress && (

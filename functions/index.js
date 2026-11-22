@@ -2,13 +2,14 @@
  * Firebase Functions
  */
 import { onRequest } from 'firebase-functions/v2/https';
-import { onDocumentCreated, onDocumentUpdated } from 'firebase-functions/v2/firestore';
+import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { defineSecret } from 'firebase-functions/params';
 import { Resend } from 'resend';
 import admin from 'firebase-admin';
 import {
   collectEndedPartiesBeforeCutoff,
+  collectExpiredShippingDeletes,
   isAbandonedPartyPastRetention,
   isEndedPartyPastRetention,
   partiesForAddressCleanupIterable,
@@ -32,8 +33,7 @@ import {
 } from './sendPartyInviteLogic.js';
 import {
   logNotifyGiftSubmitterFailure,
-  notifyGiftSubmittersForWinnerAddress,
-  resolveGiftSubmitterNotifyUpdate,
+  notifyGiftSubmittersForPartyShipping,
 } from './notifyGiftSubmitterLogic.js';
 
 if (!admin.apps.length) {
@@ -130,29 +130,24 @@ export const acceptInviteOnParticipantJoin = onDocumentCreated(
 );
 
 /**
- * Notify gift submitter when winner updates address
+ * Notify the assigned gift senders when a winner saves their per-game address (A0).
+ * CREATE only: edits and clears never email. Replaces the old users/{userId} update trigger.
  */
-export const notifyGiftSubmitter = onDocumentUpdated(
+export const notifyGiftSubmitterOnShippingCreate = onDocumentCreated(
   {
     secrets: [resendApiKey, resendFromEmail],
   },
-  'users/{userId}',
+  'parties/{partyId}/shipping/{userId}',
   async (event) => {
     try {
-      const before = event.data.before.data();
-      const after = event.data.after.data();
-
-      const { shouldNotify, emailMode } = resolveGiftSubmitterNotifyUpdate(before, after);
-      if (!shouldNotify || !emailMode) {
+      const shippingDoc = event.data?.data();
+      if (!shippingDoc) {
         return;
       }
-
-      const userId = event.params.userId;
-      await notifyGiftSubmittersForWinnerAddress(db, {
-        userId,
-        winnerUser: after,
-        shippingAddressRaw: after.shippingAddress,
-        emailMode,
+      await notifyGiftSubmittersForPartyShipping(db, {
+        partyId: event.params.partyId,
+        userId: event.params.userId,
+        shippingDoc,
         getResend,
         resolveFromEmail: () => {
           let fromEmail =
@@ -363,6 +358,12 @@ async function queuePartySubtreeDeletes(partyId, partyRef, operations) {
   joinProofsSnapshot.docs.forEach((doc) => {
     operations.push({ type: 'delete', ref: doc.ref });
   });
+
+  // Per-game shipping addresses (A0) go with the party.
+  const shippingSnapshot = await partyRef.collection('shipping').get();
+  shippingSnapshot.docs.forEach((doc) => {
+    operations.push({ type: 'delete', ref: doc.ref });
+  });
 }
 
 /**
@@ -386,6 +387,7 @@ export const dataRetentionCleanup = onSchedule(
       deletedAccounts: 0,
       deletedParties: 0,
       deletedShippingAddresses: 0,
+      deletedPartyShippingDocs: 0,
       deletedGiftLinks: 0,
       deletedSupportComm: 0,
       errors: [],
@@ -431,7 +433,7 @@ export const dataRetentionCleanup = onSchedule(
         return partyStatusBlocksAddressDeletion(status);
       });
 
-      // 2. Delete shipping addresses 30 days after game ends (before party docs are removed)
+      // 2. Legacy profile shippingAddress (pre-A0): 30 days after game ends (before party docs are removed)
       const addressOperations = [];
       for (const partyDoc of partiesForAddressCleanupIterable(partiesForAddressCleanup)) {
         const party = partyDoc.data();
@@ -473,6 +475,19 @@ export const dataRetentionCleanup = onSchedule(
         await commitOperationsInBatches(db, dedupedAddressOperations);
         console.log(`✅ Deleted ${dedupedAddressOperations.length} expired shipping addresses`);
         stats.deletedShippingAddresses = dedupedAddressOperations.length;
+      }
+
+      // 2b. Per-game shipping docs (A0): 30 days after ENDED, or when the party is gone. Fails
+      // closed (see shouldDeleteShippingDoc). Counts only in logs.
+      const partyShippingDocs = await getAllDocumentsFromQuery(db.collectionGroup('shipping'));
+      const shippingDeletes = await collectExpiredShippingDeletes(
+        partyShippingDocs,
+        thirtyDaysAgoTimestamp,
+      );
+      if (shippingDeletes.length > 0) {
+        await commitOperationsInBatches(db, shippingDeletes);
+        stats.deletedPartyShippingDocs = shippingDeletes.length;
+        console.log(`✅ Deleted ${shippingDeletes.length} expired per-game shipping addresses`);
       }
 
       // 3. Delete gift documents 30 days after game ends (full doc, not url-only)
