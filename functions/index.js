@@ -135,9 +135,9 @@ export const acceptInviteOnParticipantJoin = onDocumentCreated(
  */
 export const notifyGiftSubmitterOnShippingCreate = onDocumentCreated(
   {
+    document: 'parties/{partyId}/shipping/{userId}',
     secrets: [resendApiKey, resendFromEmail],
   },
-  'parties/{partyId}/shipping/{userId}',
   async (event) => {
     try {
       const shippingDoc = event.data?.data();
