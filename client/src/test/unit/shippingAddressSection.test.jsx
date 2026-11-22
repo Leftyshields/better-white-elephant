@@ -109,16 +109,62 @@ describe('ShippingAddressSection (A0)', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('failed save keeps the typed address and shows an error line only then', async () => {
+  it('save 503: real saveFailed error, typed values kept, never the saved view; Try again saves', async () => {
     fetchMock.mockResolvedValueOnce(json(200, { shippingAddress: null }));
     render(<ShippingAddressSection partyId="party-1" />);
     await screen.findByLabelText(COPY.fields.name.label);
     expect(screen.queryByRole('alert')).toBeNull();
     fill(ADDRESS);
-    fetchMock.mockResolvedValueOnce(json(429, { error: 'Too many requests' }));
+    fetchMock.mockResolvedValueOnce(json(503, { error: 'Try again later' }));
     fireEvent.click(saveButton());
     expect((await screen.findByRole('alert')).textContent).toBe(COPY.saveFailed);
-    expect(screen.getByLabelText(COPY.fields.street.label).value).toBe(ADDRESS.street);
+    for (const [key, value] of Object.entries(ADDRESS)) {
+      expect(screen.getByLabelText(COPY.fields[key].label).value).toBe(value);
+    }
+    expect(screen.queryByRole('button', { name: COPY.editAria })).toBeNull();
+    expect(screen.queryByText(SHIPPING_ADDRESS_DELETE_SUCCESS)).toBeNull();
+
+    // Try again resubmits what is in the fields now (one edit after the failure).
+    fireEvent.change(screen.getByLabelText(COPY.fields.zip.label), { target: { value: '11111' } });
+    fetchMock.mockResolvedValueOnce(json(200, { shippingAddress: { ...ADDRESS, zip: '11111' } }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.retry }));
+    await screen.findByRole('button', { name: COPY.editAria });
+    expect(lastBody()).toEqual({ address: { ...ADDRESS, zip: '11111' } });
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('save network failure while editing a saved address keeps the edit and does not show the new address as saved', async () => {
+    fetchMock.mockResolvedValueOnce(json(200, { shippingAddress: ADDRESS }));
+    render(<ShippingAddressSection partyId="party-1" />);
+    fireEvent.click(await screen.findByRole('button', { name: COPY.editAria }));
+    fireEvent.change(screen.getByLabelText(COPY.fields.street.label), { target: { value: '2 New Rd' } });
+    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    fireEvent.click(saveButton());
+    expect((await screen.findByRole('alert')).textContent).toBe(COPY.saveFailed);
+    expect(screen.getByLabelText(COPY.fields.street.label).value).toBe('2 New Rd');
+    expect(screen.queryByRole('button', { name: COPY.editAria })).toBeNull();
+    expect(screen.getByRole('button', { name: COPY.retry })).toBeTruthy();
+  });
+
+  it('delete 503: stays in the saved view with deleteFailed; Try again deletes without a second confirm', async () => {
+    fetchMock.mockResolvedValueOnce(json(200, { shippingAddress: ADDRESS }));
+    render(<ShippingAddressSection partyId="party-1" />);
+    fireEvent.click(await screen.findByRole('button', { name: COPY.editAria }));
+    fill(EMPTY);
+    fireEvent.click(saveButton());
+    fetchMock.mockResolvedValueOnce(json(503, { error: 'Try again later' }));
+    fireEvent.click(screen.getByRole('button', { name: SHIPPING_ADDRESS_DELETE_CONFIRM_ACTION }));
+    expect((await screen.findByRole('alert')).textContent).toBe(COPY.deleteFailed);
+    expect(screen.getByText(ADDRESS.street)).toBeTruthy();
+    expect(screen.getByRole('button', { name: COPY.editAria })).toBeTruthy();
+    expect(screen.queryByText(SHIPPING_ADDRESS_DELETE_SUCCESS)).toBeNull();
+
+    fetchMock.mockResolvedValueOnce(json(200, { shippingAddress: null }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.retry }));
+    await screen.findByText(SHIPPING_ADDRESS_DELETE_SUCCESS);
+    expect(lastBody()).toEqual({ address: EMPTY });
+    expect(screen.queryByText(SHIPPING_ADDRESS_DELETE_CONFIRM)).toBeNull();
+    expect(screen.queryByText(ADDRESS.street)).toBeNull();
   });
 
   it('failed load shows the error and Try again reloads', async () => {

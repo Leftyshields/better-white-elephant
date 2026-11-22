@@ -45,4 +45,21 @@ describe('shipping address client access (A0 per-game address)', () => {
     expect(copyModule).not.toContain('[COPYWRITER PLACEHOLDER]');
     expect(copyModule).not.toContain('TODO(Copywriter)');
   });
+
+  it('pins the Copywriter A0 finals (7:01 PM PT Nov 21)', async () => {
+    const copy = await import('../../utils/shippingAddressCopy.js');
+    expect(copy.SHIPPING_ADDRESS_FORM_COPY.loadFailed).toBe("We couldn't load your address.");
+    expect(copy.SHIPPING_ADDRESS_FORM_COPY.saveFailed).toBe("We couldn't save your address. Try again.");
+    expect(copy.SHIPPING_ADDRESS_FORM_COPY.deleteFailed).toBe("We couldn't delete your address. Try again.");
+    expect(copy.SHIPPING_ADDRESS_DELETE_CONFIRM).toBe(
+      "This removes your address from this game. The person mailing your gift won't be able to see it.",
+    );
+    expect(copy.SHIPPING_ADDRESS_DELETE_SUCCESS).toBe('Your shipping address was deleted.');
+  });
+
+  it('the giver view modal uses the signed not-shared string, not the old unsigned line', () => {
+    const viewModal = read('components/ShippingAddressViewModal.jsx');
+    expect(viewModal).not.toContain('Winner has not provided their shipping address yet.');
+    expect(viewModal).toContain('{SHIPPING_ADDRESS_WINNER_NOT_SHARED_VIEW_MODAL}');
+  });
 });

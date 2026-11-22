@@ -28,7 +28,10 @@ export function ShippingAddressSection({ partyId }) {
   const [saved, setSaved] = useState(null);
   const [draft, setDraft] = useState(EMPTY);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
+  // A failed write: { copy, kind: 'save' | 'delete' }. A failed save keeps the typed fields in
+  // the form; a failed delete goes back to the saved view. A write that didn't happen never
+  // shows as saved or as gone.
+  const [failure, setFailure] = useState(null);
   const [notice, setNotice] = useState('');
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
@@ -56,9 +59,9 @@ export function ShippingAddressSection({ partyId }) {
   const isClear = filled === 0;
   const canSubmit = !busy && (filled === FIELD_KEYS.length || (isClear && saved));
 
-  const write = async (address, failedCopy) => {
+  const write = async (address, failedCopy, viewOnFailure) => {
     setBusy(true);
-    setError('');
+    setFailure(null);
     try {
       const data = await saveMyPartyShipping(partyId, address);
       const next = data?.shippingAddress ?? null;
@@ -67,11 +70,31 @@ export function ShippingAddressSection({ partyId }) {
       setNotice(next ? '' : SHIPPING_ADDRESS_DELETE_SUCCESS);
       setView(next ? 'saved' : 'form');
     } catch {
-      setError(failedCopy);
+      if (viewOnFailure === 'saved') setDraft({ ...EMPTY, ...saved });
+      setView(viewOnFailure);
+      setFailure({ copy: failedCopy, kind: viewOnFailure === 'saved' ? 'delete' : 'save' });
     } finally {
       setBusy(false);
     }
   };
+
+  const failureLine = failure && (
+    <div className="flex flex-wrap items-center gap-3 mb-4">
+      <p role="alert" className="text-sm text-amber-300">
+        {failure.copy}
+      </p>
+      {failure.kind === 'save' ? (
+        // Inside the form: resubmits whatever is in the fields now.
+        <Button type="submit" variant="secondary" disabled={!canSubmit}>
+          {COPY.retry}
+        </Button>
+      ) : (
+        <Button variant="secondary" disabled={busy} onClick={() => write(EMPTY, COPY.deleteFailed, 'saved')}>
+          {COPY.retry}
+        </Button>
+      )}
+    </div>
+  );
 
   const handleSubmit = (event) => {
     event.preventDefault();
@@ -80,12 +103,12 @@ export function ShippingAddressSection({ partyId }) {
       setConfirmingDelete(true);
       return;
     }
-    write(draft, COPY.saveFailed);
+    write({ ...draft }, COPY.saveFailed, 'form');
   };
 
   const confirmDelete = () => {
     setConfirmingDelete(false);
-    write(EMPTY, COPY.deleteFailed);
+    write(EMPTY, COPY.deleteFailed, 'saved');
   };
 
   return (
@@ -116,6 +139,8 @@ export function ShippingAddressSection({ partyId }) {
         </div>
       )}
 
+      {view === 'saved' && saved && failureLine}
+
       {view === 'saved' && saved && (
         <div className="flex flex-wrap items-start justify-between gap-4">
           <address className="not-italic text-sm text-slate-200 leading-6">
@@ -131,6 +156,7 @@ export function ShippingAddressSection({ partyId }) {
             aria-label={COPY.editAria}
             onClick={() => {
               setNotice('');
+              setFailure(null);
               setView('form');
             }}
           >
@@ -191,11 +217,7 @@ export function ShippingAddressSection({ partyId }) {
               onChange={(e) => setDraft({ ...draft, country: e.target.value })}
             />
           </div>
-          {error && (
-            <p role="alert" className="text-sm text-amber-300 mb-4">
-              {error}
-            </p>
-          )}
+          {failureLine}
           <div className="flex flex-wrap justify-end gap-3">
             {saved && (
               <Button
@@ -203,7 +225,7 @@ export function ShippingAddressSection({ partyId }) {
                 disabled={busy}
                 onClick={() => {
                   setDraft({ ...EMPTY, ...saved });
-                  setError('');
+                  setFailure(null);
                   setView('saved');
                 }}
               >

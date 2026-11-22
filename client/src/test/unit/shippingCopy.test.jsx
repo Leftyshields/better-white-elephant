@@ -15,10 +15,10 @@ const privacySource = readFileSync(join(clientSrc, 'pages/Privacy.jsx'), 'utf8')
 const termsSource = readFileSync(join(clientSrc, 'pages/Terms.jsx'), 'utf8');
 
 const AUTO_PILOT_BODY =
-  'Before the game, you add a shipping address so the person mailing your gift can ship. It auto-deletes 30 days after the game ends.';
+  'When the game ends, each winner adds a shipping address right on the end screen. Only the person mailing the gift sees it, and it auto-deletes 30 days later.';
 
 const RULES_AFTER_GAME =
-  'Before the game, add a shipping address in your profile so the person mailing your gift can ship. It auto-deletes 30 days after the game ends.';
+  'After the game, add your shipping address on the end screen so the person mailing your gift can ship it. It auto-deletes 30 days after the game ends.';
 
 describe('Copywriter shipping / retention strings', () => {
   it('Auto-Pilot Logistics card body', () => {
@@ -77,5 +77,10 @@ describe('Copywriter shipping / retention strings', () => {
     expect(combined).not.toMatch(/only shared with the person assigned/i);
     expect(combined).not.toMatch(/fulfillment is confirmed/i);
     expect(combined).not.toMatch(/1 year after the game ends/i);
+  });
+  it('A0: no copy tells players to add an address in their profile or before the game', () => {
+    const combined = [rulesSource, privacySource, termsSource, AUTO_PILOT_BODY].join('\n');
+    expect(combined).not.toMatch(/in your profile/i);
+    expect(combined).not.toMatch(/before the game, (you )?add a shipping address/i);
   });
 });

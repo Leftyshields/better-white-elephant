@@ -72,9 +72,7 @@ export function ShippingAddressViewModal({ isOpen, onClose, partyId, giftId, win
                 : 'text-gray-500 italic'
             }
           >
-            {unavailable
-              ? SHIPPING_ADDRESS_WINNER_NOT_SHARED_VIEW_MODAL
-              : 'Winner has not provided their shipping address yet.'}
+            {SHIPPING_ADDRESS_WINNER_NOT_SHARED_VIEW_MODAL}
           </p>
         )}
 

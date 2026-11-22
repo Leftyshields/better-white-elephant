@@ -4,7 +4,8 @@
  * A0 (per-game address, Nov 21): no checkbox, no agreement, no notice line. Saving is the share.
  * Brian 5:45 PM PT: a visible 'Shipping address' heading. Copywriter 5:41: 'Save address', 'Edit',
  * aria 'Edit your address'. Field labels, placeholders, loading, saving, and the delete confirm are
- * the existing signed strings, moved here from Profile and AddressModal unchanged.
+ * the existing signed strings, moved here from Profile and AddressModal unchanged. Clear-address
+ * confirm: Copywriter final 7:01 PM PT Nov 21.
  */
 
 export const SHIPPING_ADDRESS_WINNER_NOT_SHARED_GIFT_TO_SEND =
@@ -14,7 +15,7 @@ export const SHIPPING_ADDRESS_WINNER_NOT_SHARED_VIEW_MODAL =
   "The winner hasn't shared a shipping address yet.";
 
 export const SHIPPING_ADDRESS_DELETE_CONFIRM =
-  "This will delete your saved shipping address. It won't be shared with the person mailing your gift.";
+  "This removes your address from this game. The person mailing your gift won't be able to see it.";
 
 export const SHIPPING_ADDRESS_DELETE_CONFIRM_ACTION = 'Delete address';
 
@@ -40,8 +41,7 @@ export const SHIPPING_ADDRESS_FORM_COPY = Object.freeze({
     zip: { label: 'ZIP/Postal Code', placeholder: '12345' },
     country: { label: 'Country', placeholder: 'Country' },
   }),
-  // COPY STATUS: loadFailed, saveFailed and deleteFailed are DRAFTS awaiting the Copywriter's sign
-  // on this PR head (listed in the A0 PR body). They show only on a real failed request.
+  // Copywriter final (7:01 PM PT Nov 21). They show only on a real failed request.
   loadFailed: "We couldn't load your address.",
   saveFailed: "We couldn't save your address. Try again.",
   deleteFailed: "We couldn't delete your address. Try again.",
