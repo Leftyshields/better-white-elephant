@@ -1,8 +1,10 @@
 /**
  * Persist a game that the engine has just moved to phase ENDED: winners on gift docs,
- * party status ENDED with history, retention stamps, 30-day Redis TTL, shipping snapshot,
- * then broadcast game-ended. Shared by the end-turn socket handler and the pick paths
- * (a pick can end the game when the next player has no legal move, BUG-18).
+ * ended game state and the shipping fulfillment snapshot, then party status ENDED with
+ * history and retention stamps, then broadcast game-ended. The snapshot is written before
+ * the status flip so the giver's address card does not 403 on a race. Shared by the
+ * end-turn socket handler and the pick paths (a pick can end the game when the next
+ * player has no legal move, BUG-18).
  */
 import admin from 'firebase-admin';
 import { db } from '../config/firebase-admin.js';
@@ -50,6 +52,30 @@ export async function finalizeEndedGame(partyId, endedState, io) {
     }
   }
 
+  // Persist ENDED state and the fulfillment snapshot before flipping party.status, so a
+  // client that opens the end screen on that status flip can already load the address.
+  // Pass the ENDED TTL explicitly: party status is still pre-end when this runs.
+  // Redis TTL still resolves to 30 days because gameState.phase is ENDED.
+  finalState.state.config = config;
+  finalState.state.partyId = partyId;
+  finalState.state.finalOwnership = finalOwnership;
+  try {
+    await saveGameState(partyId, finalState.state, redisTtlSecondsForPartyStatus('ENDED'));
+  } catch (error) {
+    console.error('Failed to save ended game state', {
+      code: error?.code ?? 'n/a',
+      name: error?.name ?? 'Error',
+    });
+  }
+  try {
+    await saveShippingFulfillmentSnapshot(partyId, finalOwnership, db);
+  } catch (error) {
+    console.error('Failed to save shipping fulfillment snapshot', {
+      code: error?.code ?? 'n/a',
+      name: error?.name ?? 'Error',
+    });
+  }
+
   const endedAt = admin.firestore.Timestamp.now();
   await db.collection('parties').doc(partyId).update({
     status: 'ENDED',
@@ -66,13 +92,6 @@ export async function finalizeEndedGame(partyId, endedState, io) {
     });
     await giftRetentionBatch.commit();
   }
-
-  // Re-save after the party is ENDED so the Redis TTL is 30 days (not the pre-end save).
-  finalState.state.config = config;
-  finalState.state.partyId = partyId;
-  finalState.state.finalOwnership = finalOwnership;
-  await saveGameState(partyId, finalState.state, redisTtlSecondsForPartyStatus('ENDED'));
-  await saveShippingFulfillmentSnapshot(partyId, finalOwnership, db);
 
   io.to(`party:${partyId}`).emit('game-ended', finalState);
   return finalState;

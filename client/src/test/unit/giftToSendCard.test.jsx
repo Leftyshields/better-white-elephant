@@ -17,6 +17,8 @@ import {
   ADDRESS_TIMEOUT_MS,
   ADDRESS_POLL_MS,
   ADDRESS_POLL_WINDOW_MS,
+  ADDRESS_RETRYABLE_BACKOFF_MS,
+  ADDRESS_RETRYABLE_BUDGET_MS,
 } from '../../components/GiftToSendCard.jsx';
 import { apiRequest } from '../../utils/api.js';
 import { GIFT_TO_SEND_COPY } from '../../utils/giftToSendCopy.js';
@@ -87,6 +89,47 @@ describe('GiftToSendCard address states (G5)', () => {
     expect(screen.getByText(GIFT_TO_SEND_COPY.addressLoadFailed)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: GIFT_TO_SEND_COPY.addressRetryAria })).toHaveTextContent(GIFT_TO_SEND_COPY.addressRetry);
     expect(notSharedLine()).toBeNull();
+  });
+
+  it('retries a 403 game-not-ended race, then shows "not shared yet" on 200 null', async () => {
+    fetchMock
+      .mockImplementationOnce(() => json(403, { error: 'Game has not ended', code: 'GAME_NOT_ENDED' }))
+      .mockImplementationOnce(() => json(200, { shippingAddress: null }));
+    renderCard();
+    await flush();
+    expect(screen.getByTestId('gift-to-send-address-loading')).toBeInTheDocument();
+    expect(screen.queryByText(GIFT_TO_SEND_COPY.addressLoadFailed)).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await flush(ADDRESS_RETRYABLE_BACKOFF_MS[0]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(notSharedLine()).toBeInTheDocument();
+    expect(screen.queryByText(GIFT_TO_SEND_COPY.addressLoadFailed)).toBeNull();
+  });
+
+  it('reproduces the end-game race: 403 not-ended on mount, then the address arrives', async () => {
+    fetchMock
+      .mockImplementationOnce(() => json(403, { error: 'Gift fulfillment record not found', code: 'FULFILLMENT_NOT_FOUND' }))
+      .mockImplementationOnce(() => json(200, { shippingAddress: ADDRESS }));
+    renderCard();
+    await flush();
+    expect(screen.getByTestId('gift-to-send-address-loading')).toBeInTheDocument();
+    expect(screen.queryByText('1 Example St')).toBeNull();
+    await flush(ADDRESS_RETRYABLE_BACKOFF_MS[0]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(screen.getByText('1 Example St')).toBeInTheDocument();
+    expect(screen.queryByText(GIFT_TO_SEND_COPY.addressLoadFailed)).toBeNull();
+  });
+
+  it('shows the load error with Try again if 403 not-ended keeps failing past the 10s budget', async () => {
+    fetchMock.mockImplementation(() => json(403, { error: 'Game has not ended', code: 'GAME_NOT_ENDED' }));
+    renderCard();
+    await flush();
+    expect(screen.getByTestId('gift-to-send-address-loading')).toBeInTheDocument();
+    await flush(ADDRESS_RETRYABLE_BUDGET_MS);
+    expect(screen.getByText(GIFT_TO_SEND_COPY.addressLoadFailed)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: GIFT_TO_SEND_COPY.addressRetryAria })).toBeInTheDocument();
+    expect(notSharedLine()).toBeNull();
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(1);
   });
 
   it('a hung request shows the skeleton, then the error at 8s (not before)', async () => {
@@ -234,6 +277,15 @@ describe('apiRequest errors and timeout (G5)', () => {
     await expect(apiRequest('/x')).rejects.toMatchObject({ status: 400, message: 'Valid URL is required' });
   });
 
+  it('attaches a stable error code and falls back to the server error string', async () => {
+    fetchMock.mockImplementation(() => json(403, { error: 'Game has not ended', code: 'GAME_NOT_ENDED' }));
+    await expect(apiRequest('/x')).rejects.toMatchObject({
+      status: 403,
+      code: 'GAME_NOT_ENDED',
+      message: 'Game has not ended',
+    });
+  });
+
   it('times out only when asked to', async () => {
     fetchMock.mockImplementation(never);
     const timed = apiRequest('/x', { timeoutMs: 100 });
@@ -259,9 +311,11 @@ describe('G5 copy', () => {
   it('the card and end screen no longer carry the false "No Winner" or unsigned fallbacks', () => {
     const src = join(dirname(fileURLToPath(import.meta.url)), '../..');
     const card = readFileSync(join(src, 'components/GiftToSendCard.jsx'), 'utf8');
+    const board = readFileSync(join(src, 'components/GameBoard.jsx'), 'utf8');
     const room = readFileSync(join(src, 'pages/GameRoom.jsx'), 'utf8');
     expect(card).not.toContain("hasn't added a shipping address yet");
     expect(card).not.toContain('Loading address...');
     expect(room).not.toContain("'No Winner'");
+    expect(board.split("winnerKnown={gameState?.phase === 'ENDED'}").length - 1).toBe(2);
   });
 });
