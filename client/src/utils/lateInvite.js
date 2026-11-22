@@ -23,7 +23,8 @@ export function latePartyLine(partyTitle, hostFirstName) {
   const title = typeof partyTitle === 'string' ? partyTitle.trim() : '';
   const host = typeof hostFirstName === 'string' ? hostFirstName.trim() : '';
   if (host) {
-    return { prefix: 'This link is for ', title, suffix: `, hosted by ${host}.` };
+    // G28: a roster label like "Brian S." already ends the sentence; don't add a second period.
+    return { prefix: 'This link is for ', title, suffix: `, hosted by ${host}${host.endsWith('.') ? '' : '.'}` };
   }
   return { prefix: 'This link is for ', title, suffix: '.' };
 }

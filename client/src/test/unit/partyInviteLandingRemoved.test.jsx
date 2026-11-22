@@ -146,12 +146,18 @@ describe('G28 late card host label', () => {
     expect(hostNameForLateCard({ hostDisplayName: 'Dana Reyes', hostRosterLabel: 'Dana R.' })).toBeNull();
   });
 
+  it('ends the sentence once after an initial (no "Brian S..")', () => {
+    expect(formatLatePartyLine('Office Swap', 'Dana R.')).toBe('This link is for Office Swap, hosted by Dana R.');
+    expect(formatLatePartyLine('Office Swap', 'Dana')).toBe('This link is for Office Swap, hosted by Dana.');
+    expect(formatLatePartyLine('Office Swap', null)).toBe('This link is for Office Swap.');
+  });
+
   it('the landing late card shows the roster label', async () => {
     signedIn(guest);
     reads({ party: { ...lobbyParty, status: 'ACTIVE', hostRosterLabel: 'Dana R.' }, marker: false });
 
     render(<PartyInviteLanding partyId={PARTY_ID} />);
 
-    expect(await screen.findByText(formatLatePartyLine('Office Swap', 'Dana R.'))).toBeInTheDocument();
+    expect(await screen.findByText('This link is for Office Swap, hosted by Dana R.')).toBeInTheDocument();
   });
 });
